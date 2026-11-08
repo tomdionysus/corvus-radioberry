@@ -2,3 +2,4 @@
 add_subdirectory(common)
 add_subdirectory(rbprobe)
 add_subdirectory(rbcat)
+add_subdirectory(rbctl)

@@ -4,6 +4,8 @@
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 using namespace radioberry;
 
@@ -109,4 +111,37 @@ TEST_CASE("identity text", "[command]") {
     CHECK(fpga_text(1) == "10CL016");
     CHECK(fpga_text(2) == "10CL025");
     CHECK(fpga_text(0) == "unknown (0)");
+    CHECK(driver_version_text(0x010203) == "1.2.3");
+}
+
+TEST_CASE("transmit hazards", "[command]") {
+    using V = std::vector<std::string>;
+    CHECK(transmit_hazards(Command{}).empty());
+    CHECK(transmit_hazards(hl2::general(3, 6)).empty());
+    Command c;
+    c.ptt = true;
+    c.flags = Command::kRun | Command::kTxPermit | Command::kCwx;
+    CHECK(transmit_hazards(c) == V{"PTT", "TX permission", "CWX"});
+
+    Command pa;
+    pa.address = 0x09;
+    CHECK(transmit_hazards(pa).empty());
+    pa.data = 1u << 18;  // T/R relay disable alone is harmless
+    CHECK(transmit_hazards(pa).empty());
+    pa.data = 0xff000000u | 1u << 23 | 1u << 19;
+    CHECK(transmit_hazards(pa) == V{"drive", "VNA", "PA enable"});
+    // The same bits at another address mean something else.
+    pa.address = 0x0a;
+    CHECK(transmit_hazards(pa).empty());
+}
+
+TEST_CASE("PTT hang time 31 disables the TX watchdog", "[command]") {
+    Command c;
+    c.address = 0x17;
+    c.data = 12u << 8 | 20u;
+    CHECK_FALSE(disables_tx_watchdog(c));
+    c.data = 31u << 8 | 20u;
+    CHECK(disables_tx_watchdog(c));
+    c.address = 0x16;
+    CHECK_FALSE(disables_tx_watchdog(c));
 }

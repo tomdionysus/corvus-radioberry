@@ -24,11 +24,12 @@ Debian trixie packages.
 | Component | Directory | State |
 |---|---|---|
 | Platform probe `rbprobe` | `tools/rbprobe/` | working |
-| Receive stream tool `rbcat` | `tools/rbcat/` | working |
+| Stream tool `rbcat` | `tools/rbcat/` | working |
+| Command tool `rbctl` | `tools/rbctl/` | working |
 | FPGA gateware, Hermes-Lite 2 Radioberry PIO variants 75.3 | `gateware/` | CL025 built and verified on hardware; CL016 built, untested, misses AD9866 TX output timing (`gateware/PROVENANCE.md`) |
 | Kernel driver `radioberry.ko`, overlay, ABI header | `driver/` | working: loads the gateware at boot, receive streaming verified; transmit path not yet exercised |
 | Radio daemon `radioberryd` (OpenHPSDR Protocol 1 and 2, PA control) | `daemon/` | not started |
-| Command and protocol tools (`rbctl`, `rbload`, `p1probe`, `p2probe`) | `tools/` | not started |
+| Loader and protocol tools (`rbload`, `p1probe`, `p2probe`) | `tools/` | not started |
 
 There is no daemon yet, so no SDR client can use the radio. The design of
 the whole stack is in `docs/plan-v1.md`; the open work, in order, is in
@@ -102,7 +103,7 @@ rbprobe
 | gateware for `FPGATYPE` | `/lib/firmware/radioberry.rbf` |
 | both gateware images | `/usr/local/share/radioberry/gateware/rpi-5/<type>/` |
 | ABI header | `/usr/local/include/radioberry_ioctl.h` |
-| `rbprobe`, `rbcat` | `/usr/local/bin/` |
+| `rbprobe`, `rbcat`, `rbctl` | `/usr/local/bin/` |
 
 The module is built when headers for the running kernel are installed
 (`-DKERNEL_RELEASE=` picks another kernel, `-DRADIOBERRY_BUILD_MODULE=OFF`
@@ -154,6 +155,18 @@ to `build-coverage/coverage/html`.
   TX word rate within 1% of 48000 per second, no underruns and a queue
   that never ran empty), 1 stream faults or a device error, 2 a usage
   error.
+- `rbctl ADDRESS DATA` sends one gateware command (Hermes-Lite 2
+  address and 32-bit C1..C4 data, decimal or 0x hex; run set unless
+  `--no-run`) and prints the command bytes, the gateware's reply, and the
+  driver's info and statistics; with no arguments it prints only the info
+  and statistics. A command that can key the transmitter or arm the PA
+  (`--ptt`, `--tx-permit`, `--cwx`, or address 0x09 with drive, VNA or
+  PA enable) is refused unless `--allow-tx` is given; a PTT hang time of
+  31 at address 0x17 is always refused. On exit the driver's close sends
+  the safe command, so run, PTT, the TX permission bit, PA enable and
+  drive last only while `rbctl` runs. Exit status 0 on success, 1 on a
+  device error (including EBUSY while another program holds the device),
+  2 on a usage error or refused command.
 - Receive capacity over the PIO bus is about 2.37 million values per
   second: up to six receivers at 192 ksps or three at 384 ksps.
 
@@ -164,7 +177,7 @@ docs/      design (plan-v1.md), development host, amplifier, upstream survey
 gateware/  gateware source, built bitfiles per FPGA, provenance, toolchain
 driver/    kernel module, device tree overlay, ABI header, logic tests
 daemon/    radioberryd (not started)
-tools/     rbprobe, rbcat, shared library, CI and check scripts, gateware build
+tools/     rbprobe, rbcat, rbctl, shared library, CI and check scripts, gateware build
 TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
 ```
 

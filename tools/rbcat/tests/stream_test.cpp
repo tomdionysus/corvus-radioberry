@@ -239,6 +239,14 @@ TEST_CASE("commands that could transmit are refused", "[stream]") {
     Command cwx;
     cwx.flags = Command::kCwx;
     CHECK_THROWS_AS(send_receive_only(device, cwx), std::logic_error);
+    Command drive;
+    drive.address = 0x09;
+    drive.data = 0x10000000;
+    CHECK_THROWS_AS(send_receive_only(device, drive), std::logic_error);
+    Command hang;
+    hang.address = 0x17;
+    hang.data = 31u << 8;
+    CHECK_THROWS_AS(send_receive_only(device, hang), std::logic_error);
     CHECK(device.commands.empty());
     const Reply reply = send_receive_only(device, hl2::lna_gain(0));
     CHECK(reply.version_major == 75);

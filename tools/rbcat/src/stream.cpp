@@ -96,7 +96,7 @@ std::optional<double> Level::peak_dbfs() const {
 }
 
 Reply send_receive_only(Device& device, const Command& command) {
-    if (command.can_transmit()) {
+    if (!transmit_hazards(command).empty() || disables_tx_watchdog(command)) {
         throw std::logic_error("rbcat refuses a command that could transmit");
     }
     return device.command(command);

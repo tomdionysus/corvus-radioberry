@@ -16,10 +16,12 @@ its date.
   stream faults; zero TX samples at 48000 words per second with PTT and
   the TX permission bit clear and no underruns.
 - `rbprobe` on the Pi reports one blocker: no daemon.
-- Nothing has transmitted. The TX path in the driver exists but has not
-  been exercised.
-- Next: `rbctl` (end of section 1), then
-  section 2 (driver remainder), then the daemon.
+- Nothing has transmitted. The driver's TX path has carried zero samples
+  with PTT and the TX permission bit clear (`rbcat --tx-zeros`), never
+  with PTT set.
+- `rbctl` sends single gateware commands; it refuses anything that can
+  transmit without `--allow-tx`, which has not been used on hardware.
+- Next: section 2 (driver remainder), then the daemon.
 
 ## Standing decisions
 
@@ -67,12 +69,6 @@ its date.
   `-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror`. The kernel
   module and ABI header use kernel style and are not clang-formatted.
 - Version string from `git describe`, embedded at configure time.
-
-## 1. Stream tools (`tools/`)
-
-- [ ] `rbctl`: sends one gateware command (PTT and permission refused
-      unless `--allow-tx` is given), prints the reply and the driver's
-      info and statistics.
 
 ## 2. Kernel driver remainder (`driver/`)
 

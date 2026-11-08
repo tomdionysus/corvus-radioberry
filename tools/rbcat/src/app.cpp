@@ -17,11 +17,6 @@ Node rounded(const std::optional<double>& value) {
     return value ? Node(round_to(*value, 10)) : Node();
 }
 
-std::string driver_version_text(std::uint32_t v) {
-    return std::to_string(v >> 16) + "." + std::to_string((v >> 8) & 0xffu) + "." +
-           std::to_string(v & 0xffu);
-}
-
 Node rx_counters(const radioberry_stats& from, const radioberry_stats& to) {
     Node n = Node::map();
     n.set("rx_resyncs", to.rx_resyncs - from.rx_resyncs);

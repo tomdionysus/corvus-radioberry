@@ -6,6 +6,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <vector>
 
 namespace radioberry {
 
@@ -45,6 +46,16 @@ struct Reply {
     static Reply decode(std::span<const std::uint8_t, 6> bytes);
 };
 
+// Why a command could key the transmitter or arm the PA: "PTT", "TX
+// permission", "CWX", and for address 0x09 "drive", "VNA" and "PA
+// enable". Empty for a receive-only command.
+std::vector<std::string> transmit_hazards(const Command& command);
+
+// True for an address 0x17 command with PTT hang time 31, which disables
+// the gateware's transmit watchdog (gateware/README.md section 7). Never
+// to be sent.
+bool disables_tx_watchdog(const Command& command);
+
 // Receive sample rates the gateware offers, by Hermes-Lite 2 rate code.
 inline constexpr std::array<unsigned, 4> kRxRatesKsps = {48, 96, 192, 384};
 // Rate code (0 to 3) for a rate in ksps, or nothing.
@@ -73,6 +84,8 @@ Command lna_gain(int db);
 
 // "75.3"
 std::string version_text(unsigned major, unsigned minor);
+// "1.2.3" from radioberry_info.driver_version.
+std::string driver_version_text(std::uint32_t version);
 // "10CL016", "10CL025" or "unknown (N)" for a RADIOBERRY_FPGA_* value.
 std::string fpga_text(unsigned fpga_type);
 

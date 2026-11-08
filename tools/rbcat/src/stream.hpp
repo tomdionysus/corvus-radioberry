@@ -63,8 +63,8 @@ inline constexpr double kTxRate = 48000.0;
 StreamResult run_stream(Device& device, Clock& clock, const Options& options, std::ostream& samples,
                         std::ostream& progress, const std::function<bool()>& stop);
 
-// Sends a command that cannot transmit; throws std::logic_error for one
-// that could.
+// Sends a command with no transmit hazard; throws std::logic_error for one
+// with any, or one that would disable the gateware's TX watchdog.
 Reply send_receive_only(Device& device, const Command& command);
 
 }  // namespace radioberry::cat

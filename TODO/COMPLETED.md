@@ -3,6 +3,18 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-08: `rbctl` in `tools/rbctl/`: sends one gateware command
+  (address and data, flags `--ptt`, `--tx-permit`, `--cwx`, `--no-run`)
+  and prints the command bytes, decoded reply, driver info and
+  statistics as text, JSON or YAML; info and statistics alone without a
+  command. `transmit_hazards()` and `disables_tx_watchdog()` in
+  `tools/common/` name what can key the transmitter or arm the PA (PTT,
+  TX permission, CWX, and at 0x09 drive, VNA, PA enable) and PTT hang
+  time 31; `rbctl` refuses hazards without `--allow-tx` and hang time 31
+  always, and `rbcat` refuses both. On the development Pi: info and
+  statistics, an LNA command with its reply, PTT and hang-time refusals
+  before the device is opened, EBUSY while `rbcat` runs. `--allow-tx` not
+  exercised on hardware.
 - 2026-11-08: `rbcat --tx-zeros`: writes zero TX samples, topping the
   driver's TX ring up to 2400 samples (50 ms) from the read loop, and
   reports TX words, word rate, underruns and the lowest ring level; the

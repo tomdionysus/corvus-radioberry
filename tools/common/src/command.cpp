@@ -45,6 +45,35 @@ Reply Reply::decode(std::span<const std::uint8_t, 6> b) {
     return r;
 }
 
+std::vector<std::string> transmit_hazards(const Command& c) {
+    std::vector<std::string> hazards;
+    if (c.ptt) {
+        hazards.emplace_back("PTT");
+    }
+    if ((c.flags & Command::kTxPermit) != 0) {
+        hazards.emplace_back("TX permission");
+    }
+    if ((c.flags & Command::kCwx) != 0) {
+        hazards.emplace_back("CWX");
+    }
+    if (c.address == 0x09) {
+        if ((c.data >> 24) != 0) {
+            hazards.emplace_back("drive");
+        }
+        if ((c.data & (1u << 23)) != 0) {
+            hazards.emplace_back("VNA");
+        }
+        if ((c.data & (1u << 19)) != 0) {
+            hazards.emplace_back("PA enable");
+        }
+    }
+    return hazards;
+}
+
+bool disables_tx_watchdog(const Command& c) {
+    return c.address == 0x17 && ((c.data >> 8) & 0x1fu) == 31;
+}
+
 std::optional<unsigned> rate_code_for_ksps(unsigned ksps) {
     for (unsigned code = 0; code < kRxRatesKsps.size(); ++code) {
         if (kRxRatesKsps[code] == ksps) {
@@ -103,6 +132,11 @@ Command lna_gain(int db) {
 
 std::string version_text(unsigned major, unsigned minor) {
     return std::to_string(major) + "." + std::to_string(minor);
+}
+
+std::string driver_version_text(std::uint32_t v) {
+    return std::to_string(v >> 16) + "." + std::to_string((v >> 8) & 0xffu) + "." +
+           std::to_string(v & 0xffu);
 }
 
 std::string fpga_text(unsigned fpga_type) {
