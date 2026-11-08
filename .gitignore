@@ -1,0 +1,16 @@
+build/
+*.o
+*.ko
+*.mod
+*.mod.c
+*.cmd
+*.symvers
+*.order
+*.dtbo
+.DS_Store
+db/
+incremental_db/
+output_files/
+*.rpt
+*.summary
+*.qws
