@@ -34,8 +34,10 @@ its date.
   WSJT-X decoded 40 m FT8 off air through it. It does not transmit.
 - `ft8rx` (`examples/ft8`, optional): a receive-only Protocol 1 FT8
   decoder; 23 messages in 6 live 40 m slots through `radioberryd`.
-  Samples decode only Q first, while piHPSDR reads I first and works;
-  open question, see `docs/examples.md`.
+  Samples decode only Q first (PSK Reporter confirms that spectrum);
+  piHPSDR reads I first and also decodes, so the daemon is left as is.
+  Received frequencies read 162 Hz low at 7.075 MHz (about -23 ppm,
+  five stations against PSK Reporter); `docs/examples.md`.
 - Next: Protocol 1 transmit (section 3), on the session and transmit
   policy already merged.
 
@@ -101,6 +103,11 @@ Nothing open.
 
 ## 3. Daemon (`daemon/`)
 
+- [ ] Frequency calibration: a ppm correction in `radioberryd` applied
+      to every RX and TX frequency command, measured against known
+      signals (the RX offset is -162 Hz at 7.075 MHz, about -23 ppm, from
+      PSK Reporter). Acceptance: `ft8rx` frequencies within 10 Hz of the
+      PSK Reporter median on two bands. Needed before transmit on air.
 - [ ] Protocol 1 transmit (receive is done): MOX from the owning client
       to PTT through the transmit policy, the client's TX I/Q to the
       driver at 48 ksps with the ring kept within the gateware's TX

@@ -33,9 +33,26 @@ each sample's second 24-bit value taken as I (`--iq-order qi`, the
 default): two slots read that way decoded 7 messages, the two slots after
 them read the other way decoded none (40 m, 2026-11-08). Corvus HF found
 the same on a Radioberry. The decoder's own orientation is checked by the
-synthesised tests. piHPSDR reads the first value as I and its audio
-decoded in WSJT-X through the same daemon; why the two differ is not yet
-known.
+synthesised tests.
+
+Read that way the spectrum is the true one: OE8DDX, decoded at
+7.076381 MHz, had 288 PSK Reporter spots in the same ten minutes, 285 of
+them within 300 Hz of that and none within 300 Hz of the mirrored
+7.074619 MHz.
+
+piHPSDR reads the first value as I (its Swap IQ setting applies only to
+SoapySDR radios) and also decodes real FT8 through the same daemon, so
+`radioberryd` delivers what that client expects and is left as it is;
+where piHPSDR's chain accounts for the order is not established. Other
+clients may need the order set as `ft8rx` does.
+
+### Frequency offset
+
+Decoded frequencies against the median of PSK Reporter spots in the same
+ten minutes (40 m, 2026-11-08 20:38 to 20:48 UTC, five stations with
+spots, 161 to 654 spots each): every station 161 to 163 Hz low, median
+-162 Hz, about -23 ppm at 7.075 MHz. Not yet corrected anywhere. A
+reference clock off its nominal frequency would do this; not confirmed.
 
 ### Measured
 
