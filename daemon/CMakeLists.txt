@@ -17,6 +17,7 @@ target_link_libraries(radioberryd_device PUBLIC radioberry_common)
 add_library(radioberryd_core STATIC
     src/p1/protocol1.cpp
     src/p1/server.cpp
+    src/session.cpp
     src/net.cpp
     src/daemon.cpp
     src/options.cpp)
@@ -37,6 +38,7 @@ if(RADIOBERRY_BUILD_TESTS)
         tests/service_test.cpp
         tests/protocol1_test.cpp
         tests/server_test.cpp
+        tests/session_test.cpp
         tests/options_test.cpp
         tests/daemon_test.cpp)
     target_link_libraries(daemon_tests PRIVATE radioberryd_core Catch2::Catch2WithMain)

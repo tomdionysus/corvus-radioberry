@@ -36,8 +36,19 @@ struct Rig {
     SpscRing<TxBlock> tx{2};
     FakeLink link;
     GatewareStatus status;
-    Server server{Identity{{2, 0, 0, 0, 0, 1}, 75, 3, 6}, control, tx, [this] { return status; },
+    Session session{[this] { control.safe(); }, 3s};
+    Server server{Identity{{2, 0, 0, 0, 0, 1}, 75, 3, 6},
+                  control,
+                  tx,
+                  session,
+                  [this] { return status; },
                   link};
+
+    // As the daemon's loop does.
+    void tick(std::chrono::nanoseconds now) {
+        session.tick(now);
+        server.tick();
+    }
 
     void packet(const std::vector<std::uint8_t>& p, const Peer& from,
                 std::chrono::nanoseconds now = 0s) {
@@ -135,15 +146,15 @@ TEST_CASE("a second client is ignored until the first stops or times out", "[ser
 
     // The owner's packets keep it alive; silence for the timeout ends it.
     rig.packet(host_packet(0, {}, {}), kA, 2s);
-    rig.server.tick(4s);
+    rig.tick(4s);
     CHECK(rig.server.running());
-    rig.server.tick(5s);
+    rig.tick(5s);
     CHECK_FALSE(rig.server.running());
     CHECK(rig.link.closed.empty());  // UDP: nothing to close
 
     rig.packet(start_packet(1), kB, 6s);
     CHECK(*rig.server.client() == kB);
-    rig.server.tick(6s);
+    rig.tick(6s);
     CHECK(rig.server.running());
 }
 
@@ -155,7 +166,7 @@ TEST_CASE("a TCP client's connection is closed when it stops or times out", "[se
     rig.packet(start_packet(0, 1032), kTcp, 1s);
     REQUIRE(rig.link.closed.size() == 1);
     rig.packet(start_packet(1, 1032), kTcp, 2s);
-    rig.server.tick(10s);
+    rig.tick(10s);
     CHECK(rig.link.closed.size() == 2);
     CHECK_FALSE(rig.server.running());
 }
@@ -251,6 +262,7 @@ TEST_CASE("the client's TX samples go to the TX ring while streaming", "[server]
     rig.packet(host_packet(2, {}, {}), kA);
     rig.packet(host_packet(3, {}, {}), kA);  // the ring holds two
     CHECK(rig.server.counters().tx_blocks_dropped == 1);
+    CHECK(rig.session.faults() == 1);
 }
 
 TEST_CASE("host sequence gaps and junk are counted", "[server]") {
@@ -261,6 +273,10 @@ TEST_CASE("host sequence gaps and junk are counted", "[server]") {
     rig.packet(host_packet(9, {}, {}), kA);
     rig.packet(host_packet(0, {}, {}), kA);  // a restart is no gap
     CHECK(rig.server.counters().host_sequence_gaps == 1);
+    // The gap and two TX-queue-full (the ring holds two): counted, and with
+    // no MOX nothing is latched.
+    CHECK(rig.session.faults() == 3);
+    CHECK_FALSE(rig.session.latched());
     const std::vector<std::uint8_t> junk = {1, 2, 3, 4};
     rig.packet(junk, kA);
     auto bad = host_packet(1, {}, {});
@@ -268,4 +284,19 @@ TEST_CASE("host sequence gaps and junk are counted", "[server]") {
     rig.packet(bad, kA);
     CHECK(rig.server.counters().ignored == 2);
     CHECK(rig.server.counters().packets_in == 7);
+}
+
+TEST_CASE("a client that lost the radio to a timeout stops being served", "[server]") {
+    Rig rig;
+    rig.packet(start_packet(1), kA, 0s);
+    REQUIRE(rig.session.owns({Protocol::P1, kA}));
+    rig.session.tick(10s);  // the session expires the owner
+    CHECK(rig.server.running());
+    rig.server.tick();
+    CHECK_FALSE(rig.server.running());
+    rig.server.tick();  // nothing more to do
+    CHECK_FALSE(rig.server.running());
+    // Its late packets no longer feed the TX ring.
+    rig.packet(host_packet(1, {}, {}), kA, 11s);
+    CHECK(rig.tx.empty());
 }

@@ -13,7 +13,7 @@ TEST_CASE("radioberryd's defaults", "[options]") {
     CHECK(o.daemon.address == 0);
     CHECK(o.daemon.port == 1024);
     CHECK_FALSE(o.daemon.mac);
-    CHECK(o.daemon.server.client_timeout == 3s);
+    CHECK(o.daemon.client_timeout == 3s);
     CHECK(o.log_level == "info");
     CHECK_FALSE(o.help);
     CHECK_FALSE(o.version);
@@ -29,7 +29,7 @@ TEST_CASE("radioberryd's options", "[options]") {
     CHECK(o.daemon.port == 1025);
     REQUIRE(o.daemon.mac);
     CHECK(*o.daemon.mac == std::array<std::uint8_t, 6>{0x02, 0x00, 0x5e, 0x0a, 0x0b, 0xff});
-    CHECK(o.daemon.server.client_timeout == 500ms);
+    CHECK(o.daemon.client_timeout == 500ms);
     CHECK(o.log_level == "debug");
     CHECK(o.version);
     CHECK(o.help);

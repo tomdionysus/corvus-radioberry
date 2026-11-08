@@ -113,11 +113,20 @@ TEST_CASE("radioberryd serves discovery and a UDP stream", "[daemon]") {
     const sockaddr_in to = loopback(r.daemon.port());
     Socket client(SOCK_DGRAM);
 
+    // Protocol 2 discovery is not answered (twice: logged once).
+    std::vector<std::uint8_t> p2(60, 0);
+    p2[4] = 0x02;
+    for (int i = 0; i < 2; ++i) {
+        ::sendto(client.fd, p2.data(), p2.size(), 0, reinterpret_cast<const sockaddr*>(&to),
+                 sizeof to);
+    }
+
     const auto discovery = discovery_packet();
     ::sendto(client.fd, discovery.data(), discovery.size(), 0,
              reinterpret_cast<const sockaddr*>(&to), sizeof to);
     const auto reply = receive(client.fd);
     REQUIRE(reply.size() == 60);
+    CHECK(reply[0] == 0xef);  // the Protocol 1 reply, not one to Protocol 2
     CHECK(reply[8] == 9);
     CHECK(reply[9] == 75);
     CHECK(reply[21] == 3);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <functional>
@@ -14,17 +15,11 @@
 #include "device/rx_pump.hpp"
 #include "device/tx_pump.hpp"
 #include "p1/protocol1.hpp"
+#include "session.hpp"
 
 namespace radioberry::daemon::p1 {
 
-// Where a packet came from or goes: an IPv4 address and port (host byte
-// order), over UDP or over the TCP connection from that address.
-struct Peer {
-    std::uint32_t address = 0;
-    std::uint16_t port = 0;
-    bool tcp = false;
-    bool operator==(const Peer&) const = default;
-};
+using daemon::Peer;
 
 // The transport, implemented over sockets by Network and by fakes in tests.
 class Link {
@@ -42,36 +37,33 @@ struct GatewareStatus {
     bool cw_key = false;
 };
 
-struct ServerOptions {
-    // A streaming client silent this long loses the radio.
-    std::chrono::nanoseconds client_timeout = std::chrono::seconds(3);
-};
-
 struct ServerCounters {
     std::uint64_t packets_in = 0;
     std::uint64_t packets_out = 0;
     std::uint64_t host_sequence_gaps = 0;
     std::uint64_t tx_blocks_dropped = 0;
-    std::uint64_t ignored = 0;  // from a second client, or malformed
+    std::uint64_t ignored = 0;  // from a client not owning the radio, or malformed
 };
 
 // The Protocol 1 server. The network thread calls on_packet() and
 // tick(); the RX thread calls on_rx() with every RX block.
 //
-// The first client to start streaming owns the radio until it stops or
-// is silent for client_timeout; packets from others are ignored meanwhile.
-// Commands are forwarded to the gateware when their value changes. This
-// version does not transmit: MOX is logged and ignored, and address 0x09
-// is sent with drive, VNA and PA enable cleared.
+// A client streams while it owns the radio in the Session; packets from
+// others are ignored meanwhile. Commands are forwarded to the gateware
+// when their value changes. This version does not transmit: MOX is logged
+// and ignored, and address 0x09 is sent with drive, VNA and PA enable
+// cleared.
 class Server {
 public:
-    Server(Identity identity, Control& control, SpscRing<TxBlock>& tx,
-           std::function<GatewareStatus()> status, Link& link, ServerOptions options = {});
+    Server(Identity identity, Control& control, SpscRing<TxBlock>& tx, Session& session,
+           std::function<GatewareStatus()> status, Link& link);
 
     void on_packet(std::span<const std::uint8_t> packet, const Peer& from,
                    std::chrono::nanoseconds now);
     void on_rx(const RxBlock& block);
-    void tick(std::chrono::nanoseconds now);
+    // Stops streaming to a client that no longer owns the radio (call
+    // after Session::tick).
+    void tick();
 
     bool running() const;
     std::optional<Peer> client() const;
@@ -81,23 +73,21 @@ public:
     ServerCounters counters() const;
 
 private:
-    void start_locked(const Peer& from, std::chrono::nanoseconds now);
-    void stop_locked(const char* why);
+    static Owner owner(const Peer& peer) { return {Protocol::P1, peer}; }
+    void start_locked(const Peer& from);
     void apply_locked(const HostCommand& command);
     void queue_tx_locked(const HostPacket& packet);
-    bool owned_by_other_locked(const Peer& from) const;
 
     const Identity identity_;
     Control& control_;
     SpscRing<TxBlock>& tx_;
+    Session& session_;
     std::function<GatewareStatus()> status_;
     Link& link_;
-    const ServerOptions options_;
 
     mutable std::mutex mutex_;
     bool running_ = false;
-    std::optional<Peer> client_;
-    std::chrono::nanoseconds last_heard_{};
+    Peer client_;
     std::optional<std::uint32_t> last_host_sequence_;
     RxPacker packer_;
     unsigned client_receivers_ = 1;

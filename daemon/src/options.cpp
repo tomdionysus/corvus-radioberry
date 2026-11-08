@@ -64,8 +64,7 @@ Options parse_options(const std::vector<std::string>& args) {
         } else if (a == "--mac") {
             o.daemon.mac = mac(value());
         } else if (a == "--client-timeout-ms") {
-            o.daemon.server.client_timeout =
-                std::chrono::milliseconds(number(a, value(), 3'600'000));
+            o.daemon.client_timeout = std::chrono::milliseconds(number(a, value(), 3'600'000));
         } else if (a == "--log-level") {
             o.log_level = value();
             if (o.log_level != "trace" && o.log_level != "debug" && o.log_level != "info" &&

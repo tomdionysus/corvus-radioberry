@@ -11,24 +11,15 @@
 #include "device/capacity.hpp"
 
 namespace radioberry::daemon::p1 {
-namespace {
 
-std::string text(const Peer& p) {
-    return std::to_string(p.address >> 24) + "." + std::to_string((p.address >> 16) & 0xffu) + "." +
-           std::to_string((p.address >> 8) & 0xffu) + "." + std::to_string(p.address & 0xffu) +
-           ":" + std::to_string(p.port) + (p.tcp ? " (TCP)" : " (UDP)");
-}
-
-}  // namespace
-
-Server::Server(Identity identity, Control& control, SpscRing<TxBlock>& tx,
-               std::function<GatewareStatus()> status, Link& link, ServerOptions options)
+Server::Server(Identity identity, Control& control, SpscRing<TxBlock>& tx, Session& session,
+               std::function<GatewareStatus()> status, Link& link)
     : identity_(identity),
       control_(control),
       tx_(tx),
+      session_(session),
       status_(std::move(status)),
-      link_(link),
-      options_(options) {}
+      link_(link) {}
 
 void Server::on_packet(std::span<const std::uint8_t> packet, const Peer& from,
                        std::chrono::nanoseconds now) {
@@ -37,9 +28,9 @@ void Server::on_packet(std::span<const std::uint8_t> packet, const Peer& from,
     switch (classify(packet)) {
         case PacketKind::Discovery: {
             const auto reply = discovery_reply(identity_, running_);
-            const bool streaming_peer = client_ && *client_ == from;
+            const bool streaming_peer = running_ && client_ == from;
             lock.unlock();
-            spdlog::info("discovery from {}", text(from));
+            spdlog::info("discovery from {}", describe(from));
             link_.send(from, reply);
             if (from.tcp && !streaming_peer) {
                 link_.close(from);
@@ -47,17 +38,19 @@ void Server::on_packet(std::span<const std::uint8_t> packet, const Peer& from,
             return;
         }
         case PacketKind::StartStop: {
-            if (owned_by_other_locked(from)) {
+            if (session_.busy_for(owner(from))) {
                 ++counters_.ignored;
                 return;
             }
             if (*parse_start(packet)) {
-                start_locked(from, now);
+                if (session_.claim(owner(from), now)) {
+                    start_locked(from);
+                }
                 return;
             }
-            stop_locked("the client stopped it");
-            client_.reset();
+            running_ = false;
             lock.unlock();
+            session_.release(owner(from), "the client stopped it");
             if (from.tcp) {
                 link_.close(from);
             }
@@ -65,23 +58,24 @@ void Server::on_packet(std::span<const std::uint8_t> packet, const Peer& from,
         }
         case PacketKind::Data: {
             const auto host = parse_host_packet(packet);
-            if (!host || owned_by_other_locked(from)) {
+            if (!host || session_.busy_for(owner(from))) {
                 ++counters_.ignored;
                 return;
             }
-            const bool from_client = client_ && *client_ == from;
+            const bool from_client = running_ && client_ == from;
             if (from_client) {
-                last_heard_ = now;
+                session_.heard(owner(from), now);
                 if (last_host_sequence_ && host->sequence != *last_host_sequence_ + 1 &&
                     host->sequence != 0) {
                     ++counters_.host_sequence_gaps;
+                    session_.fault("Protocol 1 host packet sequence gap");
                 }
                 last_host_sequence_ = host->sequence;
             }
             for (const HostCommand& c : host->commands) {
                 apply_locked(c);
             }
-            if (running_ && from_client) {
+            if (from_client) {
                 queue_tx_locked(*host);
             }
             return;
@@ -98,10 +92,10 @@ void Server::on_rx(const RxBlock& block) {
     Peer to;
     {
         const std::lock_guard lock(mutex_);
-        if (!running_ || !client_) {
+        if (!running_) {
             return;
         }
-        to = *client_;
+        to = client_;
         packer_.add(
             block,
             [&] {
@@ -128,17 +122,16 @@ void Server::on_rx(const RxBlock& block) {
     }
 }
 
-void Server::tick(std::chrono::nanoseconds now) {
+void Server::tick() {
     std::unique_lock lock(mutex_);
-    if (!running_ || now - last_heard_ < options_.client_timeout) {
+    if (!running_ || session_.owns(owner(client_))) {
         return;
     }
-    const Peer peer = *client_;
-    stop_locked("the client fell silent");
-    client_.reset();
+    running_ = false;
+    const Peer gone = client_;
     lock.unlock();
-    if (peer.tcp) {
-        link_.close(peer);
+    if (gone.tcp) {
+        link_.close(gone);
     }
 }
 
@@ -149,7 +142,7 @@ bool Server::running() const {
 
 std::optional<Peer> Server::client() const {
     const std::lock_guard lock(mutex_);
-    return client_;
+    return running_ ? std::optional<Peer>(client_) : std::nullopt;
 }
 
 unsigned Server::client_receivers() const {
@@ -167,28 +160,13 @@ ServerCounters Server::counters() const {
     return counters_;
 }
 
-void Server::start_locked(const Peer& from, std::chrono::nanoseconds now) {
-    client_ = from;
+void Server::start_locked(const Peer& from) {
     running_ = true;
-    last_heard_ = now;
+    client_ = from;
     last_host_sequence_.reset();
     packer_.reset();
     status_address_ = 0;
     pending_ack_.reset();
-    spdlog::info("{} started streaming", text(from));
-}
-
-void Server::stop_locked(const char* why) {
-    if (!running_) {
-        return;
-    }
-    running_ = false;
-    control_.safe();
-    spdlog::info("{} stopped streaming: {}", text(*client_), why);
-}
-
-bool Server::owned_by_other_locked(const Peer& from) const {
-    return running_ && client_ && !(*client_ == from);
 }
 
 void Server::apply_locked(const HostCommand& c) {
@@ -239,6 +217,7 @@ void Server::queue_tx_locked(const HostPacket& packet) {
     TxBlock* block = tx_.acquire();
     if (block == nullptr) {
         ++counters_.tx_blocks_dropped;
+        session_.fault("TX queue full");
         return;
     }
     std::copy(packet.tx_iq.begin(), packet.tx_iq.end(), block->bytes.begin());

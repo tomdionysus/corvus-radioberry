@@ -10,6 +10,7 @@
 #include <span>
 
 #include "p1/server.hpp"
+#include "session.hpp"
 
 namespace radioberry::daemon {
 

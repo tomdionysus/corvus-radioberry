@@ -3,6 +3,18 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-08: Session (`daemon/src/session.cpp`): one owner across
+  protocols; the first client to claim the radio owns it until it
+  releases it or is silent for the client timeout (3 s), others are
+  refused meanwhile, and losing the owner puts the gateware in the safe
+  state. A stream fault while the owner holds MOX (host sequence gap, TX
+  queue full, TX underrun, invalid TX block, RX queue full, device
+  error) makes the gateware safe and latches until the client sends MOX
+  clear; without MOX it is counted only. Protocol 2 discovery is
+  recognised and not answered, so clients settle on Protocol 1. The
+  Protocol 1 server now takes ownership from the session. Unit tests for
+  every path; the daemon's loopback test checks Protocol 2 discovery
+  goes unanswered.
 - 2026-11-08: Hardware validation, receive via Protocol 1: the owner saw
   40 m signals off air in piHPSDR's waterfall on the development Pi
   through `radioberryd`, and WSJT-X decoded 40 m FT8 from piHPSDR's

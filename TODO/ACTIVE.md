@@ -32,7 +32,7 @@ its date.
   against a fake device and, in `rbdrivertest`, against the driver.
 - `radioberryd` serves Protocol 1 receive over UDP and TCP; piHPSDR and
   WSJT-X decoded 40 m FT8 off air through it. It does not transmit.
-- Next: the transmit side: session, PA and transmit policy, Protocol 1
+- Next: the transmit side: PA and transmit policy, then Protocol 1
   transmit (section 3).
 
 ## Standing decisions
@@ -97,8 +97,6 @@ Nothing open.
 
 ## 3. Daemon (`daemon/`)
 
-- [ ] Session: protocol selection at discovery, one owning client, clean
-      hand-over on timeout.
 - [ ] PA and transmit policy: `--allow-pa`, drive ceiling, TX watchdog,
       envpa only while a client holds MOX, every PA state change logged,
       no interlock claimed. TX permission bit 42 clear unless transmit is
