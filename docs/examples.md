@@ -46,6 +46,16 @@ SoapySDR radios) and also decodes real FT8 through the same daemon, so
 where piHPSDR's chain accounts for the order is not established. Other
 clients may need the order set as `ft8rx` does.
 
+Transmit is the same way round. A 1 kHz tone sent in Protocol 1's TX
+samples as I = cos, Q = sin (first value I) went out 1 kHz below the TX
+frequency: a HackRF One near the Radioberry (2026-11-08, 14.117 MHz TX,
+drive 0, PA disabled, a small antenna) saw it at TX - 1010 Hz, 29 dB
+above the scan median and 21.6 dB above the same frequency before
+transmitting, and nothing above noise at TX + 1 kHz. Whether piHPSDR's
+transmit chain compensates as its receive chain does is not yet
+measured; an FT8 transmission checked against PSK Reporter would show
+it.
+
 ### Frequency offset
 
 Decoded frequencies against the median of PSK Reporter spots in the same

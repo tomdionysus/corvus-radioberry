@@ -51,8 +51,11 @@ its date.
   first; transmit may be).
 - PA step done: 0.9 W at drive 128, 3.2 W at drive 170 (the owner's
   known distortion-free limit) into a 50 ohm dummy load, half-scale tone.
-- Next: the on-air sideband check (HackRF), then the FT8 end-to-end run;
-  meanwhile Protocol 2 (section 3).
+- On-air sideband: transmit is mirrored in the same way as receive (a
+  +1 kHz tone in I-first samples radiated at TX - 1 kHz, HackRF). Not
+  yet known whether piHPSDR's transmit chain compensates.
+- Next: the FT8 end-to-end run (it also settles piHPSDR's transmit
+  sideband); meanwhile Protocol 2 (section 3).
 
 ## Standing decisions
 
