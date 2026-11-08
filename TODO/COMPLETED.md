@@ -3,6 +3,20 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-08: PA and transmit policy (`daemon/src/tx_policy.cpp`). MOX is
+  granted only when transmit is allowed, a client owns the radio, no
+  fault is latched and the TX watchdog (default 120 s) has not tripped;
+  while granted PTT and the TX permission bit go out in every command,
+  otherwise both are clear. Address 0x09 carries the client's drive
+  capped at the ceiling, VNA always clear, and PA enable only while MOX
+  is granted and the PA is allowed, so envpa is driven only while a
+  client holds MOX; CWX only with MOX; PTT hang time 31 refused by the
+  device layer. Defaults: transmit off, PA off, drive ceiling 0. Every
+  PTT and PA change logged; no interlock claimed. Granting MOX runs
+  under the session's lock, the lock its faults make the gateware safe
+  under, so a fault cannot fall between a grant and the PTT it sets.
+  Unit tests for every fail-safe path, 100% line coverage. Not yet
+  wired to a protocol: that is Protocol 1 transmit.
 - 2026-11-08: Session (`daemon/src/session.cpp`): one owner across
   protocols; the first client to claim the radio owns it until it
   releases it or is silent for the client timeout (3 s), others are

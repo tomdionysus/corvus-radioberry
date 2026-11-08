@@ -32,8 +32,8 @@ its date.
   against a fake device and, in `rbdrivertest`, against the driver.
 - `radioberryd` serves Protocol 1 receive over UDP and TCP; piHPSDR and
   WSJT-X decoded 40 m FT8 off air through it. It does not transmit.
-- Next: the transmit side: PA and transmit policy, then Protocol 1
-  transmit (section 3).
+- Next: Protocol 1 transmit (section 3), on the session and transmit
+  policy already merged.
 
 ## Standing decisions
 
@@ -97,19 +97,16 @@ Nothing open.
 
 ## 3. Daemon (`daemon/`)
 
-- [ ] PA and transmit policy: `--allow-pa`, drive ceiling, TX watchdog,
-      envpa only while a client holds MOX, every PA state change logged,
-      no interlock claimed. TX permission bit 42 clear unless transmit is
-      allowed, PTT bit 32 clear in every command without MOX, PTT hang
-      time never 31 (`gateware/README.md` sections 4, 6, 7). Every
-      fail-safe path proved by a unit test.
 - [ ] Protocol 1 transmit (receive is done): MOX from the owning client
       to PTT through the transmit policy, the client's TX I/Q to the
       driver at 48 ksps with the ring kept within the gateware's TX
       buffer latency, address-0 C3 reporting TX FIFO underflow and
       overflow as the HL2 does (piHPSDR reads its bits 7..6 while
       transmitting), drive and PA enable from 0x09 through the policy,
-      CWX, and MOX cleared on every stream fault. Acceptance: every path
+      CWX, and MOX cleared on every stream fault, all through `TxPolicy`
+      and `Session`; the policy's options on the command line
+      (`--allow-tx`, `--allow-pa`, `--drive-ceiling`, `--tx-watchdog-s`).
+      Acceptance: every path
       proved against the fake device, then section 6's transmit steps
       with the owner's go-ahead.
 - [ ] Protocol 2: discovery, General, DDC and DUC specific, High Priority

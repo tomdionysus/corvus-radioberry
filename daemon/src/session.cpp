@@ -96,7 +96,7 @@ void Session::fault(const std::string& why) {
                  why);
 }
 
-bool Session::mox(bool requested) {
+bool Session::mox(bool requested, const std::function<void(bool)>& apply) {
     const std::lock_guard lock(mutex_);
     if (!requested) {
         if (latched_) {
@@ -105,6 +105,14 @@ bool Session::mox(bool requested) {
         latched_ = false;
     }
     mox_ = requested && !latched_ && owner_.has_value();
+    if (apply) {
+        apply(mox_);
+    }
+    return mox_;
+}
+
+bool Session::transmitting() const {
+    const std::lock_guard lock(mutex_);
     return mox_;
 }
 

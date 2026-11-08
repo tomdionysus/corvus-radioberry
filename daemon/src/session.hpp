@@ -69,9 +69,14 @@ public:
     // only counted.
     void fault(const std::string& why);
     // The MOX the owner may have: `requested`, unless a fault is latched.
-    // A request without MOX clears the latch.
-    bool mox(bool requested);
+    // A request without MOX clears the latch. `apply`, if given, is
+    // called with the result under the session's lock, the lock fault()
+    // and the safe state are taken under, so a fault cannot fall between
+    // granting MOX and acting on it.
+    bool mox(bool requested, const std::function<void(bool)>& apply = {});
     bool latched() const;
+    // MOX is granted now.
+    bool transmitting() const;
     std::uint64_t faults() const;
 
 private:
