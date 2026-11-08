@@ -54,7 +54,10 @@ its date.
   PSK Reporter) and transmit (HackRF); `radioberryd --iq-convention
   standard` swaps both ways for plain-baseband clients, `hl2` (default)
   passes through.
-- Next: the FT8 end-to-end run; meanwhile Protocol 2 (section 3).
+- FT8 on air through `radioberryd` (2026-11-08): piHPSDR and WSJT-X
+  transmitting about 4.8 W on 40 m were decoded by two distant stations
+  at -19 and -20 dB, on the frequency the HackRF measured.
+- Next: Protocol 2 (section 3); open follow-ups below.
 
 ## Standing decisions
 
@@ -118,6 +121,18 @@ Nothing open.
 
 ## 3. Daemon (`daemon/`)
 
+- [ ] Log the drive actually in use: `radioberryd` logs the drive at
+      PTT on, before a client's 0x09 has arrived (piHPSDR sends it every
+      11 packets), so it shows the receive value; log each drive and PA
+      change while transmitting instead.
+- [ ] HL2 drive compatibility: the HL2 gateware takes 0x09's top four
+      bits as AD9866 TX gain codes 0 to 15, the Radioberry build maps the
+      whole byte to codes 0 to 39 (`ad9866ctrl.v`), and the PA hat is not
+      the HL2's, so HL2 software sends far too little drive (piHPSDR:
+      drive 46 for 80% at its default calibration, about 0.4 W). Measure
+      output against gain code across the range, then decide whether
+      `radioberryd` maps HL2 drive to Radioberry codes. Until then piHPSDR
+      is calibrated by hand (its per-band PA calibration, about 45 to 50).
 - [ ] Protocol 2: discovery, General, DDC and DUC specific, High Priority
       both ways, DDC I/Q at 48 to 384 ksps, DUC I/Q at 192 ksps resampled
       with liquid-dsp, Mic/Line and Wideband declared absent, client
@@ -165,4 +180,4 @@ Transmit items each need the owner's go-ahead at the time.
 
 - [ ] SparkSDR and Quisk receive and tune via Protocol 1.
 - [ ] Receive via Protocol 2.
-- [ ] FT8 and corvus-protocol end-to-end run, logged in `docs/`.
+- [ ] corvus-protocol end-to-end run, logged in `docs/` (FT8 is done).

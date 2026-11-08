@@ -3,6 +3,25 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-08: Hardware validation, FT8 on air through `radioberryd`,
+  operated by the owner: piHPSDR (Protocol 1, HL2 type) with WSJT-X on
+  the Pi, audio through PipeWire loopbacks, CAT and PTT through
+  piHPSDR's TS-2000 server on TCP 19090 (WSJT-X rig type Kenwood
+  TS-2000; its OpenHPSDR PiHPSDR type does not pass Test CAT against
+  this piHPSDR build, which answers `AI;` with `?;`). `radioberryd
+  --frequency-ppm 22.9 --allow-tx --allow-pa --drive-ceiling 150`, a
+  20 m end-fed half wave, about 4.8 W on 40 m. CQs keyed on the FT8
+  slots, 13.9 s each, about 48 000 samples per second, no underruns, no
+  blocks dropped. A HackRF One near the station saw the signal 292 to
+  342 Hz above the 7.074 MHz dial, upper side, the same tone pattern in
+  each CQ, no discrete spurs, harmonics or image above a broadband floor
+  about 46 dB down across +-4 kHz (transmitter noise or the HackRF's
+  limits near a strong signal; not separated). PSK Reporter: decoded by
+  two stations about 1 500 km away at -19 and -20 dB, at 7.074310 and
+  7.074321 MHz. piHPSDR's own transmit chain is the right way round for
+  this stream (a TUNE carrier measured 984 Hz above the dial, image
+  -77 dBc). piHPSDR's HL2 drive needs its per-band PA calibration
+  lowered (about 45 to 50) on this Radioberry; see the HL2 drive item.
 - 2026-11-08: Hardware validation, transmit into a 50 ohm dummy load with
   the PA enabled, output measured by the owner on an inline meter (50 W
   scale), on the owner's go-ahead for each step: a 1 kHz tone at half of
