@@ -3,6 +3,10 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-08: Hardware validation, receive via Protocol 1: the owner saw
+  40 m signals off air in piHPSDR's waterfall on the development Pi
+  through `radioberryd`, and WSJT-X decoded 40 m FT8 from piHPSDR's
+  audio (the item named 20 m; band conditions that night favoured 40 m).
 - 2026-11-08: Protocol 1 receive, Hermes-Lite 2 dialect (`daemon/src/p1/`,
   `radioberryd`, installed to sbin; transmit is still open). Discovery
   with the HL2's 60-byte reply, start and stop, 1032-byte frames for the

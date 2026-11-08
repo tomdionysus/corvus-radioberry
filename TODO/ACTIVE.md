@@ -157,7 +157,6 @@ Nothing open.
 
 Transmit items each need the owner's go-ahead at the time.
 
-- [ ] Receive: known signal on 20 m visible in piHPSDR via Protocol 1.
 - [ ] SparkSDR and Quisk receive and tune via Protocol 1.
 - [ ] Receive via Protocol 2.
 - [ ] Transmit at zero drive into a dummy load, PA disabled.
