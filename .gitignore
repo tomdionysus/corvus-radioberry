@@ -1,5 +1,6 @@
 CLAUDE.local.md
 build/
+build-*/
 *.o
 *.ko
 *.mod

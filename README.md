@@ -20,13 +20,13 @@ Debian trixie packages.
 |---|---|---|
 | Documentation of the hardware and host | `docs/` | current |
 | Work tracking | `TODO/` | current |
-| Platform probe (`rbprobe`) | `tools/` | planned, first deliverable |
+| Platform probe (`rbprobe`) | `tools/rbprobe/` | working; gateware identity via the driver waits for the driver |
 | FPGA gateware bitfiles (prebuilt, 10CL025 and 10CL016) | `gateware/` | planned |
 | Kernel driver (`radioberry.ko`, RP1 PIO plus DMA) | `driver/` | planned |
 | Radio daemon `radioberryd` (Protocol 1 and Protocol 2, PA control) | `daemon/` | planned |
 | Further tooling (loader, stream dump, protocol probes) | `tools/` | planned |
 
-Nothing is installable yet. `TODO/ACTIVE.md` is the authoritative list of
+Only `rbprobe` builds today. `TODO/ACTIVE.md` is the authoritative list of
 what is being built and in which order.
 
 ## Target hardware and host
@@ -119,16 +119,25 @@ the default `/etc/radioberry/config.yaml`, and the systemd unit. The daemon
 never runs as root. A reboot is required the first time the overlay is
 installed.
 
-Until the components in the status table exist, these targets are not
-available.
+Until the components in the status table exist, only the `cmake`,
+`ctest` and `cmake --install` steps work, and they build, test and install
+`rbprobe` alone; `FPGATYPE` is not used yet.
 
 ## Using the radio
 
 - `rbprobe` prints a report of the Pi, kernel, overlay, driver, gateware
   (type, version, configured or not), PA board (I2C scan, manual-bias
   board when nothing answers) and daemon state. `rbprobe --json` and
-  `rbprobe --yaml` give the same content in machine-readable form; a
-  non-zero exit code means the radio cannot run.
+  `rbprobe --yaml` give the same content in machine-readable form. Exit
+  status 0 means the radio can run, 1 that it cannot (each blocker is
+  listed under `findings`), 2 a usage error. Run it as root to see device
+  holders and the I2C bus.
+- `rbprobe --identify` finds out which FPGA the board carries by loading
+  each known rpi-5 gateware image in turn until one configures the chip.
+  It reprograms the FPGA, so it refuses to run while the driver is loaded.
+  It looks for `.rbf` files in `/usr/local/share/radioberry/gateware`,
+  `/usr/share/radioberry/gateware` and `/lib/firmware`; `--gateware-dir`
+  replaces that list.
 - Start and stop: `systemctl start|stop radioberry`. Logs:
   `journalctl -u radioberry`. Configuration: `/etc/radioberry/config.yaml`.
 - Point the SDR client at the Pi's address. Protocol 1 clients discover on

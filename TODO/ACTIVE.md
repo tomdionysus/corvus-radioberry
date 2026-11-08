@@ -49,27 +49,29 @@ acceptance test.
 
 ## 1. Platform probe (`tools/rbprobe`)
 
-- [ ] C++20 binary, dependencies libgpiod, libi2c, yaml-cpp,
+- [x] C++20 binary, dependencies libgpiod, libi2c, yaml-cpp,
       nlohmann/json and spdlog.
       Probes behind an interface so the report logic is tested against
       fake sysfs, device tree, GPIO and I2C contents.
-- [ ] Host: model, revision, serial, OS, kernel, matching headers,
+- [x] Host: model, revision, serial, OS, kernel, matching headers,
       bootloader date, PMIC rails and throttle flags, Ethernet and Wi-Fi
       link state.
-- [ ] Boot: overlay active (`sdr,radioberry` node, `spi0.0` bound,
+- [x] Boot: overlay active (`sdr,radioberry` node, `spi0.0` bound,
       `rp1_pio` loaded), `i2c_arm` on, spidev disabled.
-- [ ] Driver and firmware: module present for the running kernel, loaded,
+- [x] Driver and firmware: module present for the running kernel, loaded,
       `/dev/radioberry` present and free; `/lib/firmware/radioberry.rbf`
       identified by hash against a table of known upstream images, with
       family (rpi-4 GPIO, rpi-5 PIO, juice) and FPGA type.
-- [ ] FPGA: CONF_DONE and nSTATUS levels; with the driver loaded, gateware
-      major and minor, FPGA type, receiver and transmitter counts; mismatch
-      against the installed image flagged.
-- [ ] PA: I2C bus 1 scan classified (MAX11613, MCP4662, N2ADR, Alex,
+- [x] FPGA: CONF_DONE and nSTATUS levels; FPGA type by `--identify`
+      (configuration with each known rpi-5 image); mismatch against the
+      installed image flagged. Gateware major and minor, receiver and
+      transmitter counts through the driver moved to section 3.
+- [x] PA: I2C bus 1 scan classified (MAX11613, MCP4662, N2ADR, Alex,
       VA2SAJ); "manual-bias board, no telemetry" when empty.
-- [ ] Software: daemon version and service state, open UDP ports,
-      liquid-dsp and piHPSDR versions.
-- [ ] Human text report (default), `--json` and `--yaml` with identical
+- [x] Software: daemon version and service state, open UDP ports,
+      liquid-dsp and piHPSDR versions (piHPSDR version only when packaged;
+      a source build reports its path).
+- [x] Human text report (default), `--json` and `--yaml` with identical
       content; non-zero exit when the radio cannot run.
       Acceptance: run on the development Pi reports 10CL025, wrong
       installed image, no I2C devices, driver absent, and exits non-zero.
@@ -109,6 +111,11 @@ acceptance test.
       installed to `/usr/local/include`; versioned struct with
       gateware info and command path. Acceptance: daemon and tools build
       against the installed header only.
+- [ ] `rbprobe` reads gateware major and minor, FPGA type, receiver and
+      transmitter counts through the ioctl ABI when the driver is loaded,
+      and flags a mismatch with the installed image. Acceptance: on the
+      development Pi with the driver loaded, `rbprobe` reports the CL025
+      gateware version without `--identify`.
 - [ ] Read path returns whole sample frames for 1 to 4 receivers, with
       `poll()` support and a non-blocking mode. Acceptance: `tools/rbcat`
       streams 10 minutes at 48 ksps with zero resync messages.

@@ -3,6 +3,17 @@
 Newest first. Each entry gives the date, what was done, and where the
 result lives.
 
+- 2026-11-08: `rbprobe` (section 1) built in `tools/rbprobe/`, with the
+  shared `tools/common/` library (SHA-256, catalogue of known upstream
+  gateware images, passive serial FPGA loader over libgpiod 2). Probes sit
+  behind a `Source` interface; 48 Catch2 tests against an in-memory
+  machine, 98 percent line coverage of the unit-tested code, clean under
+  ASan and UBSan. On the development Pi, `rbprobe --identify` reports
+  10CL025 (configured in about 4 s), the wrong installed image (rpi-4
+  CL016), no I2C devices, the driver absent, and exits 1. Loading the
+  CL016 image alone left CONF_DONE low as expected; the FPGA was left on
+  CL025. A minimal top-level CMake, `cmake/Version.cmake` and
+  `.clang-format` were added ahead of section 2.
 - 2026-11-08: v1 plan written to `docs/plan-v1.md`: fixed constraints,
   component architecture, driver and daemon design with the upstream
   defects each part addresses, performance targets, testing policy and
