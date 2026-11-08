@@ -111,6 +111,22 @@ Word ack_word(std::uint8_t address, bool ptt, std::uint32_t data) {
     return w;
 }
 
+void swap_rx_iq(std::span<std::uint8_t> s) {
+    for (std::size_t i = 0; i + 6 <= s.size(); i += 6) {
+        std::swap_ranges(s.begin() + static_cast<std::ptrdiff_t>(i),
+                         s.begin() + static_cast<std::ptrdiff_t>(i + 3),
+                         s.begin() + static_cast<std::ptrdiff_t>(i + 3));
+    }
+}
+
+void swap_tx_iq(std::span<std::uint8_t> s) {
+    for (std::size_t i = 0; i + 4 <= s.size(); i += 4) {
+        std::swap_ranges(s.begin() + static_cast<std::ptrdiff_t>(i),
+                         s.begin() + static_cast<std::ptrdiff_t>(i + 2),
+                         s.begin() + static_cast<std::ptrdiff_t>(i + 2));
+    }
+}
+
 void RxPacker::set_receivers(unsigned receivers) {
     if (receivers < 1 || receivers > kMaxClientReceivers) {
         throw std::out_of_range("receiver count " + std::to_string(receivers));
@@ -148,6 +164,9 @@ void RxPacker::add(const RxBlock& block, const std::function<Word()>& word,
     for (std::size_t f = 0; f + frame <= block.size; f += frame) {
         std::uint8_t* out = packet_.data() + 8 + half_ * kHalfBytes + 8 + sample_ * sample_bytes;
         std::copy_n(block.bytes.begin() + static_cast<std::ptrdiff_t>(f), copy, out);
+        if (swap_iq_) {
+            swap_rx_iq(std::span<std::uint8_t>(out, copy));
+        }
         if (++sample_ < per_half) {
             continue;
         }

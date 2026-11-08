@@ -178,7 +178,9 @@ TEST_CASE("radioberryd serves discovery and a UDP stream", "[daemon]") {
 TEST_CASE("radioberryd serves discovery and a stream over TCP", "[daemon]") {
     FakeDevice device;
     device.idle_wait_ms = 1;
-    Running r(device);
+    DaemonOptions standard = Running::options();
+    standard.iq_convention = p1::IqConvention::Standard;  // logged at start
+    Running r(device, standard);
     const sockaddr_in to = loopback(r.daemon.port());
     {
         Socket tcp(SOCK_STREAM);
@@ -272,6 +274,7 @@ TEST_CASE("radioberryd transmits for the owner when allowed", "[daemon]") {
     o.tx.allow_tx = true;
     o.tx.drive_ceiling = 0x20;
     o.frequency_ppm = 1.0;  // logged at start
+    o.iq_convention = p1::IqConvention::Hl2;
     Running r(device, o);
     const sockaddr_in to = loopback(r.daemon.port());
     Socket client(SOCK_DGRAM);

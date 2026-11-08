@@ -241,3 +241,37 @@ TEST_CASE("a receiver-count change or reset drops the packet in progress", "[p1]
     CHECK_THROWS_AS(packer.set_receivers(0), std::out_of_range);
     CHECK_THROWS_AS(packer.set_receivers(17), std::out_of_range);
 }
+
+TEST_CASE("the standard convention swaps I and Q in each sample", "[p1]") {
+    std::vector<std::uint8_t> rx = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 99};
+    swap_rx_iq(rx);
+    CHECK(rx == std::vector<std::uint8_t>{4, 5, 6, 1, 2, 3, 10, 11, 12, 7, 8, 9, 99});
+    std::vector<std::uint8_t> tx = {1, 2, 3, 4, 5, 6, 7, 8, 99};
+    swap_tx_iq(tx);
+    CHECK(tx == std::vector<std::uint8_t>{3, 4, 1, 2, 7, 8, 5, 6, 99});
+
+    RxPacker packer;
+    packer.set_receivers(2);
+    packer.set_swap_iq(true);
+    std::vector<std::vector<std::uint8_t>> packets;
+    const auto word = [] { return Word{}; };
+    const auto emit = [&](std::span<const std::uint8_t> p) {
+        packets.emplace_back(p.begin(), p.end());
+    };
+    // Receiver 0 I = 1 1 1, Q = 2 2 2; receiver 1 I = 3 3 3, Q = 4 4 4.
+    RxBlock b;
+    b.receivers = 2;
+    b.size = 72 * 12;
+    for (std::size_t f = 0; f < 72; ++f) {
+        for (std::size_t k = 0; k < 12; ++k) {
+            b.bytes[f * 12 + k] = static_cast<std::uint8_t>(1 + k / 3);
+        }
+    }
+    packer.add(b, word, emit);
+    REQUIRE(packets.size() == 1);
+    const std::uint8_t* s = packets[0].data() + 16;
+    CHECK(s[0] == 2);
+    CHECK(s[3] == 1);
+    CHECK(s[6] == 4);
+    CHECK(s[9] == 3);
+}

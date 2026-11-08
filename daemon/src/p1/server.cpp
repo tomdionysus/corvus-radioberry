@@ -139,6 +139,12 @@ void Server::tick() {
     }
 }
 
+void Server::set_iq_convention(IqConvention convention) {
+    const std::lock_guard lock(mutex_);
+    swap_iq_ = convention == IqConvention::Standard;
+    packer_.set_swap_iq(swap_iq_);
+}
+
 void Server::set_frequency_ppm(double ppm) {
     const std::lock_guard lock(mutex_);
     frequency_ppm_ = ppm;
@@ -232,6 +238,9 @@ void Server::queue_tx_locked(const HostPacket& packet) {
     }
     std::copy(packet.tx_iq.begin(), packet.tx_iq.end(), block->bytes.begin());
     block->size = packet.tx_iq.size();
+    if (swap_iq_) {
+        swap_tx_iq(std::span<std::uint8_t>(block->bytes.data(), block->size));
+    }
     tx_.publish();
 }
 

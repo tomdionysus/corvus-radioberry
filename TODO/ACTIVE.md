@@ -34,8 +34,6 @@ its date.
   WSJT-X decoded 40 m FT8 off air through it. It does not transmit.
 - `ft8rx` (`examples/ft8`, optional): a receive-only Protocol 1 FT8
   decoder; 23 messages in 6 live 40 m slots through `radioberryd`.
-  Samples decode only Q first (PSK Reporter confirms that spectrum);
-  piHPSDR reads I first and also decodes, so the daemon is left as is.
   `docs/examples.md`.
 - `radioberryd` transmits for the owning client only with `--allow-tx`
   (PTT and TX permission while MOX is granted, drive capped by
@@ -51,11 +49,12 @@ its date.
   first; transmit may be).
 - PA step done: 0.9 W at drive 128, 3.2 W at drive 170 (the owner's
   known distortion-free limit) into a 50 ohm dummy load, half-scale tone.
-- On-air sideband: transmit is mirrored in the same way as receive (a
-  +1 kHz tone in I-first samples radiated at TX - 1 kHz, HackRF). Not
-  yet known whether piHPSDR's transmit chain compensates.
-- Next: the FT8 end-to-end run (it also settles piHPSDR's transmit
-  sideband); meanwhile Protocol 2 (section 3).
+- I/Q: the HL2 stream (I first, as piHPSDR reads it) is the mirror of
+  plain complex baseband in both directions, measured on receive (FT8,
+  PSK Reporter) and transmit (HackRF); `radioberryd --iq-convention
+  standard` swaps both ways for plain-baseband clients, `hl2` (default)
+  passes through.
+- Next: the FT8 end-to-end run; meanwhile Protocol 2 (section 3).
 
 ## Standing decisions
 

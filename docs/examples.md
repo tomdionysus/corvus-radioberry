@@ -28,33 +28,39 @@ through the same chain.
 
 ### Sample order
 
-On the development Radioberry through `radioberryd`, FT8 decodes only with
-each sample's second 24-bit value taken as I (`--iq-order qi`, the
-default): two slots read that way decoded 7 messages, the two slots after
-them read the other way decoded none (40 m, 2026-11-08). Corvus HF found
-the same on a Radioberry. The decoder's own orientation is checked by the
-synthesised tests.
+The Hermes-Lite 2 radio core, which the Radioberry gateware is built
+from, sends each receiver's I first and takes I first (`radio.v`), and
+the driver and `radioberryd` pass the order through. HL2 software reads
+it that way: piHPSDR, which has one code path for every HL2 and hands
+the first value to WDSP as I with no swap (its Swap IQ setting applies
+only to SoapySDR radios), decodes real FT8 through `radioberryd`. So
+the stream has the orientation HL2 software expects, as an HL2's does.
 
-Read that way the spectrum is the true one: OE8DDX, decoded at
-7.076381 MHz, had 288 PSK Reporter spots in the same ten minutes, 285 of
-them within 300 Hz of that and none within 300 Hz of the mirrored
-7.074619 MHz.
+To a client using plain complex baseband (I real, Q imaginary, positive
+frequencies above the tuned frequency) that stream is the mirror image,
+in both directions:
 
-piHPSDR reads the first value as I (its Swap IQ setting applies only to
-SoapySDR radios) and also decodes real FT8 through the same daemon, so
-`radioberryd` delivers what that client expects and is left as it is;
-where piHPSDR's chain accounts for the order is not established. Other
-clients may need the order set as `ft8rx` does.
+- Receive: `ft8rx` decodes FT8 only with each sample's second value taken
+  as I: two slots read that way decoded 7 messages, the two slots after
+  them read the other way decoded none (40 m, 2026-11-08). Read that way
+  the frequencies are the true ones: OE8DDX, decoded at 7.076381 MHz,
+  had 288 PSK Reporter spots in the same ten minutes, 285 within 300 Hz
+  of that and none within 300 Hz of the mirrored 7.074619 MHz. Corvus HF
+  found the same on a Radioberry.
+- Transmit: a 1 kHz tone sent as I = cos, Q = sin went out 1 kHz below
+  the TX frequency. A HackRF One near the Radioberry (14.117 MHz TX,
+  drive 0, PA disabled, a small antenna) saw it at TX - 1010 Hz, 29 dB
+  above the scan median and 21.6 dB above the same frequency before
+  transmitting, and nothing above noise at TX + 1 kHz.
 
-Transmit is the same way round. A 1 kHz tone sent in Protocol 1's TX
-samples as I = cos, Q = sin (first value I) went out 1 kHz below the TX
-frequency: a HackRF One near the Radioberry (2026-11-08, 14.117 MHz TX,
-drive 0, PA disabled, a small antenna) saw it at TX - 1010 Hz, 29 dB
-above the scan median and 21.6 dB above the same frequency before
-transmitting, and nothing above noise at TX + 1 kHz. Whether piHPSDR's
-transmit chain compensates as its receive chain does is not yet
-measured; an FT8 transmission checked against PSK Reporter would show
-it.
+Where in WDSP's conventions the difference lies is not established; a
+real HL2 was not available to compare.
+
+`radioberryd --iq-convention standard` swaps I and Q in both directions,
+so plain complex-baseband clients see the true spectrum without
+handling it themselves; the default, `hl2`, passes samples through for
+HL2 software. `ft8rx` defaults to `--iq-order qi` for the default
+daemon; against `--iq-convention standard` it takes `--iq-order iq`.
 
 ### Frequency offset
 

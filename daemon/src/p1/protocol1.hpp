@@ -25,6 +25,19 @@ inline constexpr std::uint8_t kBoardHermesLite = 0x06;
 // Receivers a Protocol 1 command can ask for: C4 bits 6..3, plus one.
 inline constexpr unsigned kMaxClientReceivers = 16;
 
+// How I/Q reaches clients. Hl2: as the Hermes-Lite 2 radio core produces
+// and takes it, the first value of each pair I, which HL2 software such as
+// piHPSDR expects. Standard: I and Q swapped both ways, which mirrors the
+// spectrum, for clients using plain complex baseband (I real, Q
+// imaginary), to which the HL2 stream is the mirror image
+// (docs/examples.md).
+enum class IqConvention { Hl2, Standard };
+
+// Swaps each 6-byte receiver sample's 24-bit I and Q in place.
+void swap_rx_iq(std::span<std::uint8_t> samples);
+// Swaps each 4-byte TX sample's 16-bit I and Q in place.
+void swap_tx_iq(std::span<std::uint8_t> samples);
+
 enum class PacketKind { Discovery, StartStop, Data, Unknown };
 // By the first four bytes: EF FE 02, EF FE 04, EF FE 01 02.
 PacketKind classify(std::span<const std::uint8_t> packet);
@@ -98,11 +111,15 @@ public:
 
     std::uint32_t sequence() const { return sequence_; }
 
+    // Sends each receiver's Q before its I (IqConvention::Standard).
+    void set_swap_iq(bool swap) { swap_iq_ = swap; }
+
 private:
     void begin_packet();
 
     std::array<std::uint8_t, kPacketBytes> packet_{};
     unsigned receivers_ = 1;
+    bool swap_iq_ = false;
     std::size_t half_ = 0;
     std::size_t sample_ = 0;
     std::uint32_t sequence_ = 0;

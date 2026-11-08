@@ -428,3 +428,19 @@ TEST_CASE("frequency commands are corrected for the radio's error", "[server]") 
     rig.packet(host_packet(2, {0x04, 7074000}, {0x02, 7074000}), kA);
     CHECK(rig.drain().empty());
 }
+
+TEST_CASE("the standard convention swaps TX I and Q", "[server]") {
+    Rig rig;
+    rig.server.set_iq_convention(IqConvention::Standard);
+    rig.packet(start_packet(1), kA);
+    rig.packet(host_packet(0, {}, {}, 0x1234, 0x5678), kA);
+    REQUIRE(rig.tx.front() != nullptr);
+    CHECK(rig.tx.front()->bytes[0] == 0x56);
+    CHECK(rig.tx.front()->bytes[1] == 0x78);
+    CHECK(rig.tx.front()->bytes[2] == 0x12);
+    CHECK(rig.tx.front()->bytes[3] == 0x34);
+    rig.server.set_iq_convention(IqConvention::Hl2);
+    rig.tx.pop();
+    rig.packet(host_packet(1, {}, {}, 0x1234, 0x5678), kA);
+    CHECK(rig.tx.front()->bytes[0] == 0x12);
+}

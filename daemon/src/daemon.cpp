@@ -54,6 +54,8 @@ Daemon::Daemon(Device& device, DaemonOptions options)
           },
           network_) {
     server_.set_frequency_ppm(options.frequency_ppm);
+    server_.set_iq_convention(options.iq_convention);
+    iq_standard_ = options.iq_convention == p1::IqConvention::Standard;
     frequency_ppm_ = options.frequency_ppm;
 }
 
@@ -91,6 +93,9 @@ bool Daemon::run(const std::atomic<bool>& stop) {
     const TxPolicyOptions& tx = policy_.options();
     spdlog::info("gateware {}.{}, {} receivers; Protocol 1 on port {}", identity_.version_major,
                  identity_.version_minor, identity_.receivers, port());
+    if (iq_standard_) {
+        spdlog::info("I/Q in the standard convention: I and Q swapped both ways");
+    }
     if (frequency_ppm_ != 0) {
         spdlog::info("frequencies corrected for a radio error of {:+.2f} ppm", frequency_ppm_);
     }

@@ -73,6 +73,7 @@ public:
     // The radio's frequency error (positive: it tunes high); every RX and
     // TX frequency command is corrected for it.
     void set_frequency_ppm(double ppm);
+    void set_iq_convention(IqConvention convention);
 
     bool running() const;
     std::optional<Peer> client() const;
@@ -105,6 +106,7 @@ private:
     unsigned status_address_ = 0;
     std::optional<HostCommand> pending_ack_;
     double frequency_ppm_ = 0;
+    bool swap_iq_ = false;
     // Values Control refused, so each is logged once.
     std::array<std::optional<std::uint32_t>, Control::kAddresses> refused_{};
     ServerCounters counters_;
