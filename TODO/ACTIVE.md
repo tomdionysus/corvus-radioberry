@@ -16,7 +16,11 @@ acceptance test.
 - Build and install with CMake throughout, including a kbuild wrapper
   target for the module; `cmake --install` places everything.
 - Gateware is copied in as prebuilt upstream bitfiles, never compiled here.
-- Development FPGA is a 10CL025 (verified 2026-11-08).
+- Development FPGA is a 10CL025 (verified 2026-11-08). Both the CL016
+  and CL025 rpi-5 images are kept in `gateware/` and the driver supports
+  both.
+- No transmit test on the development board without the owner's explicit
+  permission for that test. Transmit code is proved first against fakes.
 - Names: daemon `radioberryd`, unit `radioberry.service`, config
   `/etc/radioberry/config.yaml`, module `radioberry.ko`, C++ namespace
   `radioberry`, tools `rbprobe`, `rbcat`, `rbctl`, `rbload`, `p1probe`,
@@ -95,10 +99,12 @@ acceptance test.
 - [ ] Device tree overlay built from `driver/radioberry.dts`, installed
       to `/boot/firmware/overlays/`. Acceptance: overlay present after
       reboot, `spi0.0` is `radioberry_ctrl_spi`.
-- [ ] Gateware loading from `/lib/firmware/radioberry.rbf` via
-      `request_firmware`, with CONF_DONE and nSTATUS checks reported as
-      errors, not printk only. Acceptance: ioctl returns non-zero gateware
-      major version.
+- [ ] Gateware loading via `request_firmware`, with CONF_DONE and
+      nSTATUS checks reported as errors, not printk only. The driver works
+      with both the CL016 and CL025 images; the install selects the image
+      for the board's FPGA (`FPGATYPE`), and the development board is
+      always CL025. Acceptance: ioctl returns non-zero gateware major
+      version.
 - [ ] Stable ioctl ABI header `driver/include/radioberry_ioctl.h`
       installed to `/usr/local/include`; versioned struct with
       gateware info and command path. Acceptance: daemon and tools build
@@ -173,7 +179,7 @@ acceptance test.
 - [ ] Receive: known signal on 20 m visible in piHPSDR via Protocol 1.
 - [ ] Receive via Protocol 2.
 - [ ] Transmit at zero drive into a dummy load, PA disabled.
-- [ ] PA idle bias set with BIAS1 and BIAS2 reading PA_CUR; values
-      recorded in `docs/pa.md`.
+- [x] PA idle bias set with BIAS1 and BIAS2. Already done on the
+      development board before this project; see `docs/pa.md`.
 - [ ] Transmit into a dummy load with PA enabled, output measured.
 - [ ] FT8 and corvus-protocol end-to-end run, logged in `docs/`.

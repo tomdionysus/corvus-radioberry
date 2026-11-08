@@ -241,13 +241,16 @@ repository, `SBC/rpi-5/device_driver/firmware`:
 3. Confirm which CN301 line the board uses for PA enable and T/R, and
    whether the T/R relay follows ptt_out (FPGA 144), inttr (143) or envpa
    (136).
-4. Set idle bias: with no drive, raise BIAS1 and BIAS2 from minimum until
-   PA_CUR shows the intended idle current, never exceeding 2.7 V on either
-   trimmer. The 5 W ancestor's LDMOS pair and the PA30's RD15HVF1 pair both
-   run in the low hundreds of milliamps per device; the exact target for the
-   AURSINC FETs is not published.
-5. First TX into a dummy load at zero drive, then raise drive while
-   watching PA_CUR and the Pi's own temperature.
+4. Done before this project started: BIAS1 and BIAS2 are set on the
+   development board, and its RX and TX path has been used on the air for
+   FT8 with the upstream software. The procedure, for any other board:
+   with no drive, raise BIAS1 and BIAS2 from minimum until PA_CUR shows
+   the intended idle current, never exceeding 2.7 V on either trimmer.
+   The exact target for the AURSINC FETs is not published.
+5. First TX with this project's software into a dummy load at zero drive,
+   then raise drive while watching PA_CUR and the Pi's own temperature.
+   Transmit tests on the development board are run only with the owner's
+   explicit go-ahead for each one.
 
 ## 8. References
 
