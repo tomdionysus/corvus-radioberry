@@ -152,12 +152,10 @@ acceptance test.
       and toolchain notes `gateware/QUARTUS.md`.
 - [x] CL025 bitfile built (seed 4, timing met), committed and catalogued
       in `rbprobe` as rpi-5 PIO.
-- [ ] CL016 bitfile. No fitter seed meets the upstream AD9866 TX output
-      constraints (`rffe_ad9866_tx[1]` misses by 3.2 ns;
-      `gateware/PROVENANCE.md`, Timing). Needs a decision: ship it with the
-      violation documented, or change the build (for example I/O
-      registers on those pins). Acceptance: a CL016 image that meets
-      timing, or a recorded decision to ship it as is.
+- [x] CL016 bitfile built (seed 5) and catalogued; shipped with its AD9866
+      TX output timing violation documented in `gateware/PROVENANCE.md`.
+- [ ] Test the CL016 image on a CL016 board, receive and transmit, when
+      one is available.
 - [x] Install the CL025 build on the development Pi: the driver reads
       gateware 75.3, 10CL025, 6 receivers, 1 transmitter (2026-11-08).
 

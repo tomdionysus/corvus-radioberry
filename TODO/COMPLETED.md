@@ -3,6 +3,10 @@
 Newest first. Each entry gives the date, what was done, and where the
 result lives.
 
+- 2026-11-08: CL016 PIO gateware built (seed 5) and committed as
+  `gateware/rpi-5/CL016/radioberry.rbf`, shipped with its AD9866 TX output
+  timing violation documented (`rffe_ad9866_tx[1]` -3.23 ns). Not tested
+  on hardware.
 - 2026-11-08: CL025 PIO gateware built with Quartus Prime Lite 23.1std.1
   in Docker (seed 4; timing met apart from the unconstrained synchroniser
   crossing; rebuild byte-identical) and committed as

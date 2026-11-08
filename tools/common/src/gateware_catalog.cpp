@@ -13,9 +13,11 @@ constexpr std::string_view kBuild = "this repository, Hermes-Lite2 3e467fd, gate
 // Radioberry-2.x images. Ordered so that the image for the development
 // board's FPGA comes first; identification by configuration tries them in
 // this order.
-constexpr std::array<KnownImage, 4> kImages = {{
+constexpr std::array<KnownImage, 5> kImages = {{
     {"a25f30f4bc9ba3c3f7fbe3406f4a4a27da99be7e90c5272d1b6c05ee0acecedc", GatewareFamily::kRpi5Pio,
      FpgaType::k10CL025, 372888, "gateware/rpi-5/CL025/radioberry.rbf", kBuild},
+    {"fc975a3671496db6e45456f7cc0f1008df67f033b4fd17e80bc89cdfbfef4d20", GatewareFamily::kRpi5Pio,
+     FpgaType::k10CL016, 274527, "gateware/rpi-5/CL016/radioberry.rbf", kBuild},
     {"fe6a4e8acb67fbf80aa679affc8f2e0e0abe15908938cb2aed10804b461105cd", GatewareFamily::kRpi5Gpio,
      FpgaType::k10CL025, 334915, "SBC/rpi-5/archive/releases/dev/CL025/radioberry.rbf", kTag},
     {"5f146a8c2113a888bd6b7d08d8ac9f62b796e79dd950ecd47b31b5ec1ebe9e48", GatewareFamily::kRpi5Gpio,

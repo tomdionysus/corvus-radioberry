@@ -26,12 +26,12 @@ Debian trixie packages.
 | Documentation of the hardware and host | `docs/` | current |
 | Work tracking | `TODO/` | current |
 | Platform probe (`rbprobe`) | `tools/rbprobe/` | working; gateware identity via the driver waits for the driver |
-| FPGA gateware (Hermes-Lite 2 Radioberry PIO variants, 10CL025 and 10CL016) | `gateware/` | CL025 built and verified on hardware; CL016 not built (does not meet timing) |
+| FPGA gateware (Hermes-Lite 2 Radioberry PIO variants, 10CL025 and 10CL016) | `gateware/` | both built; CL025 verified on hardware; CL016 untested and misses AD9866 TX output timing (see `gateware/PROVENANCE.md`) |
 | Kernel driver (`radioberry.ko`, RP1 PIO plus DMA) | `driver/` | planned |
 | Radio daemon `radioberryd` (Protocol 1 and Protocol 2, PA control) | `daemon/` | planned |
 | Further tooling (loader, stream dump, protocol probes) | `tools/` | planned |
 
-`rbprobe` and the CL025 gateware install today. `TODO/ACTIVE.md` is the authoritative list of
+`rbprobe` and the gateware install today. `TODO/ACTIVE.md` is the authoritative list of
 what is being built and in which order.
 
 ## Target hardware and host

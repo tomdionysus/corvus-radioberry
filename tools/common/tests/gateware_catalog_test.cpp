@@ -24,10 +24,12 @@ TEST_CASE("known images are found by hash", "[catalog]") {
 
 TEST_CASE("catalog lists this project's CL025 PIO build first", "[catalog]") {
     const auto images = known_images();
-    REQUIRE(images.size() == 4);
+    REQUIRE(images.size() == 5);
     CHECK(images[0].fpga == FpgaType::k10CL025);
     CHECK(images[0].family == GatewareFamily::kRpi5Pio);
     CHECK(images[0].sha256 == "a25f30f4bc9ba3c3f7fbe3406f4a4a27da99be7e90c5272d1b6c05ee0acecedc");
+    CHECK(images[1].fpga == FpgaType::k10CL016);
+    CHECK(images[1].family == GatewareFamily::kRpi5Pio);
     for (const auto& image : images) {
         CHECK(image.sha256.size() == 64);
         CHECK_FALSE(image.upstream_ref.empty());

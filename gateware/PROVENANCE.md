@@ -39,7 +39,7 @@ the upstream constraints, and writes:
 | File | FPGA | Size | SHA-256 |
 |---|---|---|---|
 | `rpi-5/CL025/radioberry.rbf` | Cyclone 10 LP 10CL025YE144C8G | 4 | 372888 | a25f30f4bc9ba3c3f7fbe3406f4a4a27da99be7e90c5272d1b6c05ee0acecedc |
-| `rpi-5/CL016/radioberry.rbf` | Cyclone 10 LP 10CL016YE144C8G | not built: timing | - | - |
+| `rpi-5/CL016/radioberry.rbf` | Cyclone 10 LP 10CL016YE144C8G | 5 | 274527 | fc975a3671496db6e45456f7cc0f1008df67f033b4fd17e80bc89cdfbfef4d20 |
 
 The script fills in this table from its output. The same tool version and
 seed reproduce the images byte for byte; another Quartus version gives
@@ -57,16 +57,20 @@ Against the upstream `timing.sdc`, in all three Quartus timing corners:
   domain. It is an intended clock-domain crossing into a synchroniser that
   the constraints do not mark as false; it is not a timing failure.
 - CL025, seed 4: every other path meets timing.
-- CL016: no fitter seed from 1 to 8 meets the AD9866 TX output
-  constraints (2.5 ns output delay at 153.6 MHz). `rffe_ad9866_tx[1]`
-  misses by about 3.2 ns, its route to the pin taking longer than the
-  6.5 ns period, and the other TX data pins and `rffe_ad9866_txsync` by up
-  to 0.29 ns. The upstream constraints relax only `rffe_ad9866_tx[4]`
-  (`set_max_delay 10`). No CL016 image is built until this is resolved;
-  the development board is a CL025.
+- CL016, seed 5: the AD9866 TX data outputs miss their output delay
+  (2.5 ns at 153.6 MHz) in the worst corner: `rffe_ad9866_tx[1]` by
+  3.23 ns, its route to the pin being longer than the 6.5 ns period;
+  `rffe_ad9866_tx[0,2,3,5]` by up to 0.28 ns; `rffe_ad9866_txsync` by
+  0.09 ns. No seed from 1 to 8 meets these constraints, and the upstream
+  constraints relax only `rffe_ad9866_tx[4]` (`set_max_delay 10`). Every
+  other path meets timing. The image ships with this violation; transmit
+  quality on a CL016 board has not been tested here (the development
+  board is a CL025).
 
-The build script allows only the synchroniser crossing; a variant with
-any other negative slack is not written and the script exits non-zero. Its logs and timing reports go to `build-gateware/` (not
+The build script allows exactly these exceptions (the synchroniser
+crossing on both, the AD9866 TX outputs down to -3.5 ns on the CL016); a
+variant with any other negative slack is not written and the script exits
+non-zero. Its logs and timing reports go to `build-gateware/` (not
 committed).
 
 ## Licences
