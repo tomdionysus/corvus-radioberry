@@ -167,6 +167,9 @@ No radioberry daemon or service is installed yet.
 - `/dev/radioberry` is exclusive. The module can be reloaded with
   `rmmod radioberry; modprobe radioberry` (add `load_gateware=0` to keep
   the FPGA as it is), or only the gateware with
-  `echo 1 > /sys/bus/spi/devices/spi0.0/reload`.
+  `echo 1 > /sys/bus/spi/devices/spi0.0/reload`. The gateware reload is
+  also the only recovery from the receive lock-up described in
+  `plan-rx-wedge.md`: `rbcat` reporting no frames, or `rbdrivertest`
+  hanging in `read()`, means the FPGA has stopped; reload and carry on.
 - Reboots and config changes are fine at any time; the desktop session is
   not in use for anything that must survive them.

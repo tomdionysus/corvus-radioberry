@@ -5,6 +5,15 @@ dependencies are done. Each item names its acceptance test. A finished
 item is removed from here and recorded at the top of `COMPLETED.md` with
 its date.
 
+## PAUSED (2026-11-08)
+
+Main development is paused. The PIO gateware's receive stream sometimes
+stops for good until the gateware is reloaded; the driver test harness
+(branch `item/2-driver-harness`, parked unmerged) triggers it in about
+20% of runs. The diagnosis and fix plan is `docs/plan-rx-wedge.md`; its
+section 6 says what reopens this list. Only that subplan, this file and
+documentation are worked on meanwhile.
+
 ## Where things stand (2026-11-08)
 
 - Built, installed and verified on the development Pi: `rbprobe`, the
@@ -21,7 +30,10 @@ its date.
   with PTT set.
 - `rbctl` sends single gateware commands; it refuses anything that can
   transmit without `--allow-tx`, which has not been used on hardware.
-- Next: section 2 (driver remainder), then the daemon.
+- An RX lock-up in the PIO gateware is under diagnosis
+  (`docs/plan-rx-wedge.md`). Driver 0.3.0 and all tools are installed
+  and work; the lock-up has only been triggered by the parked harness.
+- Next, after the pause: section 2 (driver remainder), then the daemon.
 
 ## Standing decisions
 
@@ -72,10 +84,16 @@ its date.
 
 ## 2. Kernel driver remainder (`driver/`)
 
+- [ ] Resolve the RX lock-up per `docs/plan-rx-wedge.md`. Acceptance:
+      the fix chosen there measured at 0 lock-ups over at least 500
+      receiver-count changes of the triggering pattern on the Pi.
 - [ ] Userspace test harness `tools/driver-tests/` against
-      `/dev/radioberry`: exclusive open, frame alignment for every
-      receiver count, non-blocking reads, `poll()`, short read and write
-      errors, safe command on close (reply shows `cw_on` clear).
+      `/dev/radioberry` (parked on `item/2-driver-harness`): exclusive
+      open, frame alignment for every receiver count, non-blocking reads,
+      `poll()`, short read and write errors, safe command on close (reply
+      shows `cw_on` clear), TX ring fill and drain at 48 ksps with PTT
+      clear. Acceptance: 20 consecutive passes on the Pi with no lock-up,
+      and `tools/ci-pi.sh` runs it when the device is present and free.
 
 ## 3. Daemon (`daemon/`)
 

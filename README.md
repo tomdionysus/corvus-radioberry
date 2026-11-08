@@ -26,14 +26,14 @@ Debian trixie packages.
 | Platform probe `rbprobe` | `tools/rbprobe/` | working |
 | Stream tool `rbcat` | `tools/rbcat/` | working |
 | Command tool `rbctl` | `tools/rbctl/` | working |
-| FPGA gateware, Hermes-Lite 2 Radioberry PIO variants 75.3 | `gateware/` | CL025 built and verified on hardware; CL016 built, untested, misses AD9866 TX output timing (`gateware/PROVENANCE.md`) |
-| Kernel driver `radioberry.ko`, overlay, ABI header | `driver/` | working: loads the gateware at boot, receive streaming verified; transmit path not yet exercised |
+| FPGA gateware, Hermes-Lite 2 Radioberry PIO variants 75.3 | `gateware/` | CL025 built and verified on hardware, with a receive-stream lock-up under diagnosis (`docs/plan-rx-wedge.md`); CL016 built, untested, misses AD9866 TX output timing (`gateware/PROVENANCE.md`) |
+| Kernel driver `radioberry.ko`, overlay, ABI header | `driver/` | working: loads the gateware at boot, receive streaming verified, TX path carried zero samples with PTT clear; sysfs `reload`, `debug` parameter |
 | Radio daemon `radioberryd` (OpenHPSDR Protocol 1 and 2, PA control) | `daemon/` | not started |
 | Loader and protocol tools (`rbload`, `p1probe`, `p2probe`) | `tools/` | not started |
 
 There is no daemon yet, so no SDR client can use the radio. The design of
 the whole stack is in `docs/plan-v1.md`; the open work, in order, is in
-`TODO/ACTIVE.md`.
+`TODO/ACTIVE.md`, currently paused for the lock-up diagnosis.
 
 ## Target hardware and host
 
@@ -183,7 +183,7 @@ to `build-coverage/coverage/html`.
 ## Repository layout
 
 ```
-docs/      design (plan-v1.md), development host, amplifier, upstream survey
+docs/      design (plan-v1.md), lock-up subplan (plan-rx-wedge.md), host, amplifier, upstream survey
 gateware/  gateware source, built bitfiles per FPGA, provenance, toolchain
 driver/    kernel module, device tree overlay, ABI header, logic tests
 daemon/    radioberryd (not started)
