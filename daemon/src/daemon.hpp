@@ -23,6 +23,8 @@ struct DaemonOptions {
     std::optional<std::array<std::uint8_t, 6>> mac;  // default: interface_mac()
     // A streaming client silent this long loses the radio.
     std::chrono::nanoseconds client_timeout = std::chrono::seconds(3);
+    // The radio's frequency error in ppm (positive: it tunes high).
+    double frequency_ppm = 0;
     // The driver's TX ring is kept within 100 ms at 48 ksps.
     DeviceOptions device{.tx_ring_limit_words = 4800};
     TxPolicyOptions tx;
@@ -64,6 +66,7 @@ private:
     Network network_;
     p1::Server server_;
     bool p2_discovery_logged_ = false;
+    double frequency_ppm_ = 0;
 };
 
 }  // namespace radioberry::daemon

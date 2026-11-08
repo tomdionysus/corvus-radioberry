@@ -20,6 +20,7 @@ TEST_CASE("radioberryd's defaults", "[options]") {
     CHECK(o.daemon.tx.drive_ceiling == 0);
     CHECK(o.daemon.tx.watchdog == 120s);
     CHECK(o.daemon.device.tx_ring_limit_words == 4800);
+    CHECK(o.daemon.frequency_ppm == 0);
     CHECK_FALSE(o.help);
     CHECK_FALSE(o.version);
     CHECK(usage().find("--client-timeout-ms") != std::string::npos);
@@ -63,4 +64,10 @@ TEST_CASE("radioberryd's transmit options", "[options]") {
     CHECK(o.daemon.tx.allow_pa);
     CHECK(o.daemon.tx.drive_ceiling == 64);
     CHECK(o.daemon.tx.watchdog == 30s);
+    CHECK(parse_options({"--frequency-ppm", "22.9"}).daemon.frequency_ppm == 22.9);
+    CHECK(parse_options({"--frequency-ppm", "-5"}).daemon.frequency_ppm == -5);
+    CHECK_THROWS_AS(parse_options({"--frequency-ppm", "201"}), std::invalid_argument);
+    CHECK_THROWS_AS(parse_options({"--frequency-ppm", "2x"}), std::invalid_argument);
+    CHECK_THROWS_AS(parse_options({"--frequency-ppm", "nan"}), std::invalid_argument);
+    CHECK_THROWS_AS(parse_options({"--frequency-ppm", "ppm"}), std::invalid_argument);
 }

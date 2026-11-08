@@ -65,6 +65,19 @@ Options parse_options(const std::vector<std::string>& args) {
             o.daemon.mac = mac(value());
         } else if (a == "--client-timeout-ms") {
             o.daemon.client_timeout = std::chrono::milliseconds(number(a, value(), 3'600'000));
+        } else if (a == "--frequency-ppm") {
+            const std::string text = value();
+            std::size_t used = 0;
+            double ppm = 0;
+            try {
+                ppm = std::stod(text, &used);
+            } catch (const std::exception&) {
+                used = 0;
+            }
+            if (used != text.size() || !(ppm >= -200 && ppm <= 200)) {
+                throw std::invalid_argument("--frequency-ppm: a number from -200 to 200: " + text);
+            }
+            o.daemon.frequency_ppm = ppm;
         } else if (a == "--allow-tx") {
             o.daemon.tx.allow_tx = true;
         } else if (a == "--allow-pa") {
@@ -103,6 +116,8 @@ std::string usage() {
            "  --port N                 Protocol 1 port (default 1024)\n"
            "  --mac XX:XX:XX:XX:XX:XX  MAC reported by discovery (default: the interface's)\n"
            "  --client-timeout-ms N    silence that ends a client's stream (default 3000)\n"
+           "  --frequency-ppm P        the radio's frequency error, positive if it tunes high;\n"
+           "                           every RX and TX frequency is corrected (default 0)\n"
            "  --allow-tx               let the owning client transmit (default: receive only)\n"
            "  --allow-pa               let the client enable the PA while transmitting\n"
            "  --drive-ceiling N        highest drive level sent, 0 to 255 (default 0)\n"

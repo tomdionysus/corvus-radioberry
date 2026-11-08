@@ -4,6 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <vector>
 
+#include "frequency.hpp"
 #include "p1_packets.hpp"
 
 using namespace radioberry;
@@ -394,4 +395,36 @@ TEST_CASE("stopping while transmitting leaves the gateware safe", "[server]") {
     CHECK_FALSE(rig.policy.transmitting());
     CHECK(rig.control.transmit() == TransmitState{});
     CHECK((*rig.control.value(0x09) & (1u << 19)) == 0);
+}
+
+TEST_CASE("frequency commands are corrected for the radio's error", "[server]") {
+    CHECK(is_frequency_address(0x01));
+    CHECK(is_frequency_address(0x02));
+    CHECK(is_frequency_address(0x08));
+    CHECK(is_frequency_address(0x12));
+    CHECK(is_frequency_address(0x16));
+    CHECK_FALSE(is_frequency_address(0x00));
+    CHECK_FALSE(is_frequency_address(0x09));
+    CHECK_FALSE(is_frequency_address(0x11));
+    CHECK_FALSE(is_frequency_address(0x17));
+    CHECK(corrected_frequency(7074000, 0) == 7074000);
+    // 22.9 ppm high: 162 Hz less is commanded at 7.074 MHz.
+    CHECK(corrected_frequency(7074000, 22.9) == 7073838);
+    CHECK(corrected_frequency(14074000, -10) == 14074141);
+    CHECK(corrected_frequency(0xffffffffu, -200) == 0xffffffffu);
+    CHECK(corrected_frequency(1, 1e9) == 0);
+
+    Rig rig;
+    rig.server.set_frequency_ppm(22.9);
+    rig.packet(host_packet(0, {0x04, 7074000}, {0x02, 7074000}), kA);
+    rig.packet(host_packet(1, {0x24, 7074000}, {0x14, 1000}),
+               kA);  // RX8, and 0x0a: not a frequency
+    CHECK(rig.control.value(0x02) == 7073838u);
+    CHECK(rig.control.value(0x01) == 7073838u);
+    CHECK(rig.control.value(0x12) == 7073838u);
+    CHECK(rig.control.value(0x0a) == 1000u);
+    // The same frequency again is not resent.
+    rig.drain();
+    rig.packet(host_packet(2, {0x04, 7074000}, {0x02, 7074000}), kA);
+    CHECK(rig.drain().empty());
 }

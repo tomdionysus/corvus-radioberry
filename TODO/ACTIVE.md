@@ -36,14 +36,16 @@ its date.
   decoder; 23 messages in 6 live 40 m slots through `radioberryd`.
   Samples decode only Q first (PSK Reporter confirms that spectrum);
   piHPSDR reads I first and also decodes, so the daemon is left as is.
-  Received frequencies read 162 Hz low at 7.075 MHz (about -23 ppm,
-  five stations against PSK Reporter); `docs/examples.md`.
+  `docs/examples.md`.
 - `radioberryd` transmits for the owning client only with `--allow-tx`
   (PTT and TX permission while MOX is granted, drive capped by
   `--drive-ceiling`, PA enable only with `--allow-pa`), proved against
   the fake device. Nothing has transmitted on air.
-- Next: frequency calibration (section 3), then section 6's transmit
-  steps with the owner's go-ahead.
+- Frequency calibration: `radioberryd --frequency-ppm 22.9` puts the
+  development board's received frequencies within 2 Hz of PSK Reporter
+  on 40 m and 30 m.
+- Next: section 6's transmit steps, each with the owner's go-ahead;
+  meanwhile Protocol 2 (section 3).
 
 ## Standing decisions
 
@@ -107,11 +109,6 @@ Nothing open.
 
 ## 3. Daemon (`daemon/`)
 
-- [ ] Frequency calibration: a ppm correction in `radioberryd` applied
-      to every RX and TX frequency command, measured against known
-      signals (the RX offset is -162 Hz at 7.075 MHz, about -23 ppm, from
-      PSK Reporter). Acceptance: `ft8rx` frequencies within 10 Hz of the
-      PSK Reporter median on two bands. Needed before transmit on air.
 - [ ] Protocol 2: discovery, General, DDC and DUC specific, High Priority
       both ways, DDC I/Q at 48 to 384 ksps, DUC I/Q at 192 ksps resampled
       with liquid-dsp, Mic/Line and Wideband declared absent, client

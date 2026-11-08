@@ -3,6 +3,14 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-08: Frequency calibration: `radioberryd --frequency-ppm P`
+  divides every RX and TX frequency command (0x01, 0x02 to 0x08, 0x12 to
+  0x16) by 1 + P/10^6, P being the radio's error, positive if it tunes
+  high. The development board measured +22.9 ppm (received frequencies
+  162 Hz low at 7.075 MHz against PSK Reporter). Acceptance: with the
+  correction, `ft8rx` decodes within 2 Hz of the PSK Reporter median on
+  40 m (0 to +1 Hz, three stations) and 30 m (-2 to 0 Hz, three
+  stations); `docs/examples.md`.
 - 2026-11-08: Protocol 1 transmit, proved against the fake device (on-air
   steps are section 6). The owning client's MOX (the second command
   block's) goes through `TxPolicy` and the session: PTT and the TX

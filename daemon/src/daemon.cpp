@@ -46,7 +46,10 @@ Daemon::Daemon(Device& device, DaemonOptions options)
               const DeviceSnapshot s = service_.snapshot();
               return p1::GatewareStatus{s.cw_or_ptt, s.external_cw_key};
           },
-          network_) {}
+          network_) {
+    server_.set_frequency_ppm(options.frequency_ppm);
+    frequency_ppm_ = options.frequency_ppm;
+}
 
 Daemon::~Daemon() = default;
 
@@ -80,6 +83,9 @@ bool Daemon::run(const std::atomic<bool>& stop) {
     const TxPolicyOptions& tx = policy_.options();
     spdlog::info("gateware {}.{}, {} receivers; Protocol 1 on port {}", identity_.version_major,
                  identity_.version_minor, identity_.receivers, port());
+    if (frequency_ppm_ != 0) {
+        spdlog::info("frequencies corrected for a radio error of {:+.2f} ppm", frequency_ppm_);
+    }
     if (tx.allow_tx) {
         spdlog::warn(
             "transmit allowed: drive ceiling {}, PA {}, watchdog {} s; no PA interlock is claimed",

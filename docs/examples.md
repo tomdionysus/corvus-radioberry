@@ -51,8 +51,16 @@ clients may need the order set as `ft8rx` does.
 Decoded frequencies against the median of PSK Reporter spots in the same
 ten minutes (40 m, 2026-11-08 20:38 to 20:48 UTC, five stations with
 spots, 161 to 654 spots each): every station 161 to 163 Hz low, median
--162 Hz, about -23 ppm at 7.075 MHz. Not yet corrected anywhere. A
-reference clock off its nominal frequency would do this; not confirmed.
+-162 Hz, about -23 ppm at 7.075 MHz. A reference clock off its nominal
+frequency would do this; not confirmed.
+
+With `radioberryd --frequency-ppm 22.9`, which corrects every RX and TX
+frequency command for that error, the same comparison gave 0 to +1 Hz on
+40 m (three stations, 123 to 272 spots each, 21:35 UTC) and -2 to 0 Hz on
+30 m (three stations, 86 to 137 spots each, 21:38 to 21:44 UTC), where
+uncorrected 30 m would read about 232 Hz low. One ppm figure corrects
+both bands. The figure belongs to the development board; another board
+needs its own measurement.
 
 ### Measured
 

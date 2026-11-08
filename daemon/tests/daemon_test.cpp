@@ -271,6 +271,7 @@ TEST_CASE("radioberryd transmits for the owner when allowed", "[daemon]") {
     DaemonOptions o = Running::options();
     o.tx.allow_tx = true;
     o.tx.drive_ceiling = 0x20;
+    o.frequency_ppm = 1.0;  // logged at start
     Running r(device, o);
     const sockaddr_in to = loopback(r.daemon.port());
     Socket client(SOCK_DGRAM);

@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "device/capacity.hpp"
+#include "frequency.hpp"
 
 namespace radioberry::daemon::p1 {
 
@@ -138,6 +139,11 @@ void Server::tick() {
     }
 }
 
+void Server::set_frequency_ppm(double ppm) {
+    const std::lock_guard lock(mutex_);
+    frequency_ppm_ = ppm;
+}
+
 bool Server::running() const {
     const std::lock_guard lock(mutex_);
     return running_;
@@ -198,6 +204,8 @@ void Server::apply_locked(const HostCommand& c) {
         return;
     } else if (c.address == kCwConfig) {
         policy_.set_cwx((data & kCwxEnable) != 0);
+    } else if (is_frequency_address(c.address)) {
+        data = corrected_frequency(data, frequency_ppm_);
     }
     if (control_.value(c.address) == data || refused_[c.address] == data) {
         return;

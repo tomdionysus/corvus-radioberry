@@ -70,6 +70,10 @@ public:
     // after Session::tick).
     void tick();
 
+    // The radio's frequency error (positive: it tunes high); every RX and
+    // TX frequency command is corrected for it.
+    void set_frequency_ppm(double ppm);
+
     bool running() const;
     std::optional<Peer> client() const;
     // Receivers the client asked for, and those the device runs.
@@ -100,6 +104,7 @@ private:
     unsigned device_receivers_ = 1;
     unsigned status_address_ = 0;
     std::optional<HostCommand> pending_ack_;
+    double frequency_ppm_ = 0;
     // Values Control refused, so each is logged once.
     std::array<std::optional<std::uint32_t>, Control::kAddresses> refused_{};
     ServerCounters counters_;
