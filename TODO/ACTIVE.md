@@ -15,7 +15,11 @@ acceptance test.
   libi2c-dev, libsystemd-dev.
 - Build and install with CMake throughout, including a kbuild wrapper
   target for the module; `cmake --install` places everything.
-- Gateware is copied in as prebuilt upstream bitfiles, never compiled here.
+- Gateware: the Hermes-Lite 2 Radioberry PIO variants, built unmodified
+  from source (`gateware/source/`) with Quartus Prime Lite 23.1std.1 on an
+  x86-64 machine by `tools/build-gateware.sh`; the bitfiles are committed
+  and the Pi only installs them. Upstream's free rpi-5 images are the
+  older GPIO-mode gateware and are not used.
 - Development FPGA is a 10CL025 (verified 2026-11-08). Both the CL016
   and CL025 rpi-5 images are kept in `gateware/` and the driver supports
   both.
@@ -136,16 +140,24 @@ acceptance test.
 
 ## 4. Gateware (`gateware/`)
 
-- [x] Copy in the upstream `radioberry_pio_cl025` and `radioberry_pio_cl016`
-      bitfiles with a provenance file (upstream repo, tag or commit, hash)
-      and the corresponding source archive required by GPL-2.0-or-later.
+- [x] Source archive of the `radioberry_pio_cl025` and
+      `radioberry_pio_cl016` variants (Hermes-Lite 2 3e467fd, 75.3) with
+      `gateware/PROVENANCE.md`.
 - [x] Document, from the upstream Verilog, the facts the driver depends
       on: RX 4-bit bus and metadata nibble sequence, TX serial format and
       `pi_tx_ready` handshake, TX and RX FIFO depths, SPI command set,
       CN301 outputs (envpa, inttr, exttr, ptt_out) and keyer inputs.
       Written to `gateware/README.md`.
-- [x] Replace `/lib/firmware/radioberry.rbf` on the development Pi with
-      the rpi-5 CL025 image (done by `cmake --install`).
+- [x] Build script `tools/build-gateware.sh` (Docker or a local Quartus)
+      and toolchain notes `gateware/QUARTUS.md`.
+- [ ] Build both bitfiles with Quartus Prime Lite 23.1std.1 and commit
+      them with the filled-in `PROVENANCE.md`; add their hashes to the
+      `rbprobe` catalogue as rpi-5 PIO. Needs the Quartus installers,
+      downloaded by someone who accepts the Quartus licence agreement.
+      Acceptance: `tools/build-gateware.sh` exits 0 and writes both images.
+- [ ] Install the CL025 build on the development Pi. Acceptance: `rbprobe`
+      reports the installed image as rpi-5 PIO 10CL025 and the driver
+      reads gateware 75.3 with 6 receivers.
 
 ## 5. Daemon (`daemon/`)
 

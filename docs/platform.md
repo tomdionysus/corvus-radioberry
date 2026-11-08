@@ -32,25 +32,26 @@ Radioberry's SPI control device, so the overlay side is live.
 
 **The FPGA is an Intel Cyclone 10 LP 10CL025.** Established on 2026-11-08
 by bit-banging the upstream Pi 5 gateware loader (`loadgateware3.c`,
-libgpiod 2) with both rpi-5 images from the December 2025 upstream tag:
-the CL016 image left CONF_DONE (GPIO 22) low, the CL025 image configured
-with CONF_DONE and nSTATUS (GPIO 26) both high. The loader and both images
-remain in a scratch directory on the Pi.
+libgpiod 2) with both upstream rpi-5 GPIO-mode images: the CL016 image
+left CONF_DONE (GPIO 22) low, the CL025 image configured with CONF_DONE
+and nSTATUS (GPIO 26) both high. `rbprobe --identify` repeats the test.
 
 ### Known gateware images
 
-From the upstream tag of 2025-12-16 (commit 269e402). `rbprobe` identifies
-the installed image by these hashes.
+Upstream Radioberry-2.x images that `rbprobe` identifies by hash. None of
+them works with this project's driver: they are the 73.3 GPIO-mode
+gateware (8-bit RX bus, TX over SPI chip select 1). The driver needs the
+75.3 PIO gateware built from `gateware/source/` (`gateware/PROVENANCE.md`),
+whose hashes are added to the catalogue when it is built.
 
-| Image | Family | FPGA | Size | SHA-256 |
+| Image (Radioberry-2.x, commit 269e402) | Family | FPGA | Size | SHA-256 |
 |---|---|---|---|---|
-| `SBC/rpi-5/releases/dev/CL025/radioberry.rbf` | rpi-5 PIO | 10CL025 | 334915 | fe6a4e8acb67fbf80aa679affc8f2e0e0abe15908938cb2aed10804b461105cd |
-| `SBC/rpi-5/releases/dev/CL016/radioberry.rbf` | rpi-5 PIO | 10CL016 | 275438 | 5f146a8c2113a888bd6b7d08d8ac9f62b796e79dd950ecd47b31b5ec1ebe9e48 |
+| `SBC/rpi-5/archive/releases/dev/CL025/radioberry.rbf` | rpi-5 GPIO | 10CL025 | 334915 | fe6a4e8acb67fbf80aa679affc8f2e0e0abe15908938cb2aed10804b461105cd |
+| `SBC/rpi-5/archive/releases/dev/CL016/radioberry.rbf` | rpi-5 GPIO | 10CL016 | 275438 | 5f146a8c2113a888bd6b7d08d8ac9f62b796e79dd950ecd47b31b5ec1ebe9e48 |
 | `SBC/rpi-4/releases/dev/CL016/radioberry.rbf` | rpi-4 GPIO | 10CL016 | 276541 | aa5c36f42456bc5dee622a694db2b36aa31dadfbca2372e00e1cd952e7217da3 |
 
-The rpi-5 CL025 image is the correct one for the development board. It
-has been installed as `/lib/firmware/radioberry.rbf` by `cmake --install`
-since 2026-11-08, replacing the rpi-4 CL016 image.
+On the development Pi, `/lib/firmware/radioberry.rbf` is the rpi-5 GPIO
+CL025 image (2026-11-08); it is replaced by the PIO build.
 
 ## Operating system
 
@@ -102,7 +103,7 @@ What is present:
 | Path | State |
 |---|---|
 | `/boot/firmware/overlays/radioberry.dtbo` | installed, overlay active |
-| `/lib/firmware/radioberry.rbf` | the rpi-5 CL025 image from `gateware/` since 2026-11-08. Until then it held the upstream rpi-4 CL016 image (276541 bytes, installed 2026-11-07), wrong in family and in chip |
+| `/lib/firmware/radioberry.rbf` | the upstream rpi-5 GPIO-mode CL025 image (73.3); not usable with this project's driver, see Known gateware images |
 | `/usr/local/bin/rbprobe`, `/usr/local/share/radioberry/gateware/` | installed from this repository by `cmake --install` |
 | `/usr/local/bin/pihpsdr` | built 2026-11-07 from the g0orx submodule |
 | `/usr/local/lib/libwdsp.so` | built from a g0orx/wdsp checkout (49084f5, 2022-01-17) |

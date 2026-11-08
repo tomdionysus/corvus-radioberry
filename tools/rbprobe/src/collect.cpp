@@ -468,7 +468,10 @@ private:
         std::vector<Candidate> candidates;
         for (auto& [path, content] : candidate_files()) {
             auto known = lookup(Sha256::hex(content));
-            if (known && known->family == GatewareFamily::kRpi5Pio) {
+            // Either rpi-5 family configures the chip; both are safe to load
+            // on a Pi 5 whose stream pins are inputs.
+            if (known && (known->family == GatewareFamily::kRpi5Pio ||
+                          known->family == GatewareFamily::kRpi5Gpio)) {
                 candidates.push_back({path, std::move(content), *known});
             }
         }

@@ -9,7 +9,7 @@ TEST_CASE("known images are found by hash", "[catalog]") {
     const auto cl025 =
         find_known_image("fe6a4e8acb67fbf80aa679affc8f2e0e0abe15908938cb2aed10804b461105cd");
     REQUIRE(cl025.has_value());
-    CHECK(cl025->family == GatewareFamily::kRpi5Pio);
+    CHECK(cl025->family == GatewareFamily::kRpi5Gpio);
     CHECK(cl025->fpga == FpgaType::k10CL025);
     CHECK(cl025->size == 334915);
 
@@ -26,7 +26,7 @@ TEST_CASE("catalog lists the CL025 rpi-5 image first", "[catalog]") {
     const auto images = known_images();
     REQUIRE(images.size() == 3);
     CHECK(images[0].fpga == FpgaType::k10CL025);
-    CHECK(images[0].family == GatewareFamily::kRpi5Pio);
+    CHECK(images[0].family == GatewareFamily::kRpi5Gpio);
     for (const auto& image : images) {
         CHECK(image.sha256.size() == 64);
         CHECK_FALSE(image.upstream_ref.empty());
@@ -35,6 +35,7 @@ TEST_CASE("catalog lists the CL025 rpi-5 image first", "[catalog]") {
 
 TEST_CASE("family and FPGA names", "[catalog]") {
     CHECK(to_string(GatewareFamily::kRpi5Pio) == "rpi-5 PIO");
+    CHECK(to_string(GatewareFamily::kRpi5Gpio) == "rpi-5 GPIO");
     CHECK(to_string(GatewareFamily::kRpi4Gpio) == "rpi-4 GPIO");
     CHECK(to_string(GatewareFamily::kJuice) == "juice");
     CHECK(to_string(FpgaType::k10CL016) == "10CL016");

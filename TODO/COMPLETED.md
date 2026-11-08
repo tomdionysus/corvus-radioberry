@@ -3,6 +3,15 @@
 Newest first. Each entry gives the date, what was done, and where the
 result lives.
 
+- 2026-11-08: Gateware switched to a source build. Upstream's free rpi-5
+  bitfiles are the 73.3 GPIO-mode gateware (they report 73.3 and no
+  receiver count over SPI); its PIO gateware ships only in a paid image.
+  Removed those bitfiles from `gateware/`, replaced the source archive with
+  Hermes-Lite 2 3e467fd (75.3), added `tools/build-gateware.sh`,
+  `tools/gateware/Dockerfile` and `gateware/QUARTUS.md`, rewrote
+  `gateware/PROVENANCE.md`, updated `gateware/README.md` for 75.3, and
+  classified the upstream images in `rbprobe` as rpi-5 GPIO. README credits
+  PA3GSB's EUR 5 ready-to-run image.
 - 2026-11-08: Gateware (section 4): the upstream rpi-5 CL025 and CL016
   bitfiles copied into `gateware/rpi-5/`, with `gateware/PROVENANCE.md`
   and the corresponding Hermes-Lite 2 source (commit 7472bd1, version

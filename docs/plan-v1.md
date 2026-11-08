@@ -12,7 +12,7 @@ stack that is documented, performant and robust: a kernel driver that
 builds against the stock Raspberry Pi OS kernel (6.18 and newer), a radio
 daemon speaking OpenHPSDR Protocol 1 and Protocol 2, a platform probe, and
 explicit control of the AURSINC PA5W V2 amplifier. The FPGA gateware is
-taken as a fixed, prebuilt input.
+taken as a fixed input: the upstream source, built unmodified.
 
 The motivation is the state of the upstream stack: undocumented wire
 formats and ABI, a driver that depends on a private kernel patch, high
@@ -25,7 +25,9 @@ defects the design addresses.
 These are not design choices. They come from hardware we do not change.
 
 - Gateware: the Hermes-Lite 2 `radioberry_pio_cl025` and
-  `radioberry_pio_cl016` variants, used as upstream ships them. They define
+  `radioberry_pio_cl016` variants (version 75.3), built unmodified from
+  the upstream source with Quartus Prime Lite on an x86-64 machine. They
+  define
   the RX wire format (4-bit parallel bus on GPIO 18 to 21 with a clock on
   GPIO 6 and a sample-ready line on GPIO 25, each 32-bit word carrying a
   4-bit metadata nibble and 24 bits of I or Q), the TX wire format (1-bit
@@ -67,7 +69,7 @@ These are not design choices. They come from hardware we do not change.
                            +-----------|------------+
                                        | rp1-pio, spi0, gpiod
                            +-----------|------------+
-                           | Radioberry 2.x gateware (prebuilt) |
+                           | Radioberry 2.x gateware (HL2 75.3) |
                            | AD9866, CN301 -> PA5W V2           |
                            +------------------------------------+
 
@@ -263,7 +265,7 @@ the report logic is tested against recorded fixtures.
 1. `rbprobe`.
 2. Repository skeleton: CMake, formatting, SPDX check, Catch2 and coverage
    wiring, Pi build script.
-3. Gateware bitfiles copied in with provenance; the wire formats and FIFO
+3. Gateware built from source with provenance; the wire formats and FIFO
    depths documented from the upstream Verilog; the correct image
    installed on the development Pi.
 4. Driver: probe and gateware load, control path, RX cyclic DMA and ring,

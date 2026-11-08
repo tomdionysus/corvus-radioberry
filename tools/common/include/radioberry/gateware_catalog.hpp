@@ -9,8 +9,9 @@
 namespace radioberry {
 
 // Which host interface a gateware image was built for. Only the rpi-5 PIO
-// family works on a Raspberry Pi 5.
-enum class GatewareFamily { kRpi5Pio, kRpi4Gpio, kJuice };
+// family works with this project's driver; rpi-5 GPIO is the older 73.3
+// gateware with an 8-bit RX bus.
+enum class GatewareFamily { kRpi5Pio, kRpi5Gpio, kRpi4Gpio, kJuice };
 
 enum class FpgaType { k10CL016, k10CL025 };
 

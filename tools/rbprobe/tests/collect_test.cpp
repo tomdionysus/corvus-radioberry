@@ -2,9 +2,11 @@
 #include "collect.hpp"
 
 #include <algorithm>
+#include <array>
 #include <catch2/catch_test_macros.hpp>
 
 #include "fake_source.hpp"
+#include "radioberry/sha256.hpp"
 
 using namespace radioberry;
 using namespace radioberry::probe;
@@ -234,6 +236,27 @@ TEST_CASE("identify deduplicates identical images", "[collect]") {
     pi.configure = nullptr;
     const Report r = collect(pi, test_options(true));
     CHECK(pi.configure_calls == 2);  // CL025 and CL016 once each
+}
+
+TEST_CASE("rpi-5 GPIO-mode gateware is installed but unusable", "[collect]") {
+    static const std::string gpio_image = "fake rpi-5 GPIO CL025 gateware";
+    static const std::string hash = radioberry::Sha256::hex(gpio_image);
+    static const std::array<KnownImage, 1> catalog = {
+        {{hash, GatewareFamily::kRpi5Gpio, FpgaType::k10CL025, gpio_image.size(), "archive", "t"}}};
+    FakeSource pi = working_pi();
+    pi.files["/lib/firmware/radioberry.rbf"] = gpio_image;
+    pi.dirs.erase("/sys/module/radioberry");
+    pi.files.erase("/dev/radioberry");
+    pi.config_lines = {true, "", true, true};
+    pi.files["/srv/gateware/gpio.rbf"] = gpio_image;
+    pi.configure = [](std::span<const std::uint8_t>) { return ConfigResult{}; };
+    Options o = test_options(true);
+    o.catalog = catalog;
+    const Report r = collect(pi, o);
+    CHECK(str(r, "firmware.family") == "rpi-5 GPIO");
+    CHECK(has(r, "firmware.family", Severity::kBlocker));
+    // A GPIO-mode image still identifies the chip.
+    CHECK(str(r, "fpga.type") == "10CL025");
 }
 
 TEST_CASE("missing and unknown firmware", "[collect]") {

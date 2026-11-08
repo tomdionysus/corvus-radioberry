@@ -37,7 +37,7 @@ if(RADIOBERRY_COVERAGE)
     add_custom_target(coverage
         COMMAND ${CMAKE_COMMAND} -E rm -rf ${_cov_dir}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${_cov_dir}
-        COMMAND ${LCOV_EXECUTABLE} --quiet --zerocounters --directory ${CMAKE_BINARY_DIR}
+        COMMAND find ${CMAKE_BINARY_DIR} -name *.gcda -delete
         COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${CMAKE_BINARY_DIR} --output-on-failure
         COMMAND ${LCOV_EXECUTABLE} --quiet --capture --directory ${CMAKE_BINARY_DIR}
                 --ignore-errors mismatch,inconsistent

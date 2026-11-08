@@ -4,9 +4,14 @@ A complete, self-contained software stack for the Radioberry 2.x HF
 transceiver HAT on a Raspberry Pi 5: Linux kernel driver, userspace radio
 daemon speaking OpenHPSDR Protocol 1 and Protocol 2, DSP support library,
 platform diagnostics, and control of the AURSINC PA5W V2 amplifier board,
-with the FPGA gateware carried as prebuilt upstream bitfiles. Every
-component is built from this repository against the current Raspberry Pi OS
-kernel (6.18 and newer) with no dependency on out-of-tree kernel patches.
+with the FPGA gateware built from its GPL source. Every component is built
+from this repository against the current Raspberry Pi OS kernel (6.18 and
+newer) with no dependency on out-of-tree kernel patches.
+
+The Radioberry and the upstream software this project builds on are the
+work of Johan Maas, PA3GSB. He offers a ready-to-run Raspberry Pi 5 image
+of his software for EUR 5 at https://pa3gsb.gumroad.com/l/radioberry. If
+the Radioberry is useful to you, buying it supports his work.
 
 The code is C++20, with C only where the kernel or a shared ABI header
 requires it. Every component carries Catch2 unit tests with the aim of
@@ -21,12 +26,12 @@ Debian trixie packages.
 | Documentation of the hardware and host | `docs/` | current |
 | Work tracking | `TODO/` | current |
 | Platform probe (`rbprobe`) | `tools/rbprobe/` | working; gateware identity via the driver waits for the driver |
-| FPGA gateware bitfiles (prebuilt, 10CL025 and 10CL016) | `gateware/` | in place, with provenance, source and interface notes |
+| FPGA gateware (Hermes-Lite 2 Radioberry PIO variants, 10CL025 and 10CL016) | `gateware/` | source, build script and interface notes in place; bitfiles not built yet |
 | Kernel driver (`radioberry.ko`, RP1 PIO plus DMA) | `driver/` | planned |
 | Radio daemon `radioberryd` (Protocol 1 and Protocol 2, PA control) | `daemon/` | planned |
 | Further tooling (loader, stream dump, protocol probes) | `tools/` | planned |
 
-Only `rbprobe` and the gateware install today. `TODO/ACTIVE.md` is the authoritative list of
+Only `rbprobe` installs today; the gateware installs once it is built. `TODO/ACTIVE.md` is the authoritative list of
 what is being built and in which order.
 
 ## Target hardware and host
@@ -92,13 +97,15 @@ The overlay is built and installed by this repository; it enables `spi0`,
 `rp1_pio` and the `sdr,radioberry` platform device, and disables the
 spidev nodes.
 
-The gateware is not compiled here. `gateware/rpi-5/<type>/radioberry.rbf`
-holds the prebuilt image for each FPGA, copied from the upstream
-Hermes-Lite 2 `radioberry_pio_cl025` and `radioberry_pio_cl016` variants
-(version 75.2). `gateware/PROVENANCE.md` gives the upstream tag and commit
-they come from and their hashes, `gateware/source/` the corresponding
-source required by their licence, and `gateware/README.md` the wire
-formats and control behaviour the driver and daemon rely on.
+The gateware is the Hermes-Lite 2 `radioberry_pio_cl025` and
+`radioberry_pio_cl016` variants, version 75.3, built from the source in
+`gateware/source/` with Quartus Prime Lite on an x86-64 machine
+(`tools/build-gateware.sh`; toolchain and licence in
+`gateware/QUARTUS.md`) and committed as
+`gateware/rpi-5/<type>/radioberry.rbf`. The Pi only installs the result.
+`gateware/PROVENANCE.md` records the source commit and the hashes of the
+built images, and `gateware/README.md` the wire formats and control
+behaviour the driver and daemon rely on.
 
 ## Build and install
 
@@ -134,7 +141,7 @@ skips it). Every gateware image goes to
 
 Until the components in the status table exist, only the `cmake`,
 `ctest` and `cmake --install` steps work, and they build, test and install
-`rbprobe` and the gateware.
+`rbprobe`.
 
 ## Using the radio
 
@@ -169,7 +176,7 @@ Until the components in the status table exist, only the `cmake`,
 
 ```
 docs/      hardware, host, plan and background references
-gateware/  prebuilt bitfiles per FPGA, provenance and corresponding source
+gateware/  gateware source, built bitfiles per FPGA, provenance, toolchain
 driver/    kernel module, device tree overlay, ioctl ABI header
 daemon/    radioberryd: device layer, Protocol 1, Protocol 2, DSP, PA
 tools/     rbprobe, rbload, rbcat, rbctl, p1probe, p2probe, ci-pi.sh
@@ -206,7 +213,7 @@ private; the licence governs any future distribution.
 | Work | Author / holder | Licence | Use here | Reference |
 |---|---|---|---|---|
 | Radioberry 2.x driver, daemon, overlays, gateware loader | Johan Maas, PA3GSB | Unlicense (public domain) as stated in each source file; no repository-level LICENSE file | ABI, pin map and behaviour reference; code may be reused freely | https://github.com/pa3gsb/Radioberry-2.x |
-| Hermes-Lite 2 gateware, Radioberry variants (`radioberry_pio_cl025`, `radioberry_pio_cl016`) | Steve Haynal, KF7O; Johan Maas, PA3GSB | GPL-2.0-or-later (file headers) | Prebuilt bitfiles redistributed unmodified under `gateware/`, with corresponding source | https://github.com/softerhardware/Hermes-Lite2 |
+| Hermes-Lite 2 gateware, Radioberry variants (`radioberry_pio_cl025`, `radioberry_pio_cl016`) | Steve Haynal, KF7O; Johan Maas, PA3GSB | GPL-2.0-or-later (file headers) | Source in `gateware/source/`, unmodified; built here and the bitfiles distributed under `gateware/rpi-5/` | https://github.com/softerhardware/Hermes-Lite2 |
 | openHPSDR DSP cores used by Hermes-Lite 2 (CIC, FIR, CORDIC, receiver) | Alex Shovkoplyas VE3NEA; Phil Harman VK6APH; Darrell Harmon; Cathy Moss; Steve Haynal KF7O | LGPL-2.0-or-later ("GNU Library General Public License", file headers) | Contained in the redistributed bitfiles | https://github.com/softerhardware/Hermes-Lite2/tree/master/gateware/rtl/radio_openhpsdr1 |
 | Hermes-Lite 2 protocol description | softerhardware project | project wiki | Protocol 1 dialect, PA and bias commands, ADC fields | https://github.com/softerhardware/Hermes-Lite2/wiki/Protocol |
 | openHPSDR Ethernet Protocol v4.x (Protocol 2 specification) and Protocol 1 firmware sources | OpenHPSDR project, TAPR; Phil Harman VK6PH | GPL-2.0 (repository LICENSE) | Protocol 2 implementation reference | https://github.com/TAPR/OpenHPSDR-Firmware (Protocol 2/Documentation) |
@@ -218,7 +225,7 @@ private; the licence governs any future distribution.
 | HL2-PA30 (30 W amplifier design) | JI1UDD | no licence file in repository | Hardware reference for the PA family | https://github.com/ji1udd/HL2-PA30 |
 | AURSINC Radioberry Preamp Board V2 (PA5W V2) | AURSINC (commercial) | none published; test notes by BG7IYN | The amplifier board in use | https://www.aliexpress.com/item/1005008233825206.html , https://jumbo5566.github.io/pro/rb/2024/04/17/rb016_025.html |
 | AD9866 datasheet | Analog Devices | datasheet terms | Front-end reference | https://www.analog.com/en/products/ad9866.html |
-| Intel Quartus Prime generated IP (PLL, FIFO megafunctions) inside the upstream bitfiles | Intel | Intel licence terms for generated IP | Present in the redistributed bitfiles; not built here | https://www.intel.com/content/www/us/en/software/programmable/quartus-prime/download.html |
+| Quartus Prime Lite Edition and its generated IP (PLL, FIFO megafunctions) | Altera (formerly Intel) | Quartus Prime licence agreement, accepted by whoever builds | Toolchain for the gateware build (`gateware/QUARTUS.md`); not redistributed; its generated IP is inside the bitfiles | https://www.altera.com/downloads |
 
 Code taken from an upstream work keeps that work's licence header and
 copyright line in addition to the SPDX line above. "Hermes", "Hermes-Lite",

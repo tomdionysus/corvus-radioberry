@@ -1,20 +1,29 @@
 # Gateware: what the driver depends on
 
-The FPGA runs the Hermes-Lite 2 gateware in its Radioberry PIO variants,
-`radioberry_pio_cl025` and `radioberry_pio_cl016`, version 75.2. The
-images are in `rpi-5/<type>/radioberry.rbf`; where they come from, and the
-source they were built from, is in `PROVENANCE.md`.
+Status 2026-11-08.
 
-Everything below was read from that source (`source/`, paths relative to
+The FPGA runs the Hermes-Lite 2 gateware in its Radioberry PIO variants,
+`radioberry_pio_cl025` and `radioberry_pio_cl016`, version 75.3, built in
+this repository from the source in `source/`. `PROVENANCE.md` names the
+source commit and the build; `QUARTUS.md` describes the toolchain and how
+to obtain it; `tools/build-gateware.sh` builds `rpi-5/<type>/radioberry.rbf`.
+
+Everything below is read from that source (paths relative to
 `gateware/rtl/` in the archive) and from the upstream Pi 5 driver's PIO
-programs, on 2026-11-08. Statements marked *not yet measured* follow from
-the source and have not been checked on hardware.
+programs. Statements marked *not yet measured* follow from the source and
+have not been checked on hardware.
+
+Only the PIO variants work with this project's driver. The Radioberry-2.x
+repository also carries older GPIO-mode images (version 73.3: an 8-bit RX
+bus and TX over a second SPI chip select); `rbprobe` recognises them and
+reports them as unusable.
 
 ## 1. Variants
 
 | | CL025 | CL016 |
 |---|---|---|
 | Device | 10CL025YE144C8G | 10CL016YE144C8G |
+| Version | 75.3 | 75.3 |
 | Receivers (`NR`) | 6 | 4 |
 | Transmitters (`NT`) | 1 | 1 |
 | CW (`CW`) | 1, basic: key and PTT from the jack | 1, basic |
@@ -125,19 +134,23 @@ SPI (section 4) and is the authority at run time.
 - `int_tx_on = (tx_on | ext_ptt) & run & tx_permission`, where `tx_on`
   comes from the radio's transmit state machine, `ext_ptt` is the debounced
   jack ring (PTT on the PA board's MIC jack), `run` is SPI bit 40 and
-  `tx_permission` is SPI bit 42.
+  `tx_permission` is SPI bit 42. `ext_ptt` also feeds the radio's transmit
+  state machine.
 - `exttr` (CN301 pin 3, `ptt_out`) = `int_tx_on`.
 - `inttr` (CN301 pin 4) = `int_tx_on & (pa_enable | ~tr_disable)`.
 - `envpa` (CN301 pin 8) and `envbias` = `int_tx_on & pa_enable`.
 - `pa_enable` and `tr_disable` latch from command address 0x09, data bits
   19 and 18, and keep their value until the next 0x09 command.
-- The radio leaves its idle state, and the DAC transmits, on any of: SPI
-  PTT (bit 32) together with valid TX FIFO data; the CW key on the jack tip
-  (`ext_keydown`, unconditional in the basic CW build); CWX keying.
-  **None of these needs `run` or the TX permission bit.** Those two gate
-  only the CN301 lines, which switch the T/R relay and bias the PA. A key
-  on the jack therefore drives the DAC with the PA unswitched whenever the
-  gateware is loaded. *Not yet measured.*
+- The radio leaves its idle state on any of: SPI PTT (bit 32) together
+  with valid TX FIFO data, which transmits the FIFO's samples; the CW key
+  on the jack tip (`ext_keydown`, unconditional in the basic CW build),
+  which transmits a CW carrier; CWX keying; external PTT on the jack ring,
+  which holds the radio in its pre-transmit state with the DAC enabled and
+  no samples flowing until one of the others follows. **None of these needs
+  `run` or the TX permission bit.** Those two gate only the CN301 lines,
+  which switch the T/R relay and bias the PA. A key on the jack therefore
+  drives the DAC with the PA unswitched whenever the gateware is loaded.
+  *Not yet measured.*
 - Consequences for software: keep SPI bit 42 clear except while a client
   is allowed to transmit, clear bit 32 in every command unless MOX is
   wanted, and send address 0x09 with bit 19 clear whenever PA control is
