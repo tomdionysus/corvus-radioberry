@@ -185,7 +185,8 @@ state machine in `radio.v`:
   8 bytes before full. If it does fill, writes are dropped until it drains
   to a quarter (1024 samples) and a word boundary is reached.
 - While not transmitting, the radio drains the FIFO at the sample rate and
-  discards the samples. On entering transmit it stops reading for the TX
+  discards the samples (measured: 48 000 words per second with PTT
+  clear). On entering transmit it stops reading for the TX
   buffer latency (default 20 ms, address 0x17) to fill the FIFO.
 - Gateware watchdog: in transmit, if the FIFO runs dry for the PTT hang
   time (default 12 ms, address 0x17 bits 12..8) the radio returns to idle
@@ -193,7 +194,10 @@ state machine in `radio.v`:
   when PTT is cleared. Software must never send 31 there.
 - Upstream PIO throughput: divider 8 (25 MHz), seven cycles per bit,
   about 233 cycles per word: at most about 107 000 words per second, more
-  than twice the 48 ksps needed. *Not yet measured.*
+  than twice the 48 ksps needed. Measured on the development board with
+  PTT clear: about 102 000 words per second while the FIFO fills (from
+  empty, with the driver's ring full, for about 75 ms), then exactly
+  48 000 per second as the radio drains it.
 
 ## 8. Keyer and jack inputs
 

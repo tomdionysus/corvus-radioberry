@@ -3,6 +3,18 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-08: Driver test harness `tools/driver-tests/` (`rbdrivertest`,
+  Catch2) against `/dev/radioberry`: exclusive open, info against sysfs,
+  whole-frame reads for every receiver count with no resyncs or dropped
+  words, non-blocking reads to EAGAIN, `poll()` for frames, TX space and
+  RX overrun, short read and partial-sample write errors, unknown ioctls,
+  safe command on close (reply shows `cw_on` clear), TX ring fill and
+  drain at 48 ksps with PTT clear, and no RX stall during the run (sysfs
+  `rx_stalls` unchanged). Receive only: PTT and the TX permission bit are
+  never set. Acceptance on the development Pi with driver 0.4.0: 20
+  consecutive passes, `rx_stalls` 0 before and after, no "RX stream
+  stalled" in the kernel log. `tools/ci-pi.sh` runs it when the device is
+  present and free.
 - 2026-11-08: Driver 0.4.0: the PIO gateware's RX lock-up resolved by
   a driver workaround (`docs/fault-rx-lockup.md`). Diagnosed from the Pi
   alone: the fault is an asynchronous crossing at the RX FIFO clear that

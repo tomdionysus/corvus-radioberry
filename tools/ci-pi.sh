@@ -3,8 +3,9 @@
 #
 # The merge gate. Builds and tests everything on a Raspberry Pi 5:
 # format and SPDX checks, the release build with its tests, the ASan and
-# UBSan build with the same tests, the coverage build with a summary, and,
-# where the ABI header is installed, the userspace build against it.
+# UBSan build with the same tests, the coverage build with a summary,
+# where the ABI header is installed the userspace build against it, and
+# where /dev/radioberry is present and free the driver's hardware tests.
 #
 #   tools/ci-pi.sh                  run here (on the Pi)
 #   tools/ci-pi.sh --remote HOST    copy this working tree to HOST over SSH
@@ -15,7 +16,7 @@
 set -eu
 
 usage() {
-    sed -n '4,14p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '4,15p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 remote=${RADIOBERRY_CI_HOST:-}
@@ -100,6 +101,18 @@ print("no userspace source sees driver/include")
 PY
 else
     step "userspace against the installed ABI header: skipped, $installed_abi absent"
+fi
+
+# Receive only: the hardware tests never set PTT or the TX permission bit.
+if [ -c /dev/radioberry ]; then
+    if python3 -c 'import os; os.close(os.open("/dev/radioberry", os.O_RDWR))' 2>/dev/null; then
+        step "driver hardware tests on /dev/radioberry"
+        build/tools/driver-tests/rbdrivertest
+    else
+        step "driver hardware tests: skipped, /dev/radioberry is busy"
+    fi
+else
+    step "driver hardware tests: skipped, no /dev/radioberry"
 fi
 
 echo

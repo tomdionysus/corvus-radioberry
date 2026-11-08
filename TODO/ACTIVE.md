@@ -26,9 +26,9 @@ its date.
   receiver-count command and reports a stalled stream in the log and in
   sysfs. Accepted as the fix (Standing decisions); the gateware defect
   itself is an owner-gated item in section 5.
-- Next: the driver test harness (section 2, parked on
-  `item/2-driver-harness`, which rebases on `develop` first), then the
-  daemon.
+- The driver test harness `rbdrivertest` passes 20 consecutive runs on
+  the Pi and runs in `tools/ci-pi.sh` when the device is present and free.
+- Next: the daemon (section 3).
 
 ## Standing decisions
 
@@ -88,13 +88,7 @@ its date.
 
 ## 2. Kernel driver remainder (`driver/`)
 
-- [ ] Userspace test harness `tools/driver-tests/` against
-      `/dev/radioberry` (parked on `item/2-driver-harness`): exclusive
-      open, frame alignment for every receiver count, non-blocking reads,
-      `poll()`, short read and write errors, safe command on close (reply
-      shows `cw_on` clear), TX ring fill and drain at 48 ksps with PTT
-      clear. Acceptance: 20 consecutive passes on the Pi with no lock-up,
-      and `tools/ci-pi.sh` runs it when the device is present and free.
+Nothing open.
 
 ## 3. Daemon (`daemon/`)
 
