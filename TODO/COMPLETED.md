@@ -3,6 +3,25 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-08: Protocol 1 receive, Hermes-Lite 2 dialect (`daemon/src/p1/`,
+  `radioberryd`, installed to sbin; transmit is still open). Discovery
+  with the HL2's 60-byte reply, start and stop, 1032-byte frames for the
+  client's receiver count with receivers beyond the gateware or the RX
+  capacity at the rate sent as zero, the HL2 response words with ADC
+  measurements reported as absent, ACK echoes, commands forwarded on
+  change, UDP and TCP (piHPSDR's 1032-byte records). The first client to
+  start owns the radio until it stops or is silent for 3 s, then the
+  gateware is put in the safe state. Receive only: MOX ignored, 0x09
+  sent with drive, VNA and PA enable cleared. Measured on the
+  development Pi: expected packet rates with no sequence gaps over
+  loopback up to six receivers at 192 ksps and three at 384 ksps;
+  piHPSDR (headless) discovered, autostarted, tuned and streamed with
+  no sequence errors; over Wi-Fi to the workstation 0.3% of UDP packets
+  were lost after leaving the Pi. Acceptance by the owner on the Pi's
+  desktop: piHPSDR received 40 m off air, and WSJT-X (audio through a
+  PipeWire loopback, CAT through piHPSDR's TS-2000 server) decoded 40 m
+  FT8, including a CQ checked against its callsign and grid. SparkSDR
+  and Quisk are a follow-up check in section 6.
 - 2026-11-08: Daemon device layer (`daemon/src/device/`, library
   `radioberryd_device`). `Control` holds the gateware's command registers
   and sends each changed one once, latest value; PTT, run, CWX and the TX

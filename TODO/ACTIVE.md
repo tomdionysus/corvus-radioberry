@@ -30,7 +30,10 @@ its date.
   the Pi and runs in `tools/ci-pi.sh` when the device is present and free.
 - The daemon's device layer (`daemon/src/device/`) is built and tested
   against a fake device and, in `rbdrivertest`, against the driver.
-- Next: Protocol 1 (section 3).
+- `radioberryd` serves Protocol 1 receive over UDP and TCP; piHPSDR and
+  WSJT-X decoded 40 m FT8 off air through it. It does not transmit.
+- Next: the transmit side: session, PA and transmit policy, Protocol 1
+  transmit (section 3).
 
 ## Standing decisions
 
@@ -94,11 +97,6 @@ Nothing open.
 
 ## 3. Daemon (`daemon/`)
 
-- [ ] Protocol 1, Hermes-Lite 2 dialect: discovery, start/stop, 1032-byte
-      frames for the gateware's receiver count within the RX capacity, the
-      HL2 C0 command set, PA enable and drive, ADC status words reported
-      as absent, TCP transport. Acceptance: piHPSDR, SparkSDR and Quisk
-      connect, receive and tune (transmit is section 6).
 - [ ] Session: protocol selection at discovery, one owning client, clean
       hand-over on timeout.
 - [ ] PA and transmit policy: `--allow-pa`, drive ceiling, TX watchdog,
@@ -107,6 +105,15 @@ Nothing open.
       allowed, PTT bit 32 clear in every command without MOX, PTT hang
       time never 31 (`gateware/README.md` sections 4, 6, 7). Every
       fail-safe path proved by a unit test.
+- [ ] Protocol 1 transmit (receive is done): MOX from the owning client
+      to PTT through the transmit policy, the client's TX I/Q to the
+      driver at 48 ksps with the ring kept within the gateware's TX
+      buffer latency, address-0 C3 reporting TX FIFO underflow and
+      overflow as the HL2 does (piHPSDR reads its bits 7..6 while
+      transmitting), drive and PA enable from 0x09 through the policy,
+      CWX, and MOX cleared on every stream fault. Acceptance: every path
+      proved against the fake device, then section 6's transmit steps
+      with the owner's go-ahead.
 - [ ] Protocol 2: discovery, General, DDC and DUC specific, High Priority
       both ways, DDC I/Q at 48 to 384 ksps, DUC I/Q at 192 ksps resampled
       with liquid-dsp, Mic/Line and Wideband declared absent, client
@@ -151,6 +158,7 @@ Nothing open.
 Transmit items each need the owner's go-ahead at the time.
 
 - [ ] Receive: known signal on 20 m visible in piHPSDR via Protocol 1.
+- [ ] SparkSDR and Quisk receive and tune via Protocol 1.
 - [ ] Receive via Protocol 2.
 - [ ] Transmit at zero drive into a dummy load, PA disabled.
 - [ ] Transmit into a dummy load with PA enabled, output measured.
