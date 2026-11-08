@@ -3,6 +3,15 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-08: Userspace against the installed ABI header.
+  `RADIOBERRY_ABI_INCLUDE_DIR` points the `radioberry_abi` target at an
+  installed `radioberry_ioctl.h`; configuration fails on an ABI version
+  mismatch and warns if the text differs. The driver's unit tests keep
+  the source header. `tools/ci-pi.sh` builds `rbprobe`, `rbcat` and
+  `rbctl` against `/usr/local/include` when the header is installed and
+  fails if any userspace compile command names `driver/include`.
+  Acceptance on the development Pi: 19 userspace compiles, none with the
+  source-tree include (32 of 34 in the default build).
 - 2026-11-08: `rbctl` in `tools/rbctl/`: sends one gateware command
   (address and data, flags `--ptt`, `--tx-permit`, `--cwx`, `--no-run`)
   and prints the command bytes, decoded reply, driver info and

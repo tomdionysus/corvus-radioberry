@@ -72,9 +72,6 @@ its date.
 
 ## 2. Kernel driver remainder (`driver/`)
 
-- [ ] ABI header: daemon and tools build against the installed
-      `/usr/local/include/radioberry_ioctl.h` only. Acceptance: `rbcat`
-      and `rbctl` built with that include path and no source-tree include.
 - [ ] sysfs `reload` attribute that unbinds the streams, reloads the
       gateware and re-reads the identity; a `debug` module parameter for
       rate-limited diagnostics. Acceptance: writing `reload` on the Pi

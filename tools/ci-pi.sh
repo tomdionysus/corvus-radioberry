@@ -3,7 +3,8 @@
 #
 # The merge gate. Builds and tests everything on a Raspberry Pi 5:
 # format and SPDX checks, the release build with its tests, the ASan and
-# UBSan build with the same tests, and the coverage build with a summary.
+# UBSan build with the same tests, the coverage build with a summary, and,
+# where the ABI header is installed, the userspace build against it.
 #
 #   tools/ci-pi.sh                  run here (on the Pi)
 #   tools/ci-pi.sh --remote HOST    copy this working tree to HOST over SSH
@@ -14,7 +15,7 @@
 set -eu
 
 usage() {
-    sed -n '4,13p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '4,14p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 remote=${RADIOBERRY_CI_HOST:-}
@@ -81,6 +82,25 @@ step "coverage"
 cmake --preset coverage >/dev/null
 cmake --build --preset coverage -j "$jobs"
 cmake --build --preset coverage --target coverage
+
+installed_abi=/usr/local/include/radioberry_ioctl.h
+if [ -f "$installed_abi" ]; then
+    step "userspace against the installed ABI header"
+    cmake -S . -B build-abi -DRADIOBERRY_ABI_INCLUDE_DIR="$(dirname "$installed_abi")" \
+        -DRADIOBERRY_BUILD_MODULE=OFF -DRADIOBERRY_BUILD_TESTS=OFF >/dev/null
+    cmake --build build-abi -j "$jobs" --target rbprobe rbcat rbctl
+    # No userspace compile may see the source tree's copy.
+    python3 - build-abi/compile_commands.json <<'PY'
+import json, sys
+bad = [e["file"] for e in json.load(open(sys.argv[1]))
+       if "/driver/" not in e["file"] and "driver/include" in e["command"]]
+if bad:
+    sys.exit("source-tree ABI header on the include path of: " + ", ".join(bad))
+print("no userspace source sees driver/include")
+PY
+else
+    step "userspace against the installed ABI header: skipped, $installed_abi absent"
+fi
 
 echo
 echo "== ci-pi: all checks passed ($(git describe --tags --always --dirty 2>/dev/null || echo unknown))"

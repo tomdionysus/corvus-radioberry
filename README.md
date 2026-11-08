@@ -107,7 +107,10 @@ rbprobe
 
 The module is built when headers for the running kernel are installed
 (`-DKERNEL_RELEASE=` picks another kernel, `-DRADIOBERRY_BUILD_MODULE=OFF`
-skips it). `CMakePresets.json` has `default`, `asan` (AddressSanitizer and
+skips it). `-DRADIOBERRY_ABI_INCLUDE_DIR=/usr/local/include` builds the
+tools and daemon against the installed ABI header instead of
+`driver/include`; configuration fails if its ABI version differs from the
+source tree's. `CMakePresets.json` has `default`, `asan` (AddressSanitizer and
 UndefinedBehaviorSanitizer) and `coverage` presets;
 `cmake --build --preset coverage --target coverage` writes an lcov report
 to `build-coverage/coverage/html`.
@@ -186,7 +189,9 @@ into it; `main` receives `develop` only at version tags.
 `tools/ci-pi.sh` is the merge gate: on the Pi it runs the format check
 (`tools/check-format.sh`, clang-format 19), the SPDX check
 (`tools/check-spdx.sh`), the release, sanitizer and coverage builds with
-their tests, and prints the coverage summary; from a workstation,
+their tests, prints the coverage summary, and, when the ABI header is
+installed, builds the tools against it and checks that no userspace
+compile sees `driver/include`; from a workstation,
 `tools/ci-pi.sh --remote [user@]host` copies the working tree to the Pi
 and runs it there. Working conventions are in `CONTRIBUTING.md`.
 
