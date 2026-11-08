@@ -3,6 +3,18 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-08: Driver 0.3.0: words in flight across a receiver-count
+  change are discarded, not counted as resyncs. After a change the RX
+  parser settles until two consecutive clean frames of the new layout
+  (old-layout words cannot form two: shown for every pair of counts 1 to
+  6 in the unit tests), withholding frames and counting what it throws
+  away in the new `rx_discarded_words` statistic, which takes two of the
+  reserved words (ABI 1 size and offsets unchanged, checked by a test).
+  `rbcat` reports it for the measurement and the settling time, `rbctl`
+  in its statistics. Acceptance on the development Pi: `rbcat` through
+  1, 6, 1, 6, 3 (384 ksps), 1, 6, 2, 5, 1 receivers showed zero resyncs
+  and zero dropped words while settling and measuring, with 77 to 1113
+  words discarded per change.
 - 2026-11-08: Driver 0.2.0: sysfs `reload` and the `debug` parameter.
   Writing 1 to `reload` (refused with EBUSY while the device is open,
   which it also keeps closed meanwhile) stops the streams, sends the safe

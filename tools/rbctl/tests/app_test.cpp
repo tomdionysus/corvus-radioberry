@@ -33,6 +33,7 @@ public:
     radioberry_stats stats() override {
         radioberry_stats s{};
         s.rx_words = 100;
+        s.rx_discarded_words = 24;
         s.commands = commands.size();
         s.flags = RADIOBERRY_STATS_RX_OVERRUN;
         return s;
@@ -109,6 +110,7 @@ TEST_CASE("info and statistics without a command", "[rbctl]") {
     CHECK(j["info"]["active_receivers"] == 2);
     CHECK(j["info"]["rx_rate_ksps"] == 96);
     CHECK(j["statistics"]["rx_words"] == 100);
+    CHECK(j["statistics"]["rx_discarded_words"] == 24);
     CHECK(j["statistics"]["commands"] == 0);
     CHECK(j["statistics"]["rx_overrun_flag"] == true);
     CHECK(j["statistics"]["ptt_flag"] == false);

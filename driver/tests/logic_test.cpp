@@ -3,6 +3,7 @@
 // The driver's pure logic (driver/kernel/rb_logic.h), compiled in userspace.
 #include <array>
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
 #include <vector>
 
 #include "radioberry_ioctl.h"
@@ -225,4 +226,109 @@ TEST_CASE("TX packing puts I in the high half, big-endian input", "[driver][tx]"
     rb_tx_pack(in, out, 2);
     CHECK(out[0] == 0x12345678u);
     CHECK(out[1] == 0xfffe8000u);
+}
+
+TEST_CASE("RX stats layout keeps the ABI 1 size and offsets", "[driver][abi]") {
+    CHECK(sizeof(radioberry_stats) == 96);
+    CHECK(offsetof(radioberry_stats, flags) == 76);
+    CHECK(offsetof(radioberry_stats, rx_discarded_words) == 80);
+}
+
+TEST_CASE("RX parser does not settle on a fresh stream", "[driver][rx]") {
+    rb_rx_parser p;
+    rb_rx_init(&p, 1);
+    CHECK(p.settle == 0);
+    CHECK_FALSE(rb_rx_feed(&p, rx_word(0, 1)));
+    CHECK(rb_rx_feed(&p, rx_word(1, 2)));
+}
+
+namespace {
+
+// Feeds frames of `receivers` receivers, values numbered from `first`;
+// returns the frames delivered.
+int feed_frames(rb_rx_parser& p, unsigned receivers, int frames, unsigned first = 0) {
+    int delivered = 0;
+    for (int f = 0; f < frames; ++f) {
+        for (unsigned i = 0; i < 2 * receivers; ++i) {
+            delivered += rb_rx_feed(&p, rx_word(i, first + i)) ? 1 : 0;
+        }
+    }
+    return delivered;
+}
+
+}  // namespace
+
+TEST_CASE("RX layout change from 1 to 6 receivers discards old words", "[driver][rx]") {
+    rb_rx_parser p;
+    rb_rx_init(&p, 1);
+    CHECK(feed_frames(p, 1, 3) == 3);
+    rb_rx_set_receivers(&p, 6);
+    // Old one-receiver frames still in flight.
+    CHECK(feed_frames(p, 1, 50) == 0);
+    // Then the new layout: the first two frames settle, the rest arrive.
+    CHECK(feed_frames(p, 6, 5) == 3);
+    CHECK(p.resyncs == 0);
+    CHECK(p.dropped == 0);
+    CHECK(p.discarded == 100 + 2 * 12);
+    CHECK(p.settle == 0);
+}
+
+TEST_CASE("RX layout change from 6 to 1 receivers discards old words", "[driver][rx]") {
+    rb_rx_parser p;
+    rb_rx_init(&p, 6);
+    CHECK(feed_frames(p, 6, 2) == 2);
+    rb_rx_set_receivers(&p, 1);
+    // A six-receiver tail starting mid-frame, then whole old frames.
+    for (unsigned i = 5; i < 12; ++i) {
+        CHECK_FALSE(rb_rx_feed(&p, rx_word(i, i)));
+    }
+    CHECK(feed_frames(p, 6, 20) == 0);
+    CHECK(feed_frames(p, 1, 10) == 8);
+    CHECK(p.resyncs == 0);
+    CHECK(p.dropped == 0);
+    CHECK(p.discarded == 7 + 20 * 12 + 2 * 2);
+}
+
+TEST_CASE("RX every old layout fails to settle in every new one", "[driver][rx]") {
+    for (unsigned from = 1; from <= 6; ++from) {
+        for (unsigned to = 1; to <= 6; ++to) {
+            if (from == to) {
+                continue;
+            }
+            rb_rx_parser p;
+            rb_rx_init(&p, from);
+            rb_rx_set_receivers(&p, to);
+            CHECK(feed_frames(p, from, 40) == 0);
+            CHECK(p.settle > 0);
+            CHECK(feed_frames(p, to, 3) == 1);
+            CHECK(p.resyncs == 0);
+            CHECK(p.dropped == 0);
+        }
+    }
+}
+
+TEST_CASE("RX faults after settling count as resyncs again", "[driver][rx]") {
+    rb_rx_parser p;
+    rb_rx_init(&p, 1);
+    rb_rx_set_receivers(&p, 2);
+    CHECK(feed_frames(p, 2, 3) == 1);
+    CHECK_FALSE(rb_rx_feed(&p, rx_word(0, 1)));
+    CHECK_FALSE(rb_rx_feed(&p, rx_word(2, 1)));  // break
+    CHECK(p.resyncs == 1);
+    CHECK(p.dropped == 2);
+    CHECK(p.discarded == 8);
+}
+
+TEST_CASE("RX settling skips stray words and dirty words as discarded", "[driver][rx]") {
+    rb_rx_parser p;
+    rb_rx_init(&p, 1);
+    rb_rx_set_receivers(&p, 1);
+    CHECK_FALSE(rb_rx_feed(&p, rx_word(1, 0)));                // not index 0
+    CHECK_FALSE(rb_rx_feed(&p, 0x20000000u | rx_word(0, 0)));  // dirty
+    CHECK_FALSE(rb_rx_feed(&p, rx_word(0, 0)));
+    CHECK_FALSE(rb_rx_feed(&p, 0x20000000u | rx_word(1, 0)));  // dirty mid-frame
+    CHECK(p.discarded == 4);
+    CHECK(p.settle == RB_RX_SETTLE_FRAMES);
+    CHECK(p.dropped == 0);
+    CHECK(p.resyncs == 0);
 }

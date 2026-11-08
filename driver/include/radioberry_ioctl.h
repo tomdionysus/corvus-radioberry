@@ -74,7 +74,8 @@ struct radioberry_stats {
 	__u32 tx_ring_words;     /* words waiting now */
 	__u32 rx_period_bytes;   /* current RX DMA period */
 	__u32 flags;             /* RADIOBERRY_STATS_* */
-	__u32 reserved[4];
+	__u64 rx_discarded_words; /* old-layout words after a receiver-count change */
+	__u32 reserved[2];
 };
 
 #define RADIOBERRY_STATS_RX_OVERRUN (1u << 0) /* since the last STATS call */

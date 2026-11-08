@@ -97,6 +97,7 @@ TEST_CASE("a clean stream reports and exits 0", "[app]") {
     CHECK(j["driver"]["rx_resyncs"] == 0);
     CHECK(j["driver"]["rx_period_bytes"] == 288);
     CHECK(j["settling"]["rx_resyncs"] == 0);
+    CHECK(j["settling"]["rx_discarded_words"] == 0);
     CHECK(j["safety"]["commands_sent"] == 3);
     CHECK(j["safety"]["ptt_set"] == false);
     CHECK(j["safety"]["tx_permission_set"] == false);

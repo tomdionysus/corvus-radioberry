@@ -41,8 +41,8 @@
 #include "rb_logic.h"
 #include "rb_pio.h"
 
-#define RB_DRIVER_VERSION ((0u << 16) | (2u << 8) | 0u)
-#define RB_DRIVER_VERSION_STRING "0.2.0"
+#define RB_DRIVER_VERSION ((0u << 16) | (3u << 8) | 0u)
+#define RB_DRIVER_VERSION_STRING "0.3.0"
 
 #define RB_FIRMWARE_NAME "radioberry.rbf"
 #define RB_DMA_SLOTS 4
@@ -929,6 +929,7 @@ static long rb_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		spin_lock_irqsave(&rb->rx_lock, flags);
 		rb->stats.rx_resyncs = rb->parser.resyncs;
 		rb->stats.rx_dropped_words = rb->parser.dropped;
+		rb->stats.rx_discarded_words = rb->parser.discarded;
 		rb->stats.rx_ring_frames =
 			rb_ring_used(&rb->rx_ring) / rb_rx_frame_bytes(&rb->parser);
 		rb->stats.rx_period_bytes = rb->rx_period;

@@ -122,6 +122,7 @@ Node stats_node(const radioberry_stats& s) {
     n.set("rx_resyncs", s.rx_resyncs);
     n.set("rx_dropped_words", s.rx_dropped_words);
     n.set("rx_overrun_frames", s.rx_overrun_frames);
+    n.set("rx_discarded_words", s.rx_discarded_words);
     n.set("tx_words", s.tx_words);
     n.set("tx_underruns", s.tx_underruns);
     n.set("commands", s.commands);

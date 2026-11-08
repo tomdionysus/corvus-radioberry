@@ -22,6 +22,7 @@ Node rx_counters(const radioberry_stats& from, const radioberry_stats& to) {
     n.set("rx_resyncs", to.rx_resyncs - from.rx_resyncs);
     n.set("rx_dropped_words", to.rx_dropped_words - from.rx_dropped_words);
     n.set("rx_overrun_frames", to.rx_overrun_frames - from.rx_overrun_frames);
+    n.set("rx_discarded_words", to.rx_discarded_words - from.rx_discarded_words);
     return n;
 }
 

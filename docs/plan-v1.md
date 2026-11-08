@@ -156,8 +156,9 @@ capabilities needed for real-time threads.
 - Receiver count and sample rate follow the gateware command the daemon
   issues; the driver observes the command and resizes its parsing. The
   gateware has six receivers on the CL025 and four on the CL016
-  (`gateware/README.md`). Words in flight across a receiver-count change
-  count as resyncs.
+  (`gateware/README.md`). Words of the old layout still in flight after a
+  receiver-count change are discarded until two consecutive clean frames
+  of the new layout arrive, and counted separately from resyncs.
 - Capacity: with the upstream PIO clocking one RX value takes 42 PIO
   cycles at 100 MHz, at most about 2.38 million values per second,
   measured at 2.37 million: six receivers at 192 ksps or three at

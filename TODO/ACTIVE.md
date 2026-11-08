@@ -72,9 +72,6 @@ its date.
 
 ## 2. Kernel driver remainder (`driver/`)
 
-- [ ] Discard words in flight across a receiver-count change instead of
-      counting them as resyncs. Acceptance: `rbcat` switching 1 to 6
-      receivers shows zero resyncs.
 - [ ] Userspace test harness `tools/driver-tests/` against
       `/dev/radioberry`: exclusive open, frame alignment for every
       receiver count, non-blocking reads, `poll()`, short read and write

@@ -130,14 +130,27 @@ static inline u32 rb_rx_period_bytes(unsigned int rate_code, unsigned int receiv
 	return bytes & ~3u;
 }
 
+/*
+ * After a receiver-count change, words of the old layout are still in
+ * flight (PIO FIFO and DMA periods). They cannot form two consecutive
+ * frames of the new layout: with fewer receivers the old index runs past
+ * the new frame length after at most one frame, with more it wraps to 0
+ * before the first frame completes. So the parser settles until it has
+ * seen this many consecutive clean frames, counting what it throws away
+ * meanwhile as discarded rather than as resyncs or drops.
+ */
+#define RB_RX_SETTLE_FRAMES 2
+
 struct rb_rx_parser {
 	u8 values_per_frame;
 	u8 expected;
 	bool synced;
+	u8 settle; /* clean frames still to see before frames are delivered */
 	u8 frame[RB_MAX_FRAME_BYTES];
 	u64 words;
 	u64 resyncs;
 	u64 dropped;
+	u64 discarded; /* words thrown away while settling */
 };
 
 static inline unsigned int rb_rx_frame_bytes(const struct rb_rx_parser *p)
@@ -145,7 +158,7 @@ static inline unsigned int rb_rx_frame_bytes(const struct rb_rx_parser *p)
 	return (unsigned int)p->values_per_frame * RB_VALUE_BYTES;
 }
 
-static inline void rb_rx_set_receivers(struct rb_rx_parser *p, unsigned int receivers)
+static inline void rb_rx_set_layout(struct rb_rx_parser *p, unsigned int receivers)
 {
 	if (receivers < 1)
 		receivers = 1;
@@ -156,10 +169,18 @@ static inline void rb_rx_set_receivers(struct rb_rx_parser *p, unsigned int rece
 	p->synced = false;
 }
 
+/* A receiver-count change: new layout, then settle (see above). */
+static inline void rb_rx_set_receivers(struct rb_rx_parser *p, unsigned int receivers)
+{
+	rb_rx_set_layout(p, receivers);
+	p->settle = RB_RX_SETTLE_FRAMES;
+}
+
+/* A fresh stream: nothing of another layout is in flight. */
 static inline void rb_rx_init(struct rb_rx_parser *p, unsigned int receivers)
 {
 	memset(p, 0, sizeof(*p));
-	rb_rx_set_receivers(p, receivers);
+	rb_rx_set_layout(p, receivers);
 }
 
 /*
@@ -167,7 +188,9 @@ static inline void rb_rx_init(struct rb_rx_parser *p, unsigned int receivers)
  * in its frame, bits 23..0 the value, bits 31..28 zero. Returns true when
  * the word completed a frame, which is then in p->frame. A word out of
  * sequence discards the partial frame; the parser restarts at the next
- * word with index 0, which may be the offending word itself.
+ * word with index 0, which may be the offending word itself. While
+ * settling, a break restarts the settle count, frames are withheld, and
+ * every word thrown away counts as discarded.
  */
 static inline bool rb_rx_feed(struct rb_rx_parser *p, u32 word)
 {
@@ -177,13 +200,21 @@ static inline bool rb_rx_feed(struct rb_rx_parser *p, u32 word)
 
 	p->words++;
 	if (p->synced && (!clean || index != p->expected)) {
-		p->resyncs++;
-		p->dropped += p->expected;
+		if (p->settle) {
+			p->discarded += p->expected;
+			p->settle = RB_RX_SETTLE_FRAMES;
+		} else {
+			p->resyncs++;
+			p->dropped += p->expected;
+		}
 		p->synced = false;
 	}
 	if (!p->synced) {
 		if (!clean || index != 0) {
-			p->dropped++;
+			if (p->settle)
+				p->discarded++;
+			else
+				p->dropped++;
 			return false;
 		}
 		p->synced = true;
@@ -197,6 +228,11 @@ static inline bool rb_rx_feed(struct rb_rx_parser *p, u32 word)
 	if (++p->expected < p->values_per_frame)
 		return false;
 	p->expected = 0;
+	if (p->settle) {
+		p->settle--;
+		p->discarded += p->values_per_frame;
+		return false;
+	}
 	return true;
 }
 
