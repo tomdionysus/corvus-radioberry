@@ -50,9 +50,13 @@ Raspberry Pi or natively on macOS.
    quartus:23.1std.1` with Quartus installed (about 10 GB of disk); later
    runs reuse it.
 3. The script compiles `radioberry_pio_cl025` and `radioberry_pio_cl016`
-   from `gateware/source/`, copies each `radioberry.rbf` to
+   from `gateware/source/` with the fitter seeds recorded in
+   `PROVENANCE.md`, checks timing, copies each `radioberry.rbf` to
    `gateware/rpi-5/<type>/`, and updates the table in `PROVENANCE.md` with
-   sizes and hashes. A full build of both takes several minutes.
+   seeds, sizes and hashes. Each compile takes about four minutes on a
+   six-core machine. Logs and timing reports are left in
+   `build-gateware/`. `--seed-search N` tries seeds 1 to N instead, for a
+   new Quartus version or source commit.
 
 ## Building on an x86-64 Linux machine without Docker
 

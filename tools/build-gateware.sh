@@ -13,19 +13,30 @@
 #   tools/build-gateware.sh --quartus DIR
 #       use an installed Quartus (DIR is its quartus/ directory)
 #   --only CL025|CL016   build one variant
+#   --seed-search N      try fitter seeds 1..N until timing is met
+#                        (default: the recorded seed for each variant)
 set -eu
 
 QUARTUS_VERSION=23.1std.1.993
 IMAGE=radioberry-quartus:23.1std.1
 
 usage() {
-    sed -n '4,15p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '4,17p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+# Fitter seed that meets timing for each variant with Quartus 23.1std.1.
+seed_for() {
+    case "$1" in
+        CL025) echo 4 ;;
+        CL016) echo 5 ;;
+    esac
 }
 
 installers=""
 quartus=""
 accept=0
 only=""
+search=0
 inner=0
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -33,6 +44,7 @@ while [ $# -gt 0 ]; do
         --accept-quartus-eula) accept=1; shift ;;
         --quartus) quartus=$2; shift 2 ;;
         --only) only=$2; shift 2 ;;
+        --seed-search) search=$2; shift 2 ;;
         --inner) inner=1; shift ;;
         -h | --help) usage; exit 0 ;;
         *) usage >&2; exit 2 ;;
@@ -54,29 +66,67 @@ size() {
     wc -c <"$1" | tr -d ' '
 }
 
+# Timing check: every negative-slack path must end in a synchroniser stage
+# (sync_chain), which the upstream SDC leaves unconstrained
+# (gateware/PROVENANCE.md, Timing).
+timing_ok() {
+    awk -F';' '/^; -[0-9]/ { if ($4 !~ /sync_chain\[/) bad = 1 } END { exit bad }' "$1"
+}
+
 # Compile with Quartus on PATH; runs on the host or inside the container.
 compile() {
     work=$(mktemp -d)
     trap 'rm -rf "$work"' EXIT
     tar -xJf "$archive" -C "$work"
     src=$(ls -d "$work"/Hermes-Lite2-*)
+    mkdir -p build-gateware
+    failed=""
     for type in $variants; do
         lower=$(echo "$type" | tr 'A-Z' 'a-z')
         project="$src/gateware/variants/radioberry_pio_$lower"
-        echo "== compiling radioberry_pio_$lower"
-        (cd "$project" && quartus_sh --flow compile radioberry -c radioberry >quartus.log 2>&1) || {
-            tail -40 "$project/quartus.log" >&2
-            exit 1
-        }
+        log="build-gateware/radioberry_pio_$lower.log"
+        report="build-gateware/radioberry_pio_$lower.timing.txt"
+        if [ "$search" -gt 0 ]; then seeds=$(seq 1 "$search"); else seeds=$(seed_for "$type"); fi
+        met=""
+        for seed in $seeds; do
+            echo "== compiling radioberry_pio_$lower, fitter seed $seed"
+            rm -rf "$project/build" "$project/db" "$project/incremental_db" "$project/timing.txt"
+            (cd "$project" && quartus_sh -t "$top/tools/gateware/compile.tcl" "$seed") \
+                >"$log" 2>&1 || { tail -40 "$log" >&2; exit 1; }
+            # A project file Quartus could not read is only a warning to it.
+            if grep -q -E "couldn't read file|Can't open file" "$log"; then
+                grep -E "couldn't read file|Can't open file" "$log" >&2
+                echo "radioberry_pio_$lower: a project file is missing" >&2
+                exit 1
+            fi
+            (cd "$project" && quartus_sta -t "$top/tools/gateware/timing-report.tcl") >>"$log" 2>&1
+            cp "$project/timing.txt" "$report"
+            awk -F';' '/^; -[0-9]/ { printf "   slack %s to %s\n", $2, $4 }' "$report" | sort -u | head -5
+            if timing_ok "$report"; then
+                met=$seed
+                break
+            fi
+        done
+        if [ -z "$met" ]; then
+            awk -F';' '/^; -[0-9]/ && $4 !~ /sync_chain\[/ { printf "   failing: slack %s to %s\n", $2, $4 }' \
+                "$report" | sort -u >&2
+            echo "radioberry_pio_$lower: timing not met, not written (see $report)" >&2
+            failed="$failed $type"
+            continue
+        fi
+        echo "   timing met with seed $met"
+        echo "$met" >"build-gateware/radioberry_pio_$lower.seed"
         mkdir -p "gateware/rpi-5/$type"
         cp "$project/build/radioberry.rbf" "gateware/rpi-5/$type/radioberry.rbf"
     done
+    echo "$failed" >build-gateware/failed
 }
 
 if [ "$inner" = 1 ]; then
     compile
     exit 0
 fi
+rm -f build-gateware/failed
 
 if [ -n "$quartus" ]; then
     PATH="$quartus/bin:$PATH"
@@ -95,12 +145,20 @@ elif [ -n "$installers" ]; then
         for f in "QuartusLiteSetup-$QUARTUS_VERSION-linux.run" "cyclone10lp-$QUARTUS_VERSION.qdz"; do
             [ -f "$installers/$f" ] || { echo "missing $installers/$f" >&2; exit 1; }
         done
+        # Stage only the two files as the build context (hard links where
+        # possible), not the whole directory they sit in.
+        context=$(mktemp -d)
+        for f in "QuartusLiteSetup-$QUARTUS_VERSION-linux.run" "cyclone10lp-$QUARTUS_VERSION.qdz"; do
+            ln "$installers/$f" "$context/$f" 2>/dev/null || cp "$installers/$f" "$context/$f"
+        done
         docker build --platform linux/amd64 -t "$IMAGE" -f tools/gateware/Dockerfile \
             --build-arg ACCEPT_QUARTUS_EULA=1 --build-arg QUARTUS_VERSION="$QUARTUS_VERSION" \
-            "$installers"
+            "$context" || { rm -rf "$context"; exit 1; }
+        rm -rf "$context"
     fi
     docker run --rm --platform linux/amd64 --user "$(id -u):$(id -g)" -e HOME=/tmp \
-        -v "$top:/src" -w /src "$IMAGE" sh tools/build-gateware.sh --inner ${only:+--only "$only"}
+        -v "$top:/src" -w /src "$IMAGE" sh tools/build-gateware.sh --inner ${only:+--only "$only"} \
+        --seed-search "$search"
 else
     usage >&2
     exit 2
@@ -112,13 +170,21 @@ for type in CL025 CL016; do
     [ -f "$f" ] || continue
     s=$(size "$f")
     h=$(sha256 "$f")
-    echo "$f  $s bytes  $h"
-    awk -v path="\`rpi-5/$type/radioberry.rbf\`" -v size="$s" -v hash="$h" '
+    lower=$(echo "$type" | tr 'A-Z' 'a-z')
+    seed=$(cat "build-gateware/radioberry_pio_$lower.seed" 2>/dev/null || echo "?")
+    echo "$f  seed $seed  $s bytes  $h"
+    awk -v path="\`rpi-5/$type/radioberry.rbf\`" -v seed="$seed" -v size="$s" -v hash="$h" '
         index($0, "| " path " |") == 1 {
             n = split($0, cell, "|")
-            printf "| %s | %s | %s | %s |\n", path, substr(cell[3], 2, length(cell[3]) - 2), size, hash
+            printf "| %s | %s | %s | %s | %s |\n", path, substr(cell[3], 2, length(cell[3]) - 2), seed, size, hash
             next
         }
         { print }' gateware/PROVENANCE.md >gateware/PROVENANCE.md.new
     mv gateware/PROVENANCE.md.new gateware/PROVENANCE.md
 done
+
+failed=$(cat build-gateware/failed 2>/dev/null || true)
+if [ -n "$failed" ]; then
+    echo "timing not met for:$failed" >&2
+    exit 1
+fi

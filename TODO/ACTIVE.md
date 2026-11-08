@@ -150,14 +150,16 @@ acceptance test.
       Written to `gateware/README.md`.
 - [x] Build script `tools/build-gateware.sh` (Docker or a local Quartus)
       and toolchain notes `gateware/QUARTUS.md`.
-- [ ] Build both bitfiles with Quartus Prime Lite 23.1std.1 and commit
-      them with the filled-in `PROVENANCE.md`; add their hashes to the
-      `rbprobe` catalogue as rpi-5 PIO. Needs the Quartus installers,
-      downloaded by someone who accepts the Quartus licence agreement.
-      Acceptance: `tools/build-gateware.sh` exits 0 and writes both images.
-- [ ] Install the CL025 build on the development Pi. Acceptance: `rbprobe`
-      reports the installed image as rpi-5 PIO 10CL025 and the driver
-      reads gateware 75.3 with 6 receivers.
+- [x] CL025 bitfile built (seed 4, timing met), committed and catalogued
+      in `rbprobe` as rpi-5 PIO.
+- [ ] CL016 bitfile. No fitter seed meets the upstream AD9866 TX output
+      constraints (`rffe_ad9866_tx[1]` misses by 3.2 ns;
+      `gateware/PROVENANCE.md`, Timing). Needs a decision: ship it with the
+      violation documented, or change the build (for example I/O
+      registers on those pins). Acceptance: a CL016 image that meets
+      timing, or a recorded decision to ship it as is.
+- [x] Install the CL025 build on the development Pi: the driver reads
+      gateware 75.3, 10CL025, 6 receivers, 1 transmitter (2026-11-08).
 
 ## 5. Daemon (`daemon/`)
 

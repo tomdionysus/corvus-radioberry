@@ -38,11 +38,12 @@ and nSTATUS (GPIO 26) both high. `rbprobe --identify` repeats the test.
 
 ### Known gateware images
 
-Upstream Radioberry-2.x images that `rbprobe` identifies by hash. None of
-them works with this project's driver: they are the 73.3 GPIO-mode
-gateware (8-bit RX bus, TX over SPI chip select 1). The driver needs the
-75.3 PIO gateware built from `gateware/source/` (`gateware/PROVENANCE.md`),
-whose hashes are added to the catalogue when it is built.
+`rbprobe` identifies images by hash. The driver needs this project's
+75.3 PIO build (`gateware/PROVENANCE.md`): CL025 SHA-256
+a25f30f4bc9ba3c3f7fbe3406f4a4a27da99be7e90c5272d1b6c05ee0acecedc, 372888
+bytes. The upstream Radioberry-2.x images below are the 73.3 GPIO-mode
+gateware (8-bit RX bus, TX over SPI chip select 1) and do not work with
+it.
 
 | Image (Radioberry-2.x, commit 269e402) | Family | FPGA | Size | SHA-256 |
 |---|---|---|---|---|
@@ -50,8 +51,8 @@ whose hashes are added to the catalogue when it is built.
 | `SBC/rpi-5/archive/releases/dev/CL016/radioberry.rbf` | rpi-5 GPIO | 10CL016 | 275438 | 5f146a8c2113a888bd6b7d08d8ac9f62b796e79dd950ecd47b31b5ec1ebe9e48 |
 | `SBC/rpi-4/releases/dev/CL016/radioberry.rbf` | rpi-4 GPIO | 10CL016 | 276541 | aa5c36f42456bc5dee622a694db2b36aa31dadfbca2372e00e1cd952e7217da3 |
 
-On the development Pi, `/lib/firmware/radioberry.rbf` is the rpi-5 GPIO
-CL025 image (2026-11-08); it is replaced by the PIO build.
+On the development Pi, `/lib/firmware/radioberry.rbf` is this project's
+CL025 PIO build (2026-11-08).
 
 ## Operating system
 
@@ -103,7 +104,7 @@ What is present:
 | Path | State |
 |---|---|
 | `/boot/firmware/overlays/radioberry.dtbo` | installed, overlay active |
-| `/lib/firmware/radioberry.rbf` | the upstream rpi-5 GPIO-mode CL025 image (73.3); not usable with this project's driver, see Known gateware images |
+| `/lib/firmware/radioberry.rbf` | this project's CL025 PIO build, gateware 75.3 |
 | `/usr/local/bin/rbprobe`, `/usr/local/share/radioberry/gateware/` | installed from this repository by `cmake --install` |
 | `/usr/local/bin/pihpsdr` | built 2026-11-07 from the g0orx submodule |
 | `/usr/local/lib/libwdsp.so` | built from a g0orx/wdsp checkout (49084f5, 2022-01-17) |

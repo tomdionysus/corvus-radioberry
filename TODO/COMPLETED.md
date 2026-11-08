@@ -3,6 +3,15 @@
 Newest first. Each entry gives the date, what was done, and where the
 result lives.
 
+- 2026-11-08: CL025 PIO gateware built with Quartus Prime Lite 23.1std.1
+  in Docker (seed 4; timing met apart from the unconstrained synchroniser
+  crossing; rebuild byte-identical) and committed as
+  `gateware/rpi-5/CL025/radioberry.rbf`. The source archive now includes
+  the board files the projects source. On the development Pi the driver
+  reads gateware 75.3 with 6 receivers, and receive-only streaming ran
+  with zero resyncs over 185 million words at up to 2.3 million values per
+  second (6 receivers at 192 ksps, 3 at 384 ksps). CL016 does not meet
+  timing and is not built.
 - 2026-11-08: Gateware switched to a source build. Upstream's free rpi-5
   bitfiles are the 73.3 GPIO-mode gateware (they report 73.3 and no
   receiver count over SPI); its PIO gateware ships only in a paid image.
