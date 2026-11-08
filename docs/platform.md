@@ -103,7 +103,7 @@ Installed from this repository by `cmake --install` (2026-11-08):
 | `/lib/modules/<kernel>/updates/radioberry.ko` | loads at boot; `/dev/radioberry` present; gateware identity under `/sys/bus/spi/devices/spi0.0/` |
 | `/lib/firmware/radioberry.rbf` | this project's CL025 PIO build, gateware 75.3 |
 | `/usr/local/include/radioberry_ioctl.h` | ABI header |
-| `/usr/local/bin/rbprobe`, `/usr/local/share/radioberry/gateware/` | probe and both gateware images |
+| `/usr/local/bin/rbprobe`, `/usr/local/bin/rbcat`, `/usr/local/share/radioberry/gateware/` | probe, receive stream tool and both gateware images |
 
 Not from this repository:
 
