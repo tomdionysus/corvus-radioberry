@@ -7,6 +7,9 @@
  * the gateware identity over SPI, claims two RP1 PIO state machines for the
  * RX and TX streams and keeps their DMA running, and creates
  * /dev/radioberry (see include/radioberry_ioctl.h for the interface).
+ * Writing 1 to the sysfs attribute "reload" while the device is closed
+ * stops the streams, reloads the gateware, re-reads its identity and
+ * restarts the streams.
  *
  * Built only on the stock rp1-pio kernel API. Stream DMA uses rp1-pio's
  * bounce buffers: up to RB_DMA_SLOTS periods are in flight per direction
@@ -38,8 +41,8 @@
 #include "rb_logic.h"
 #include "rb_pio.h"
 
-#define RB_DRIVER_VERSION ((0u << 16) | (1u << 8) | 0u)
-#define RB_DRIVER_VERSION_STRING "0.1.0"
+#define RB_DRIVER_VERSION ((0u << 16) | (2u << 8) | 0u)
+#define RB_DRIVER_VERSION_STRING "0.2.0"
 
 #define RB_FIRMWARE_NAME "radioberry.rbf"
 #define RB_DMA_SLOTS 4
@@ -67,6 +70,16 @@ MODULE_PARM_DESC(rx_ring_kib, "RX ring size in KiB, rounded up to a power of two
 static unsigned int tx_ring_kib = 64;
 module_param(tx_ring_kib, uint, 0444);
 MODULE_PARM_DESC(tx_ring_kib, "TX ring size in KiB, rounded up to a power of two (default 64)");
+
+static bool debug;
+module_param(debug, bool, 0644);
+MODULE_PARM_DESC(debug, "Log rate-limited diagnostics: resyncs, overruns, underruns, commands");
+
+#define rb_debug(rb, fmt, ...)                                              \
+	do {                                                                \
+		if (READ_ONCE(debug))                                       \
+			dev_info_ratelimited((rb)->dev, fmt, ##__VA_ARGS__); \
+	} while (0)
 
 struct rb_stream {
 	int sm;
@@ -115,7 +128,8 @@ struct rb_dev {
 	struct task_struct *worker;
 	wait_queue_head_t work_wait;
 
-	atomic_t open;
+	atomic_t open;    /* held by an open file or a reload */
+	bool running;     /* streams up; open() refused otherwise */
 	struct miscdevice misc;
 	struct radioberry_stats stats;
 };
@@ -272,9 +286,12 @@ static void rb_rx_dma_done(void *param)
 	unsigned int frame_bytes;
 	unsigned long flags;
 	bool queued = false;
+	u64 resyncs, dropped, overruns = 0;
 	unsigned int i;
 
 	spin_lock_irqsave(&rb->rx_lock, flags);
+	resyncs = rb->parser.resyncs;
+	dropped = rb->parser.dropped;
 	frame_bytes = rb_rx_frame_bytes(&rb->parser);
 	for (i = 0; i < n; i++) {
 		/* Parse while closed to stay in sync, but queue nothing. */
@@ -286,10 +303,19 @@ static void rb_rx_dma_done(void *param)
 		} else {
 			rb->stats.rx_overrun_frames++;
 			rb->rx_overrun = true;
+			overruns++;
 		}
 	}
 	rb->stats.rx_words += n;
+	resyncs = rb->parser.resyncs - resyncs;
+	dropped = rb->parser.dropped - dropped;
 	spin_unlock_irqrestore(&rb->rx_lock, flags);
+
+	if (resyncs || dropped)
+		rb_debug(rb, "RX period of %u words: %llu resyncs, %llu words dropped\n", n, resyncs,
+			 dropped);
+	if (overruns)
+		rb_debug(rb, "RX ring full: %llu frames dropped\n", overruns);
 
 	atomic_dec(&s->inflight);
 	if (queued || rb->rx_overrun)
@@ -335,6 +361,7 @@ static int rb_tx_submit(struct rb_dev *rb)
 	struct rb_stream *s = &rb->tx;
 	unsigned long flags;
 	unsigned int idx;
+	bool underrun;
 	u32 bytes;
 	int ret;
 
@@ -342,13 +369,16 @@ static int rb_tx_submit(struct rb_dev *rb)
 		idx = s->submitted % RB_DMA_SLOTS;
 		spin_lock_irqsave(&rb->tx_lock, flags);
 		bytes = rb_ring_get(&rb->tx_ring, s->slot[idx], RB_TX_SLOT_BYTES);
-		if (!bytes && rb->ptt && !atomic_read(&s->inflight) && !rb->tx_starved) {
+		underrun = !bytes && rb->ptt && !atomic_read(&s->inflight) && !rb->tx_starved;
+		if (underrun) {
 			rb->stats.tx_underruns++;
 			rb->tx_starved = true;
 		}
 		if (bytes)
 			rb->tx_starved = false;
 		spin_unlock_irqrestore(&rb->tx_lock, flags);
+		if (underrun)
+			rb_debug(rb, "TX underrun with PTT set\n");
 		if (!bytes)
 			return 0;
 		wake_up_interruptible(&rb->tx_wait);
@@ -530,6 +560,17 @@ static int rb_start_streams(struct rb_dev *rb)
 	return 0;
 }
 
+/* State of a stream with no state machine claimed and nothing in flight. */
+static void rb_stream_reset(struct rb_stream *s)
+{
+	s->sm = -1;
+	s->prog_offset = 0;
+	s->prog_loaded = false;
+	s->submitted = 0;
+	s->completed = 0;
+	atomic_set(&s->inflight, 0);
+}
+
 static void rb_stop_streams(struct rb_dev *rb)
 {
 	struct rp1_pio_sm_set_enabled_args off = { 0 };
@@ -556,6 +597,88 @@ static void rb_stop_streams(struct rb_dev *rb)
 		rb->rx.slot[i] = NULL;
 		rb->tx.slot[i] = NULL;
 	}
+	rb_stream_reset(&rb->rx);
+	rb_stream_reset(&rb->tx);
+}
+
+/*
+ * Opens the RP1 PIO, claims and configures both state machines and starts
+ * them with their kernel thread. Undoes everything on failure.
+ */
+static int rb_streams_up(struct rb_dev *rb)
+{
+	int ret;
+
+	rb->pio = rp1_pio_open();
+	if (IS_ERR(rb->pio)) {
+		ret = PTR_ERR(rb->pio);
+		rb->pio = NULL;
+		dev_err(rb->dev, "cannot open the RP1 PIO: %d\n", ret);
+		return ret;
+	}
+	ret = rb_setup_stream(rb, &rb->rx, false);
+	if (!ret)
+		ret = rb_setup_stream(rb, &rb->tx, true);
+	if (!ret)
+		ret = rb_start_streams(rb);
+	if (ret) {
+		rb_stop_streams(rb);
+		return ret;
+	}
+	dev_info(rb->dev, "RX on PIO state machine %d (program at %d), TX on %d (program at %d)\n",
+		 rb->rx.sm, rb->rx.prog_offset, rb->tx.sm, rb->tx.prog_offset);
+	return 0;
+}
+
+/* RX parsing for one receiver at 48 ksps, empty rings, zeroed statistics. */
+static void rb_reset_stream_state(struct rb_dev *rb)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&rb->rx_lock, flags);
+	rb->receivers = 1;
+	rb->rate_code = 0;
+	rb_rx_init(&rb->parser, 1);
+	rb->rx_period = rb_rx_period_bytes(0, 1, RB_RX_MIN_PERIOD, RB_RX_SLOT_BYTES);
+	rb_ring_reset(&rb->rx_ring);
+	rb->rx_overrun = false;
+	memset(&rb->stats, 0, sizeof(rb->stats));
+	spin_unlock_irqrestore(&rb->rx_lock, flags);
+	spin_lock_irqsave(&rb->tx_lock, flags);
+	rb_ring_reset(&rb->tx_ring);
+	rb->tx_starved = false;
+	spin_unlock_irqrestore(&rb->tx_lock, flags);
+}
+
+/*
+ * Stops the streams, reloads the gateware, re-reads its identity and
+ * restarts the streams. The caller holds rb->open, so no file is open.
+ * On failure the streams stay down and open() is refused.
+ */
+static int rb_reload(struct rb_dev *rb)
+{
+	int ret;
+
+	WRITE_ONCE(rb->running, false);
+	rb_stop_streams(rb);
+	ret = rb_command_safe(rb, NULL);
+	if (ret)
+		dev_err(rb->dev, "safe command before reload failed: %d\n", ret);
+	ret = rb_load_gateware(rb);
+	if (ret)
+		return ret;
+	ret = rb_read_identity(rb);
+	if (ret)
+		return ret;
+	dev_info(rb->dev, "reloaded: gateware %u.%u, FPGA %s, %u receivers, %u transmitter(s)\n",
+		 rb->id.major, rb->id.minor, rb->id.fpga_type == 2 ? "10CL025" : "10CL016",
+		 rb->id.receivers, rb->id.transmitters);
+	rb_reset_stream_state(rb);
+	ret = rb_streams_up(rb);
+	if (ret)
+		return ret;
+	WRITE_ONCE(rb->running, true);
+	return 0;
 }
 
 /* ---- character device ----------------------------------------------- */
@@ -572,6 +695,10 @@ static int rb_open(struct inode *inode, struct file *file)
 
 	if (atomic_cmpxchg(&rb->open, 0, 1) != 0)
 		return -EBUSY;
+	if (!READ_ONCE(rb->running)) {
+		atomic_set(&rb->open, 0);
+		return -ENODEV;
+	}
 
 	spin_lock_irqsave(&rb->rx_lock, flags);
 	rb_ring_reset(&rb->rx_ring);
@@ -792,6 +919,7 @@ static long rb_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		mutex_unlock(&rb->cmd_lock);
 		if (ret)
 			return ret;
+		rb_debug(rb, "command %6ph reply %6ph\n", c.tx, c.rx);
 		wake_up(&rb->work_wait);
 		return copy_to_user(uarg, &c, sizeof(c)) ? -EFAULT : 0;
 	}
@@ -874,11 +1002,42 @@ static ssize_t transmitters_show(struct device *dev, struct device_attribute *at
 }
 static DEVICE_ATTR_RO(transmitters);
 
+/*
+ * Writing a true value ("1", "y") reloads the gateware: refused with EBUSY
+ * while /dev/radioberry is open, and nothing can open it until the reload
+ * has finished. Returns the reload's error if it failed; the device then
+ * stays closed to userspace until a reload succeeds.
+ */
+static ssize_t reload_store(struct device *dev, struct device_attribute *attr, const char *buf,
+			    size_t count)
+{
+	struct rb_dev *rb = dev_get_drvdata(dev);
+	bool requested;
+	int ret;
+
+	ret = kstrtobool(buf, &requested);
+	if (ret)
+		return ret;
+	if (!requested)
+		return (ssize_t)count;
+	if (atomic_cmpxchg(&rb->open, 0, 1) != 0)
+		return -EBUSY;
+	ret = rb_reload(rb);
+	atomic_set(&rb->open, 0);
+	if (ret) {
+		dev_err(rb->dev, "reload failed: %d; /dev/radioberry unavailable\n", ret);
+		return ret;
+	}
+	return (ssize_t)count;
+}
+static DEVICE_ATTR_WO(reload);
+
 static struct attribute *rb_attrs[] = {
 	&dev_attr_gateware_version.attr,
 	&dev_attr_fpga_type.attr,
 	&dev_attr_receivers.attr,
 	&dev_attr_transmitters.attr,
+	&dev_attr_reload.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(rb);
@@ -944,8 +1103,8 @@ static int rb_probe(struct spi_device *spi)
 		return -ENOMEM;
 	rb->spi = spi;
 	rb->dev = &spi->dev;
-	rb->rx.sm = -1;
-	rb->tx.sm = -1;
+	rb_stream_reset(&rb->rx);
+	rb_stream_reset(&rb->tx);
 	mutex_init(&rb->cmd_lock);
 	mutex_init(&rb->io_lock);
 	spin_lock_init(&rb->rx_lock);
@@ -966,50 +1125,32 @@ static int rb_probe(struct spi_device *spi)
 	if (ret)
 		return ret;
 
-	rb->pio = rp1_pio_open();
-	if (IS_ERR(rb->pio)) {
-		ret = PTR_ERR(rb->pio);
-		rb->pio = NULL;
-		return dev_err_probe(rb->dev, ret, "RP1 PIO\n");
-	}
-
 	ret = rb_alloc_rings(rb);
 	if (ret)
-		goto err_pio;
+		goto err_free;
 
 	if (load_gateware) {
 		ret = rb_load_gateware(rb);
 		if (ret)
-			goto err_pio;
+			goto err_free;
 	} else if (!gpiod_get_value_cansleep(rb->conf_done)) {
 		dev_err(rb->dev, "load_gateware=0 but the FPGA is not configured\n");
 		ret = -ENODEV;
-		goto err_pio;
+		goto err_free;
 	}
 
 	ret = rb_read_identity(rb);
 	if (ret)
-		goto err_pio;
+		goto err_free;
 	dev_info(rb->dev, "gateware %u.%u, FPGA %s, %u receivers, %u transmitter(s)\n",
 		 rb->id.major, rb->id.minor, rb->id.fpga_type == 2 ? "10CL025" : "10CL016",
 		 rb->id.receivers, rb->id.transmitters);
 
-	rb->receivers = 1;
-	rb->rate_code = 0;
-	rb_rx_init(&rb->parser, 1);
-	rb->rx_period = rb_rx_period_bytes(0, 1, RB_RX_MIN_PERIOD, RB_RX_SLOT_BYTES);
-
-	ret = rb_setup_stream(rb, &rb->rx, false);
+	rb_reset_stream_state(rb);
+	ret = rb_streams_up(rb);
 	if (ret)
-		goto err_streams;
-	ret = rb_setup_stream(rb, &rb->tx, true);
-	if (ret)
-		goto err_streams;
-	ret = rb_start_streams(rb);
-	if (ret)
-		goto err_streams;
-	dev_info(rb->dev, "RX on PIO state machine %d (program at %d), TX on %d (program at %d)\n",
-		 rb->rx.sm, rb->rx.prog_offset, rb->tx.sm, rb->tx.prog_offset);
+		goto err_safe;
+	rb->running = true;
 
 	rb->misc.minor = MISC_DYNAMIC_MINOR;
 	rb->misc.name = "radioberry";
@@ -1022,12 +1163,9 @@ static int rb_probe(struct spi_device *spi)
 
 err_streams:
 	rb_stop_streams(rb);
+err_safe:
 	rb_command_safe(rb, NULL);
-	rb_free(rb);
-	return ret;
-err_pio:
-	rp1_pio_close(rb->pio);
-	rb->pio = NULL;
+err_free:
 	rb_free(rb);
 	return ret;
 }

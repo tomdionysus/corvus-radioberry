@@ -166,6 +166,7 @@ No radioberry daemon or service is installed yet.
   home directory for reading upstream sources.
 - `/dev/radioberry` is exclusive. The module can be reloaded with
   `rmmod radioberry; modprobe radioberry` (add `load_gateware=0` to keep
-  the FPGA as it is).
+  the FPGA as it is), or only the gateware with
+  `echo 1 > /sys/bus/spi/devices/spi0.0/reload`.
 - Reboots and config changes are fine at any time; the desktop session is
   not in use for anything that must survive them.

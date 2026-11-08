@@ -72,10 +72,6 @@ its date.
 
 ## 2. Kernel driver remainder (`driver/`)
 
-- [ ] sysfs `reload` attribute that unbinds the streams, reloads the
-      gateware and re-reads the identity; a `debug` module parameter for
-      rate-limited diagnostics. Acceptance: writing `reload` on the Pi
-      leaves `/dev/radioberry` streaming again with zero resyncs.
 - [ ] Discard words in flight across a receiver-count change instead of
       counting them as resyncs. Acceptance: `rbcat` switching 1 to 6
       receivers shows zero resyncs.

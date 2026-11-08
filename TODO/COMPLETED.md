@@ -3,6 +3,18 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-08: Driver 0.2.0: sysfs `reload` and the `debug` parameter.
+  Writing 1 to `reload` (refused with EBUSY while the device is open,
+  which it also keeps closed meanwhile) stops the streams, sends the safe
+  command, reloads the gateware, re-reads the identity, resets parser,
+  rings and statistics and restarts the PIO streams; on failure `open()`
+  returns ENODEV. Stream setup is now one routine shared by probe and
+  reload, which also resets stream state on stop. `debug` (0644) logs
+  rate-limited commands and replies, RX resyncs and dropped words per
+  period, RX overruns and TX underruns. Acceptance on the development
+  Pi: three reloads in a row, about 5.5 s each, same PIO program offsets
+  each time; `rbcat` then streamed 10 s with zero resyncs; EBUSY while
+  `rbcat` ran, EINVAL for a non-boolean write.
 - 2026-11-08: Userspace against the installed ABI header.
   `RADIOBERRY_ABI_INCLUDE_DIR` points the `radioberry_abi` target at an
   installed `radioberry_ioctl.h`; configuration fails on an ABI version

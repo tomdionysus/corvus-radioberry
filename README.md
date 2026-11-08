@@ -131,9 +131,16 @@ to `build-coverage/coverage/html`.
   replaces that list.
 - The driver loads the gateware when it binds, at boot, and publishes the
   gateware identity in `/sys/bus/spi/devices/spi0.0/` (`gateware_version`,
-  `fpga_type`, `receivers`, `transmitters`). Module parameters:
+  `fpga_type`, `receivers`, `transmitters`). Writing 1 to `reload`
+  there reloads `/lib/firmware/radioberry.rbf`, re-reads the identity and
+  restarts the streams (about 5.5 s; EBUSY while `/dev/radioberry` is
+  open; statistics restart from zero; if it fails, opening the device
+  gives ENODEV until a reload succeeds). Module parameters:
   `load_gateware` (default 1), `rx_clkdiv` (2), `tx_clkdiv` (8),
-  `rx_ring_kib` (512), `tx_ring_kib` (64).
+  `rx_ring_kib` (512), `tx_ring_kib` (64), and `debug` (0; writable at
+  run time in `/sys/module/radioberry/parameters/debug`), which logs
+  rate-limited diagnostics: each command with its reply, RX resyncs and
+  dropped words per DMA period, RX ring overruns and TX underruns.
 - `/dev/radioberry` is the interface for the daemon and tools: exclusive
   open, whole RX frames from `read()`, TX samples to `write()`, gateware
   commands, identity and statistics by ioctl. `driver/include/radioberry_ioctl.h`

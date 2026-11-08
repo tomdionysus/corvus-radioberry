@@ -125,8 +125,9 @@ capabilities needed for real-time threads.
   CONF_DONE and nSTATUS, poll the gateware identity over SPI until it
   leaves its reset, then claim two PIO state machines and start their DMA.
   Any failure unwinds completely and fails the probe with a specific
-  error. Identity is published in sysfs. A sysfs `reload` attribute will
-  repeat the gateware load.
+  error. Identity is published in sysfs. A sysfs `reload` attribute
+  repeats the gateware load with the device closed and restarts the
+  streams; a `debug` parameter turns on rate-limited diagnostics.
 - One character device, exclusive open, with `read`, `write`, `ioctl`
   and `poll`. Closing it sends the gateware a safe command (run, PTT, TX
   permission, PA enable and drive all clear).
