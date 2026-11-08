@@ -3,6 +3,26 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-08: Daemon device layer (`daemon/src/device/`, library
+  `radioberryd_device`). `Control` holds the gateware's command registers
+  and sends each changed one once, latest value; PTT, run, CWX and the TX
+  permission bit are stamped onto every command from one transmit state,
+  so a protocol command cannot carry them, and a PTT hang time of 31 is
+  refused; `safe()` clears the transmit state and sends 0x09 with drive,
+  VNA and PA enable cleared ahead of everything else. An RX thread sends
+  the commands and reads frames into a lock-free single-producer
+  single-consumer ring, so every block knows its receiver layout; a TX
+  thread writes TX blocks from a second ring, finishing partial writes.
+  Driver statistics are polled every 100 ms and on an RX overrun, and
+  faults (resync, dropped words, overrun, full RX queue, stall after
+  250 ms, TX underrun, invalid TX block, device error) go to one sink.
+  The `Device` interface gained `wait()` (poll) and
+  `open_device_nonblocking()`. Unit tests with a fake device: 100% line
+  coverage of the layer except `monitor.cpp` (98.4%); release, ASan and
+  UBSan builds pass. On the development Pi, `rbdrivertest` runs the layer
+  against the driver for one second at 48 ksps with zero TX samples and
+  PTT clear: between 47 000 and 49 000 frames, no sequence gaps, no
+  faults; 10 consecutive harness passes, `rx_stalls` 0.
 - 2026-11-08: Driver test harness `tools/driver-tests/` (`rbdrivertest`,
   Catch2) against `/dev/radioberry`: exclusive open, info against sysfs,
   whole-frame reads for every receiver count with no resyncs or dropped

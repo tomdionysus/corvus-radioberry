@@ -5,5 +5,6 @@
 # them when the device is present and free.
 if(RADIOBERRY_BUILD_TESTS)
     add_executable(rbdrivertest driver_test.cpp)
-    target_link_libraries(rbdrivertest PRIVATE radioberry_abi Catch2::Catch2WithMain)
+    target_link_libraries(rbdrivertest PRIVATE
+        radioberry_abi radioberryd_device radioberry_device Catch2::Catch2WithMain)
 endif()

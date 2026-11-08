@@ -54,6 +54,7 @@ public:
     }
     std::size_t read(std::span<std::uint8_t>) override { return 0; }
     std::size_t write(std::span<const std::uint8_t> b) override { return b.size(); }
+    Readiness wait(bool, bool, int) override { return {}; }
 
     std::vector<Command> commands;
     std::uint8_t rate_code = 1;

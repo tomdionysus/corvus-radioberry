@@ -3,6 +3,7 @@
 // The Device interface over the radioberry.ko character device. Hardware
 // glue, exercised on the Pi rather than by the unit tests.
 #include <fcntl.h>
+#include <poll.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
@@ -21,8 +22,9 @@ namespace {
 
 class LinuxDevice final : public Device {
 public:
-    explicit LinuxDevice(const std::string& path)
-        : path_(path), fd_(::open(path.c_str(), O_RDWR | O_CLOEXEC)) {
+    LinuxDevice(const std::string& path, bool nonblocking)
+        : path_(path),
+          fd_(::open(path.c_str(), O_RDWR | O_CLOEXEC | (nonblocking ? O_NONBLOCK : 0))) {
         if (fd_ < 0) {
             fail(path);
         }
@@ -60,7 +62,7 @@ public:
     std::size_t read(std::span<std::uint8_t> buffer) override {
         const ssize_t n = ::read(fd_, buffer.data(), buffer.size());
         if (n < 0) {
-            if (errno == EINTR) {
+            if (errno == EINTR || errno == EAGAIN) {
                 return 0;
             }
             fail(path_ + ": read");
@@ -71,12 +73,24 @@ public:
     std::size_t write(std::span<const std::uint8_t> buffer) override {
         const ssize_t n = ::write(fd_, buffer.data(), buffer.size());
         if (n < 0) {
-            if (errno == EINTR) {
+            if (errno == EINTR || errno == EAGAIN) {
                 return 0;
             }
             fail(path_ + ": write");
         }
         return static_cast<std::size_t>(n);
+    }
+
+    Readiness wait(bool want_read, bool want_write, int timeout_ms) override {
+        pollfd p{fd_, static_cast<short>((want_read ? POLLIN : 0) | (want_write ? POLLOUT : 0)), 0};
+        const int n = ::poll(&p, 1, timeout_ms);
+        if (n < 0) {
+            if (errno == EINTR) {
+                return {};
+            }
+            fail(path_ + ": poll");
+        }
+        return {(p.revents & POLLIN) != 0, (p.revents & POLLOUT) != 0, (p.revents & POLLERR) != 0};
     }
 
 private:
@@ -87,7 +101,11 @@ private:
 }  // namespace
 
 std::unique_ptr<Device> open_device(const std::string& path) {
-    return std::make_unique<LinuxDevice>(path);
+    return std::make_unique<LinuxDevice>(path, false);
+}
+
+std::unique_ptr<Device> open_device_nonblocking(const std::string& path) {
+    return std::make_unique<LinuxDevice>(path, true);
 }
 
 }  // namespace radioberry

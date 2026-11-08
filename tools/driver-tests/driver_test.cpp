@@ -20,9 +20,13 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
+
+#include "device/service.hpp"
+#include "radioberry/device.hpp"
 
 namespace {
 
@@ -298,6 +302,64 @@ TEST_CASE("after close the gateware reports no transmit state", "[close]") {
     const radioberry_command reply = command(fd.get(), 0x0a, 0x40 | 32);
     CHECK((reply.rx[0] & 0x01) == 0);  // cw_on and external PTT clear
     CHECK(reply.rx[4] == info(fd.get()).gateware_major);
+}
+
+TEST_CASE("the daemon's device layer streams through the driver", "[service]") {
+    namespace rd = radioberry::daemon;
+    std::mutex mutex;
+    std::vector<rd::Fault> faults;
+    const auto device = radioberry::open_device_nonblocking(device_path());
+    rd::DeviceService service(*device, [&](const rd::Fault& f) {
+        const std::lock_guard lock(mutex);
+        faults.push_back(f);
+    });
+    REQUIRE(service.start());
+    service.control().set(radioberry::hl2::general(0, 1));
+    service.control().set(radioberry::hl2::rx_frequency(0, 14074000));
+    // Let the receiver-count command and the driver's settling pass.
+    for (const auto end = Clock::now() + 100ms; Clock::now() < end;) {
+        while (service.rx().front() != nullptr) {
+            service.rx().pop();
+        }
+        std::this_thread::sleep_for(1ms);
+    }
+
+    // One second: count frames, keep zero TX samples queued (PTT clear).
+    std::size_t frames = 0;
+    std::uint64_t last_sequence = 0;
+    bool gap = false;
+    for (const auto end = Clock::now() + 1s; Clock::now() < end;) {
+        while (const rd::RxBlock* b = service.rx().front()) {
+            CHECK(b->receivers == 1);
+            gap = gap || (last_sequence != 0 && b->sequence != last_sequence + 1);
+            last_sequence = b->sequence;
+            frames += b->frames();
+            service.rx().pop();
+        }
+        if (rd::TxBlock* t = service.tx().acquire()) {
+            t->bytes.fill(0);
+            t->size = rd::TxBlock::kCapacity;
+            service.tx().publish();
+        }
+        std::this_thread::sleep_for(1ms);
+    }
+    const rd::DeviceSnapshot s = service.snapshot();
+    service.stop();
+
+    CHECK_FALSE(gap);
+    CHECK(frames > 47000);
+    CHECK(frames < 49000);
+    CHECK(s.rx_blocks_dropped == 0);
+    CHECK(s.tx_bytes > 0);
+    CHECK_FALSE(s.failed);
+    CHECK_FALSE(s.stalled);
+    REQUIRE(s.driver.has_value());
+    CHECK((s.driver->flags & RADIOBERRY_STATS_PTT) == 0);
+    const std::lock_guard lock(mutex);
+    for (const rd::Fault& f : faults) {
+        UNSCOPED_INFO(rd::describe(f));
+    }
+    CHECK(faults.empty());
 }
 
 // Declared last so it runs last (Catch2 runs in declaration order).

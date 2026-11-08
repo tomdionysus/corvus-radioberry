@@ -47,9 +47,10 @@ if(RADIOBERRY_COVERAGE)
                 --ignore-errors mismatch,inconsistent
                 --output-file ${_cov_dir}/all.info
         COMMAND ${LCOV_EXECUTABLE} --quiet --extract ${_cov_dir}/all.info
-                "${CMAKE_SOURCE_DIR}/*" --output-file ${_cov_dir}/project.info
+                "${CMAKE_SOURCE_DIR}/*" --ignore-errors inconsistent
+                --output-file ${_cov_dir}/project.info
         COMMAND ${LCOV_EXECUTABLE} --quiet --remove ${_cov_dir}/project.info
-                ${RADIOBERRY_COVERAGE_EXCLUDE} --ignore-errors unused,unused
+                ${RADIOBERRY_COVERAGE_EXCLUDE} --ignore-errors unused,unused,inconsistent
                 --output-file ${_cov_dir}/coverage.info
         COMMAND ${GENHTML_EXECUTABLE} --quiet --output-directory ${_cov_dir}/html
                 ${_cov_dir}/coverage.info

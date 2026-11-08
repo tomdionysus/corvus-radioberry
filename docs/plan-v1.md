@@ -215,7 +215,10 @@ proves late, the period is raised, not the architecture changed.
   device, timers for the status cadence.
 - Device layer behind an interface so every protocol and policy test runs
   against a fake device. The radioberry-p2 draft already has this shape
-  and its fail-safe semantics; they are carried forward.
+  and its fail-safe semantics; they are carried forward. Protocol code
+  sets command registers; the RX stream thread sends them between its
+  reads, so it always knows the frame layout it reads, and stamps PTT, run
+  and the TX permission bit onto each from one transmit state.
 - Protocol 1, Hermes-Lite 2 dialect: discovery, start and stop, 1032-byte
   frames for the gateware's receivers at 48 to 384 ksps within the RX
   capacity (section 4.3), the full C0 command

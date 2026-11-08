@@ -53,6 +53,7 @@ struct Harness {
                     std::size_t write(std::span<const std::uint8_t> b) override {
                         return d.write(b);
                     }
+                    Readiness wait(bool r, bool w, int t) override { return d.wait(r, w, t); }
                     FakeDevice& d;
                 };
                 return std::make_unique<Forward>(device);

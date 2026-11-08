@@ -31,6 +31,8 @@ public:
     Reply command(const Command& command) override;
     std::size_t read(std::span<std::uint8_t> buffer) override;
     std::size_t write(std::span<const std::uint8_t> buffer) override;
+    // rbcat blocks in read and write; it never waits.
+    Readiness wait(bool, bool, int) override { return {}; }
 
     FakeClock& clock;
     radioberry_info info_{};

@@ -28,7 +28,9 @@ its date.
   itself is an owner-gated item in section 5.
 - The driver test harness `rbdrivertest` passes 20 consecutive runs on
   the Pi and runs in `tools/ci-pi.sh` when the device is present and free.
-- Next: the daemon (section 3).
+- The daemon's device layer (`daemon/src/device/`) is built and tested
+  against a fake device and, in `rbdrivertest`, against the driver.
+- Next: Protocol 1 (section 3).
 
 ## Standing decisions
 
@@ -92,9 +94,6 @@ Nothing open.
 
 ## 3. Daemon (`daemon/`)
 
-- [ ] Device layer over `/dev/radioberry`: command queue, RX frame reader,
-      TX block writer, statistics and fault reporting. Unit tests with a
-      fake device.
 - [ ] Protocol 1, Hermes-Lite 2 dialect: discovery, start/stop, 1032-byte
       frames for the gateware's receiver count within the RX capacity, the
       HL2 C0 command set, PA enable and drive, ADC status words reported
