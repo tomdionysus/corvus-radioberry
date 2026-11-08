@@ -82,11 +82,23 @@ causal:
   it waits on (`us_tvalid`, `us_tlength`) are changed asynchronously to
   its clock by the clear. Quartus infers latches for its `us_stream`
   output (map log warning 10240). The project leaves "Safe State
-  Machine" off and state machine processing on "Auto"; the encoding
-  Quartus chose for `state` is not shown in the map report and has not
-  been confirmed (the timing report names the bits `state.START`,
-  `state.RXMETA`, which is how Quartus names one-hot bits, but that
-  inference is unverified).
+  Machine" off and state machine processing on "Auto". The Analysis &
+  Synthesis report of a full compile (2026-11-08 seed-sweep builds,
+  table "State Machine - ...|rx_pi_pio:rx_pi_pio_i|state") shows that
+  Quartus re-encoded the source's 5-bit binary `state` as 8 one-hot
+  bits with the START bit inverted: START is all zeros, every other
+  state is `state.START` = 1 plus its own bit. Quartus adds recovery
+  from illegal state vectors only when Safe State Machine is on, so
+  the source's `default: state_next = START` branch is not what the
+  built machine does in an illegal state; what the minimised logic
+  does there has not been determined.
+- The timing analyser checks recovery and removal of the FIFO clear
+  only against `clock_76p8MHz`, the write side, which shares a clock
+  group with the 10 MHz command domain that asserts the clear.
+  `pi_rx_clk` is in a separate asynchronous group, so the clear's
+  release against the read-side registers that `rx_pi_pio` samples
+  was never analysed (`radioberry.sta.rpt`, Recovery and Removal
+  summaries, any seed).
 - The timing constraints assume a 4.8 MHz Pi RX clock; the upstream PIO
   program and ours drive 20 MHz. The report's `pi_rx_clk` paths still
   fit a 25 ns half period (data delays 6 to 10 ns). The outputs to the
@@ -214,6 +226,20 @@ the result is in section 5. Confirmation would also need the encoding
 check above and, ideally, a rate that varies with fitter seed
 (step 13).
 
+Status at the end of 2026-11-08: the three predictions that can be
+tested without hardware all came out as predicted. The clock hold
+gave 0 in 4500 changes against 17 in 1800 without it; the encoding
+is one-hot without safe-state recovery (section 1); and seven images
+built from identical logic with fitter seeds 1 to 7 lock up at rates
+from 0 to 8 per 150 runs (section 5), so the fault moves with
+placement, which a logic or protocol bug would not do. What remains
+unidentified, and cannot be identified from the Pi, is which register
+captures the bad value: the one-hot `state` vector, or the FIFO's
+read-side flag registers (`rdempty`, `rdusedw`), cleared
+asynchronously, that the state machine samples. Both sit on the same
+path between the clear and the Pi's RX clock edge, and the clock hold
+removes the edge for both.
+
 ## 4. Fixes, in order of preference, each gated on a finding
 
 1. Driver avoids the trigger (command spacing, ordering, or RX clock
@@ -236,6 +262,42 @@ check above and, ideally, a rate that varies with fitter seed
 
 Dated entries, newest first. Each gives the configuration, the number
 of changes or runs, the number of lock-ups, and what it rules in or out.
+
+- 2026-11-08 (evening), fitter seed sweep (step 13). The unmodified
+  source was compiled seven times with Quartus 23.1std.1 and fitter
+  seeds 1 to 7 (seed 4 is the shipped image; same synthesis result for
+  all, only placement and routing differ). Each image was loaded
+  through `/lib/firmware` and measured with the harness loop, 150 runs
+  (900 receiver-count changes), `debug=2`, no gap, no hold, SoC 27 to
+  32 C, in the order 4, 1, 2, 5, 6, 7, 3:
+
+  | seed | timing | lock-ups in 150 runs |
+  |---|---|---|
+  | 4 (shipped) | met | 8 |
+  | 1 | FIR path -0.163 ns | 3 |
+  | 2 | FIR path -0.016 ns | 6 |
+  | 3 | FIR path -0.199 ns | 0 |
+  | 5 | met | 1 |
+  | 6 | met | 0 |
+  | 7 | met | 2 |
+
+  The timing misses are on receiver FIR paths inside the AD9866 clock
+  group, not on the Pi RX clock domain. Seed 4 measured 17 in 300 runs
+  today (this run and the morning's ladder run); seeds 3 and 6 measured
+  0 in 150 each. Under seed 4's rate the chance of 150 clean runs is
+  about 1 in 10000, so the rate depends on placement. A 0 in 150
+  bounds a seed's rate at about 2% per run, not at zero: seed 6 then
+  measured 6 in 600 runs (3600 changes, 1% per run, 6 in 750 overall).
+  No seed measured zero over a long run; a seed lowers the rate, it
+  does not remove the fault. The encoding table from the same builds
+  is in section 1.
+
+  Same evening, shipped seed 4 image restored, RX clock hold
+  (`rx_clock_hold_us=200`), otherwise the same configuration: 0 in
+  600 runs (3600 changes). With the morning's run the hold has 0 in
+  750 runs (4500 changes) on an image that measures 17 in 300 without
+  it. Also today, same image, hold off, control for the sweep: 8 in
+  150.
 
 - 2026-11-08, driver 0.3.1 (diagnostic: stall detector in sysfs
   `rx_stalled`, `debug=2` traces every command, `cmd_gap_us`). Harness
@@ -270,13 +332,31 @@ of changes or runs, the number of lock-ups, and what it rules in or out.
 
 ## 6. Decision
 
-Open, awaiting the owner. Position at the end of 2026-11-08: the fault
-is in the PIO gateware's receive read-out, in state that no command
-resets (section 3a, unconfirmed as to the exact register but the only
-candidate left by elimination). The driver-side avoidance, holding the
-Pi's RX clock still across each receiver-count command, measured 0
-lock-ups in 900 changes against 9 lock-ups in 900 without it. Proposed
-way forward, for the owner to approve:
+Open, awaiting the owner. The owner asked for the mechanism to be
+confirmed before any merge; the confirmation steps (encoding check,
+seed sweep) are done and are in sections 1, 3a and 5.
+
+Position at the end of 2026-11-08: the fault is an asynchronous
+crossing in the PIO gateware's receive read-out, at the FIFO clear
+that every receiver-count change asserts, against the Pi's RX clock.
+Its rate depends on fitter placement (0 to 8 per 150 runs across seven
+images of identical logic) and goes to zero when the Pi's clock is held
+still across the clear (0 in 4500 changes). The exact register that
+captures the bad value cannot be identified from the Pi. Two fixes from
+section 4 are now measured:
+
+- Fix 1, driver clock hold (`rx_clock_hold_us=200`): 0 in 750 runs
+  (4500 changes) on the shipped seed 4 image, whose rate without it is
+  17 in 300 runs. Independent of placement, since it removes the clock
+  edge from the window. This already exceeds the 500-change acceptance
+  in item 1 below.
+- Fix 3, a different fitter seed: the best timing-clean image, seed 6,
+  measured 6 in 750 runs (0.8% per run) against seed 4's 17 in 300
+  (5.7%). A seed lowers the rate for one placement on one board at
+  room temperature; it does not remove the crossing, and none of the
+  seven measured zero. Not a fix on its own.
+
+Proposed way forward, for the owner to approve:
 
 1. Make the RX clock hold the driver's normal behaviour (fix 1): on in
    the shipped module, 200 us, documented in the README and
@@ -284,15 +364,21 @@ way forward, for the owner to approve:
    as a permanent fault indicator; keep `cmd_gap_us` out (ruled out).
    Merge from `item/2-rx-wedge-diag` after a final acceptance run of
    at least 500 changes with the shipped defaults and the usual gate.
-2. Resume development; the parked harness branch rebases on it and
+2. Optionally ship seed 6 in place of seed 4 (fix 3) as a second
+   layer under the clock hold, with the seed and the measured rates
+   recorded in `gateware/PROVENANCE.md`; the source stays unmodified.
+   Worth about a sevenfold lower rate if the hold ever fails to cover
+   a case; not a fix on its own, and item 1 does not depend on it.
+3. Resume development; the parked harness branch rebases on it and
    its own acceptance (20 consecutive passes) becomes meaningful.
-3. Record the gateware's defects (section 1) as an open gateware item:
-   unreset Pi-clocked `rx_pi_pio` state machine with inferred latches,
-   FIFO clear unsynchronised on both sides, `wrsync_aclr_synch`
-   silently ignored. Whether to fix them at source is the owner's
-   decision and reopens "built unmodified"; the driver avoidance does
-   not depend on it.
-4. Optional confirmation, not needed for 1 to 3: the `state` encoding
-   from a Quartus fitter report, and a seed-sweep rate comparison. Development resumes when a fix from section 4 is chosen, applied
-and measured at 0 lock-ups over at least 500 changes of the triggering
+4. Record the gateware's defects (section 1) as an open gateware item:
+   unreset Pi-clocked `rx_pi_pio` state machine, one-hot without
+   safe-state recovery, with inferred latches; FIFO clear
+   unsynchronised on both sides and unanalysed against the read clock;
+   `wrsync_aclr_synch` silently ignored. Whether to fix them at source
+   is the owner's decision and reopens "built unmodified"; items 1 and
+   2 do not depend on it.
+
+Development resumes when a fix from section 4 is chosen, applied and
+measured at 0 lock-ups over at least 500 changes of the triggering
 pattern, or when the owner decides otherwise.
