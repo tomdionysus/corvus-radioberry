@@ -3,6 +3,22 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-08: Hardware validation, transmit at zero drive into a 50 ohm
+  dummy load, PA disabled, on the owner's go-ahead: `radioberryd
+  --allow-tx --drive-ceiling 0 --tx-watchdog-s 15` with a Protocol 1
+  test client sending a 1 kHz tone at 10% of full scale. The first run
+  dropped MOX after 60 ms on 23 driver TX underruns: the driver's ring
+  empties for moments while the gateware fills its own FIFO at PIO speed
+  (78 527 samples per second over that 60 ms), so driver underruns no
+  longer drop MOX (they are counted and summarised per transmission;
+  the gateware's PTT hang-time watchdog, the TX watchdog, the client
+  timeout and the other stream faults still end a transmission). Then:
+  PTT held for 10.0 s and 5.0 s exactly as commanded, 47 972 samples
+  per second to the gateware, no TX blocks dropped, receive running
+  throughout; the tone in the duplex receiver at -35 dBFS during MOX
+  against -146 to -159 dBFS before and after, on the side it was sent,
+  the other side 77 to 80 dB below it. `radioberryd` now logs each
+  transmission's length, samples, rate, underruns and drops.
 - 2026-11-08: Frequency calibration: `radioberryd --frequency-ppm P`
   divides every RX and TX frequency command (0x01, 0x02 to 0x08, 0x12 to
   0x16) by 1 + P/10^6, P being the radio's error, positive if it tunes

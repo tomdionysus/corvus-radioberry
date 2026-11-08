@@ -322,7 +322,7 @@ TEST_CASE("radioberryd transmits for the owner when allowed", "[daemon]") {
     CHECK_FALSE(device.commands.back().can_transmit());
 }
 
-TEST_CASE("a device fault while transmitting drops MOX in the daemon", "[daemon]") {
+TEST_CASE("driver TX underruns do not drop MOX", "[daemon]") {
     FakeDevice device;
     device.idle_wait_ms = 1;
     DaemonOptions o = Running::options();
@@ -342,12 +342,43 @@ TEST_CASE("a device fault while transmitting drops MOX in the daemon", "[daemon]
     REQUIRE(r.daemon.policy().transmitting());
     {
         const std::lock_guard lock(device.mutex);
-        device.stats_.tx_underruns += 3;  // reported at the next statistics poll
+        device.stats_.tx_underruns += 23;  // reported at the next statistics poll
     }
+    std::this_thread::sleep_for(100ms);  // several polls (stats_period 5 ms)
+    CHECK_FALSE(r.daemon.session().latched());
+    CHECK(r.daemon.policy().transmitting());
+    CHECK(r.finish());
+}
+
+TEST_CASE("a device error while transmitting drops MOX in the daemon", "[daemon]") {
+    FakeDevice device;
+    device.idle_wait_ms = 1;
+    DaemonOptions o = Running::options();
+    o.tx.allow_tx = true;
+    Running r(device, o);
+    const sockaddr_in to = loopback(r.daemon.port());
+    Socket client(SOCK_DGRAM);
+    const auto start = start_packet(1);
+    ::sendto(client.fd, start.data(), start.size(), 0, reinterpret_cast<const sockaddr*>(&to),
+             sizeof to);
+    const auto mox = host_packet(0, {0x02, 0}, {0x01, 0});
+    ::sendto(client.fd, mox.data(), mox.size(), 0, reinterpret_cast<const sockaddr*>(&to),
+             sizeof to);
+    for (int i = 0; i < 400 && !r.daemon.policy().transmitting(); ++i) {
+        std::this_thread::sleep_for(5ms);
+    }
+    REQUIRE(r.daemon.policy().transmitting());
+    {
+        const std::lock_guard lock(device.mutex);
+        device.fail_on = "write";  // the next TX block fails
+    }
+    const auto more = host_packet(1, {0x02, 0}, {0x01, 0});
+    ::sendto(client.fd, more.data(), more.size(), 0, reinterpret_cast<const sockaddr*>(&to),
+             sizeof to);
     for (int i = 0; i < 400 && !r.daemon.session().latched(); ++i) {
         std::this_thread::sleep_for(5ms);
     }
     CHECK(r.daemon.session().latched());
-    CHECK_FALSE(r.daemon.policy().transmitting());
     CHECK(r.daemon.device().control().transmit() == TransmitState{});
+    CHECK_FALSE(r.finish());  // the daemon stops on a device error
 }

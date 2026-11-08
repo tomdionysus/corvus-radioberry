@@ -44,8 +44,13 @@ its date.
 - Frequency calibration: `radioberryd --frequency-ppm 22.9` puts the
   development board's received frequencies within 2 Hz of PSK Reporter
   on 40 m and 30 m.
-- Next: section 6's transmit steps, each with the owner's go-ahead;
-  meanwhile Protocol 2 (section 3).
+- Transmitted at zero drive into a 50 ohm dummy load, PA disabled
+  (2026-11-08): PTT held for the commanded 5 and 10 s, the test tone
+  seen in the duplex receiver 110 dB above the floor during MOX only.
+  On-air sideband not yet established (receive is mirrored read I
+  first; transmit may be).
+- Next: section 6's PA step with the owner's go-ahead and a power
+  measurement; meanwhile Protocol 2 (section 3).
 
 ## Standing decisions
 
@@ -156,6 +161,5 @@ Transmit items each need the owner's go-ahead at the time.
 
 - [ ] SparkSDR and Quisk receive and tune via Protocol 1.
 - [ ] Receive via Protocol 2.
-- [ ] Transmit at zero drive into a dummy load, PA disabled.
 - [ ] Transmit into a dummy load with PA enabled, output measured.
 - [ ] FT8 and corvus-protocol end-to-end run, logged in `docs/`.

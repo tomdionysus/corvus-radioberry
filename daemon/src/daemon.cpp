@@ -19,9 +19,15 @@ p1::Identity identify(Device& device, const std::optional<std::array<std::uint8_
 }
 
 // Faults that break the transmit stream: the session drops MOX on them.
+// A driver TX underrun is not one: the driver's ring runs empty for moments
+// whenever the gateware fills its own 85 ms FIFO at PIO speed (on PTT, at
+// about 102 000 samples per second), and the ring is kept short for low
+// latency, so it counts underruns while the gateware's FIFO is still full.
+// Real starvation ends transmission through the gateware's own PTT
+// hang-time watchdog, the TX watchdog, the client timeout and the other
+// faults here.
 bool breaks_transmit(FaultKind kind) {
     switch (kind) {
-        case FaultKind::TxUnderrun:
         case FaultKind::TxInvalidBlock:
         case FaultKind::RxQueueFull:
         case FaultKind::DeviceError:
@@ -56,6 +62,8 @@ Daemon::~Daemon() = default;
 void Daemon::on_fault(const Fault& fault) {
     if (fault.kind == FaultKind::DeviceError) {
         spdlog::error("{}", describe(fault));
+    } else if (fault.kind == FaultKind::TxUnderrun) {
+        spdlog::debug("{}", describe(fault));  // summarised per transmission
     } else {
         spdlog::warn("{}", describe(fault));
     }
@@ -111,12 +119,37 @@ bool Daemon::run(const std::atomic<bool>& stop) {
     const auto handler = [&](std::span<const std::uint8_t> packet, const Peer& from) {
         on_packet(packet, from, clock());
     };
+    // Each transmission summarised from the driver's statistics.
+    bool was_transmitting = false;
+    std::chrono::nanoseconds tx_started{};
+    radioberry_stats tx_before{};
+    std::uint64_t dropped_before = 0;
     while (!stop && !service_.failed()) {
         network_.poll(100, handler);
         const auto now = clock();
         session_.tick(now);
         policy_.tick(now);
         server_.tick();
+        const bool transmitting = policy_.transmitting();
+        if (transmitting != was_transmitting) {
+            const DeviceSnapshot s = service_.snapshot();
+            const radioberry_stats driver = s.driver.value_or(radioberry_stats{});
+            if (transmitting) {
+                tx_started = now;
+                tx_before = driver;
+                dropped_before = s.tx_blocks_dropped;
+            } else {
+                const double seconds = std::chrono::duration<double>(now - tx_started).count();
+                const auto words = driver.tx_words - tx_before.tx_words;
+                spdlog::info(
+                    "transmission of {:.1f} s: {} samples to the gateware ({:.0f} per second), "
+                    "{} underruns, {} TX blocks dropped",
+                    seconds, words, seconds > 0 ? static_cast<double>(words) / seconds : 0.0,
+                    driver.tx_underruns - tx_before.tx_underruns,
+                    s.tx_blocks_dropped - dropped_before);
+            }
+            was_transmitting = transmitting;
+        }
     }
     const bool failed = service_.failed();
     stop_rx = true;
