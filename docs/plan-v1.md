@@ -142,7 +142,15 @@ capabilities needed for real-time threads.
   the ring for zero-copy consumers. Ring overrun sets a flag readable by
   ioctl and `POLLERR`; data is dropped in whole frames and counted.
 - Receiver count and sample rate follow the gateware command the daemon
-  issues; the driver observes the command and resizes its parsing.
+  issues; the driver observes the command and resizes its parsing. The
+  gateware has six receivers on the CL025 and four on the CL016
+  (`gateware/README.md`).
+- Capacity: with the upstream PIO clocking one RX value takes 42 PIO
+  cycles at 100 MHz, at most about 2.38 million values per second, enough
+  for six receivers at 192 ksps or three at 384 ksps. The driver either
+  limits the receiver count per rate accordingly or runs the RX state
+  machine faster; `rbcat` measures which works before the design is
+  frozen.
 
 ### 4.4 TX path
 
@@ -194,7 +202,8 @@ raised, not the architecture changed.
   TCP transport. Every client that speaks to a Hermes-Lite 2 works
   unchanged.
 - Protocol 2, openHPSDR Ethernet Protocol v4.x: discovery, General, DDC
-  and DUC specific, High Priority both ways, DDC I/Q at 48 to 384 ksps,
+  and DUC specific, High Priority both ways, as many DDCs as the gateware
+  reports (four or six), DDC I/Q at 48 to 384 ksps,
   DUC I/Q at 192 ksps resampled with liquid-dsp to the gateware rate,
   Mic/Line and Wideband declared absent, sequence checking.
 - Session: the first non-discovery packet claims the radio; other clients
@@ -205,7 +214,11 @@ raised, not the architecture changed.
 - PA policy: PA enable is off unless the daemon is started with it allowed
   and the client requests it; a drive ceiling and a transmit watchdog are
   enforced; every PA state change is logged. No interlock is claimed, and
-  the daemon says so at start-up.
+  the daemon says so at start-up. The gateware gives three levers, all
+  used: the TX permission bit in every SPI command (gates the CN301 T/R
+  and PA lines), the PTT bit in every command, and its own PTT hang-time
+  watchdog, which must never be disabled. A CW key on the jack drives the
+  DAC regardless of software (`gateware/README.md` section 6).
 - DSP: liquid-dsp for resampling, filtering, NCO and measurement. wdsp is
   not used.
 - Operations: systemd unit running unprivileged, YAML config file,

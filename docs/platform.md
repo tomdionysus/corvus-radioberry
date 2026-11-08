@@ -48,8 +48,9 @@ the installed image by these hashes.
 | `SBC/rpi-5/releases/dev/CL016/radioberry.rbf` | rpi-5 PIO | 10CL016 | 275438 | 5f146a8c2113a888bd6b7d08d8ac9f62b796e79dd950ecd47b31b5ec1ebe9e48 |
 | `SBC/rpi-4/releases/dev/CL016/radioberry.rbf` | rpi-4 GPIO | 10CL016 | 276541 | aa5c36f42456bc5dee622a694db2b36aa31dadfbca2372e00e1cd952e7217da3 |
 
-The rpi-5 CL025 image is the correct one for the development board. The
-rpi-4 CL016 image is what is installed today.
+The rpi-5 CL025 image is the correct one for the development board. It
+has been installed as `/lib/firmware/radioberry.rbf` by `cmake --install`
+since 2026-11-08, replacing the rpi-4 CL016 image.
 
 ## Operating system
 
@@ -101,7 +102,8 @@ What is present:
 | Path | State |
 |---|---|
 | `/boot/firmware/overlays/radioberry.dtbo` | installed, overlay active |
-| `/lib/firmware/radioberry.rbf` | 276541 bytes, installed 2026-11-07; byte-identical to the upstream tag's `SBC/rpi-4/releases/dev/CL016` image, which is wrong twice over: rpi-4 gateware (8-bit GPIO RX bus, not the PIO variant) and CL016 (the chip is a CL025). Must be replaced by the rpi-5 CL025 image before any driver test |
+| `/lib/firmware/radioberry.rbf` | the rpi-5 CL025 image from `gateware/` since 2026-11-08. Until then it held the upstream rpi-4 CL016 image (276541 bytes, installed 2026-11-07), wrong in family and in chip |
+| `/usr/local/bin/rbprobe`, `/usr/local/share/radioberry/gateware/` | installed from this repository by `cmake --install` |
 | `/usr/local/bin/pihpsdr` | built 2026-11-07 from the g0orx submodule |
 | `/usr/local/lib/libwdsp.so` | built from a g0orx/wdsp checkout (49084f5, 2022-01-17) |
 | `/usr/local/include/wdsp.h` | installed |
@@ -179,6 +181,9 @@ radioberry service is empty, so the daemon never ran under systemd.
 - All builds run on the Pi itself over SSH; there is no cross toolchain.
 - The only git checkout on the box is the wdsp one used to build piHPSDR.
   New source trees go under the root or the ordinary user's home.
+- `tools/ci-pi.sh --remote` keeps its copy of the tree in the root
+  account's home directory on the Pi. A blobless clone of the Hermes-Lite 2
+  repository, used to locate the gateware source, is also kept there.
 - No radioberry service runs, so nothing needs stopping before driver
   work. Once a driver loads, `/dev/radioberry` is exclusive, so only one
   daemon may open it.

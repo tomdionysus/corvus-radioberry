@@ -35,8 +35,11 @@ acceptance test.
 - Workflow: one branch per TODO item, squash-merged into `develop`;
   `develop` merged into `main` only at a version tag. No pull requests.
 - Protocol 2 transmit at 192 ksps is resampled in the daemon with
-  liquid-dsp; discovery advertises the gateware's receiver count (up to
-  four DDCs), one DUC, 48 to 384 ksps, no wideband, diversity or audio.
+  liquid-dsp; discovery advertises the gateware's receiver count (four
+  DDCs on the CL016, six on the CL025, read over SPI), one DUC, 48 to
+  384 ksps, no wideband, diversity or audio. (Corrected 2026-11-08 from
+  "up to four" after reading the variant sources; the decision itself is
+  unchanged.)
 - Code style: clang-format 19, Google base, 4-space indent, 100 columns;
   `-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror`.
 - Version string from `git describe`, embedded at configure time.
@@ -104,7 +107,9 @@ acceptance test.
       to `/boot/firmware/overlays/`. Acceptance: overlay present after
       reboot, `spi0.0` is `radioberry_ctrl_spi`.
 - [ ] Gateware loading via `request_firmware`, with CONF_DONE and
-      nSTATUS checks reported as errors, not printk only. The driver works
+      nSTATUS checks reported as errors, not printk only. Wait out the
+      gateware's 1.7 s reset before reading the identity word
+      (`gateware/README.md` section 2). The driver works
       with both the CL016 and CL025 images; the install selects the image
       for the board's FPGA (`FPGATYPE`), and the development board is
       always CL025. Acceptance: ioctl returns non-zero gateware major
@@ -118,7 +123,8 @@ acceptance test.
       and flags a mismatch with the installed image. Acceptance: on the
       development Pi with the driver loaded, `rbprobe` reports the CL025
       gateware version without `--identify`.
-- [ ] Read path returns whole sample frames for 1 to 4 receivers, with
+- [ ] Read path returns whole sample frames for 1 to the gateware's
+      receiver count (4 on CL016, 6 on CL025), with
       `poll()` support and a non-blocking mode. Acceptance: `tools/rbcat`
       streams 10 minutes at 48 ksps with zero resync messages.
 - [ ] Write path accepts arbitrary block lengths, reports FIFO underrun
@@ -130,16 +136,16 @@ acceptance test.
 
 ## 4. Gateware (`gateware/`)
 
-- [ ] Copy in the upstream `radioberry_pio_cl025` and `radioberry_pio_cl016`
+- [x] Copy in the upstream `radioberry_pio_cl025` and `radioberry_pio_cl016`
       bitfiles with a provenance file (upstream repo, tag or commit, hash)
       and the corresponding source archive required by GPL-2.0-or-later.
-- [ ] Document, from the upstream Verilog, the facts the driver depends
+- [x] Document, from the upstream Verilog, the facts the driver depends
       on: RX 4-bit bus and metadata nibble sequence, TX serial format and
       `pi_tx_ready` handshake, TX and RX FIFO depths, SPI command set,
       CN301 outputs (envpa, inttr, exttr, ptt_out) and keyer inputs.
       Written to `gateware/README.md`.
-- [ ] Replace `/lib/firmware/radioberry.rbf` on the development Pi with
-      the rpi-5 CL025 image (currently the rpi-4 CL016 image).
+- [x] Replace `/lib/firmware/radioberry.rbf` on the development Pi with
+      the rpi-5 CL025 image (done by `cmake --install`).
 
 ## 5. Daemon (`daemon/`)
 
@@ -160,7 +166,10 @@ acceptance test.
       hand-over on timeout.
 - [ ] PA control policy: `--allow-pa` flag, drive ceiling, TX watchdog,
       envpa only while a client holds MOX, logging of every PA state
-      change. No interlock is claimed.
+      change. No interlock is claimed. SPI TX permission bit 42 clear
+      unless transmit is allowed, PTT bit 32 clear in every command
+      without MOX, PTT hang time never 31 (`gateware/README.md`
+      sections 4, 6, 7).
 - [ ] Real-time setup: thread priorities, CPU affinity, socket buffer
       sizes, `SO_PRIORITY`; measured RX packet jitter over Wi-Fi and
       Ethernet recorded in `docs/platform.md`.

@@ -3,6 +3,20 @@
 Newest first. Each entry gives the date, what was done, and where the
 result lives.
 
+- 2026-11-08: Gateware (section 4): the upstream rpi-5 CL025 and CL016
+  bitfiles copied into `gateware/rpi-5/`, with `gateware/PROVENANCE.md`
+  and the corresponding Hermes-Lite 2 source (commit 7472bd1, version
+  75.2) as `gateware/source/`. `gateware/README.md` documents from the
+  Verilog and the upstream PIO programs the SPI command and reply words,
+  the RX nibble and metadata format, the TX bit format and handshake, FIFO
+  depths, the CN301 output logic, the jack inputs, the 1.7 s reset after
+  configuration and the gateware's PTT hang-time watchdog. Findings that
+  changed documents: the CL025 build has six receivers, not four (plan and
+  standing decision text corrected); upstream RX clocking cannot carry six
+  receivers at 384 ksps (plan section 4.3); a CW key on the jack keys the
+  DAC without software (plan section 5). CL025 image installed on the
+  development Pi; `rbprobe` there now reports only the missing driver and
+  daemon as blockers.
 - 2026-11-08: Repository and build skeleton (section 2): `driver/`,
   `daemon/` and `gateware/` CMake subdirectories, `FPGATYPE` (CL016 or
   CL025, default CL025) selecting the image installed as

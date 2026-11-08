@@ -21,12 +21,12 @@ Debian trixie packages.
 | Documentation of the hardware and host | `docs/` | current |
 | Work tracking | `TODO/` | current |
 | Platform probe (`rbprobe`) | `tools/rbprobe/` | working; gateware identity via the driver waits for the driver |
-| FPGA gateware bitfiles (prebuilt, 10CL025 and 10CL016) | `gateware/` | planned |
+| FPGA gateware bitfiles (prebuilt, 10CL025 and 10CL016) | `gateware/` | in place, with provenance, source and interface notes |
 | Kernel driver (`radioberry.ko`, RP1 PIO plus DMA) | `driver/` | planned |
 | Radio daemon `radioberryd` (Protocol 1 and Protocol 2, PA control) | `daemon/` | planned |
 | Further tooling (loader, stream dump, protocol probes) | `tools/` | planned |
 
-Only `rbprobe` builds today. `TODO/ACTIVE.md` is the authoritative list of
+Only `rbprobe` and the gateware install today. `TODO/ACTIVE.md` is the authoritative list of
 what is being built and in which order.
 
 ## Target hardware and host
@@ -92,11 +92,13 @@ The overlay is built and installed by this repository; it enables `spi0`,
 `rp1_pio` and the `sdr,radioberry` platform device, and disables the
 spidev nodes.
 
-The gateware is not compiled here. `gateware/` holds the prebuilt
-`radioberry.rbf` for each FPGA, copied from the upstream Hermes-Lite 2
-`radioberry_pio_cl025` and `radioberry_pio_cl016` variants, together with
-the upstream tag they were built from and the corresponding source archive
-required by their licence.
+The gateware is not compiled here. `gateware/rpi-5/<type>/radioberry.rbf`
+holds the prebuilt image for each FPGA, copied from the upstream
+Hermes-Lite 2 `radioberry_pio_cl025` and `radioberry_pio_cl016` variants
+(version 75.2). `gateware/PROVENANCE.md` gives the upstream tag and commit
+they come from and their hashes, `gateware/source/` the corresponding
+source required by their licence, and `gateware/README.md` the wire
+formats and control behaviour the driver and daemon rely on.
 
 ## Build and install
 
@@ -132,7 +134,7 @@ skips it). Every gateware image goes to
 
 Until the components in the status table exist, only the `cmake`,
 `ctest` and `cmake --install` steps work, and they build, test and install
-`rbprobe` alone; `FPGATYPE` is not used yet.
+`rbprobe` and the gateware.
 
 ## Using the radio
 
