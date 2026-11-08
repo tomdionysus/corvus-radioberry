@@ -31,9 +31,22 @@ Established on the development board:
   with run set), made about 500 changes with no lock-up. With a 3% rate
   per change that outcome has a probability well under one in a million,
   so the harness does something necessary that is not yet identified.
-- A further receiver-count change while locked (1 to 2 to 1) does not
-  recover it, although it asserts the same FIFO clear that a
-  receiver-count change always asserts.
+- A further receiver-count change while locked (1 to 2 to 1, and a
+  later one with the device held open and reading) does not recover it,
+  although it asserts the same FIFO clear that a receiver-count change
+  always asserts. Only a gateware reload recovers.
+- While locked, the TX path keeps running: 16384 zero samples written
+  with PTT clear drained within 0.6 s, as at 48 ksps (four cases). The
+  AD9866 clock domain is alive; the fault is in the receive chain or
+  its FIFO.
+- Every captured lock-up begins at the receiver-count command itself
+  (no RX words after it), with the same bytes and the same 30 to 40 us
+  command spacing as the hundreds of changes that did not lock up.
+- Recovery ladder, run on nine lock-ups with the device held open and
+  reading: receiver-count change 1 to 2 and back, rate change 48 to 96
+  ksps and back, `run` cleared for 1 s then set, count change while
+  `run` was clear, LNA command, PA word zero. None restarted the
+  stream in any of the nine. Only the gateware reload does.
 - The owner ran upstream's GPIO-mode gateware (73.3) on this board
   without noticing any such fault. The PIO variant has no known-good
   reference run anywhere.
@@ -51,8 +64,33 @@ causal:
 - In both variants the receiver-count comparison that fires
   `reset_channels` runs in the 10 MHz domain on `cmd_addr` and `cmd_data`,
   which are assigned combinationally from the SPI slave's `rdata`.
-  Whether `rdata` is registered on `done` or is the live shift register
-  has not been checked.
+  `rdata` is registered: `spi_slave.v` writes it only on the 48th SPI
+  clock, so the comparison never sees a half-shifted command.
+- The generated FIFO netlist (Quartus map pass, `build-gateware/diag/`)
+  has no clear synchroniser on either side: `rdptr_g[].clrn` and
+  `wrptr_g[].clrn` are `!aclr` directly, and the source's parameter
+  `wrsync_aclr_synch` appears nowhere in it. The documented Intel
+  parameters are `write_aclr_synch` and `read_aclr_synch`, default OFF;
+  the source's name is ignored without a warning. Every FIFO pointer,
+  synchroniser stage and flag register is reset by `aclr`, so a
+  corrupted FIFO would be repaired by the next clear.
+- `rst_all` into the radio block is tied to 0: the receivers' decimators
+  and FIR are never reset after configuration. `run` is used in
+  `radio.v` only by the transmit state machine and does not gate RX.
+- `rx_pi_pio.v`, the Pi-clocked state machine that reads the FIFO and
+  drives the nibble stream, has no reset of any kind; the FIFO's flags
+  it waits on (`us_tvalid`, `us_tlength`) are changed asynchronously to
+  its clock by the clear. Quartus infers latches for its `us_stream`
+  output (map log warning 10240). The project leaves "Safe State
+  Machine" off and state machine processing on "Auto"; the encoding
+  Quartus chose for `state` is not shown in the map report and has not
+  been confirmed (the timing report names the bits `state.START`,
+  `state.RXMETA`, which is how Quartus names one-hot bits, but that
+  inference is unverified).
+- The timing constraints assume a 4.8 MHz Pi RX clock; the upstream PIO
+  program and ours drive 20 MHz. The report's `pi_rx_clk` paths still
+  fit a 25 ns half period (data delays 6 to 10 ns). The outputs to the
+  Pi are false-pathed.
 
 Nothing in this section identifies the cause. Everything in section 3
 is designed to.
@@ -151,6 +189,31 @@ open item, and fix 4 considered only for a change whose effect can be
 measured as a rate difference between two images built from the same
 source.
 
+## 3a. Working hypothesis (2026-11-08, unconfirmed)
+
+Stated as a hypothesis, with the experiment that tests it. The one
+block in the receive path that nothing resets and whose inputs change
+asynchronously at exactly the moment the lock-ups start is the
+`rx_pi_pio` state machine. If a receiver-count clear changes the FIFO
+flags within the setup or hold window of a Pi RX clock edge, the state
+register can capture an illegal value; with no reset and no safe-state
+recovery, an illegal one-hot vector would leave it asserting nothing,
+so it never reads the FIFO again, the FIFO fills to its 1012-word
+threshold, the assembler waits on `rx_tready` for good, and only
+reconfiguration recovers. This fits every fact in section 1: TX alive,
+clears and resets ineffective, onset at the clear, a rate of a few per
+thousand clears (a sub-nanosecond window against a 50 ns clock), and
+no such fault in the GPIO variant, whose FIFO read side ran on the
+FPGA's own clock with no Pi-clocked state machine.
+
+Test (step 11): the driver stops the RX state machine, so the Pi's RX
+clock is static, from before a receiver-count command until 200 us
+after it (`rx_clock_hold_us`, diagnostic driver 0.3.1). With no clock
+edge while the flags change, the hypothesis predicts zero lock-ups;
+the result is in section 5. Confirmation would also need the encoding
+check above and, ideally, a rate that varies with fitter seed
+(step 13).
+
 ## 4. Fixes, in order of preference, each gated on a finding
 
 1. Driver avoids the trigger (command spacing, ordering, or RX clock
@@ -174,6 +237,30 @@ source.
 Dated entries, newest first. Each gives the configuration, the number
 of changes or runs, the number of lock-ups, and what it rules in or out.
 
+- 2026-11-08, driver 0.3.1 (diagnostic: stall detector in sysfs
+  `rx_stalled`, `debug=2` traces every command, `cmd_gap_us`). Harness
+  test "reads return whole frames for every receiver count", one run =
+  6 receiver-count changes, lock-up detected 200 ms after the change:
+  - cold (30 C), `debug=2`: 0 in 50 runs, then 6 in 100 runs (576
+    changes, about 1% per change);
+  - cold, `debug=0`: 1 in 50;
+  - SoC 42 to 47 C (CPU burners), `debug=0`: 2 in 50;
+  - SoC 46 to 49 C, `debug=0`, 100 us minimum gap between SPI commands:
+    2 in 50.
+  - SoC 46 to 49 C, `debug=2`: 3 in 50;
+  - cold, `debug=2`, recovery ladder on each lock-up: 9 in 150 runs,
+    0 recovered by any command (section 1);
+  - cold, `debug=2`, RX clock held still across each receiver-count
+    command (`rx_clock_hold_us=200`): 0 in 150 runs (900 changes),
+    run immediately after the 9-in-150 ladder loop on the same driver.
+    Under the measured 6% per-run rate the chance of 150 clean runs is
+    about 1 in 10000. This is the predicted outcome of the hypothesis
+    in section 3a and already exceeds the 500-change acceptance in
+    section 6.
+  Rules out command spacing as the trigger and moderate SoC temperature
+  as a strong factor; the morning's 7 in 35 is not reproduced. Thirteen
+  lock-ups with the TX drain test: TX alive in all (section 1).
+
 - 2026-11-08: Harness test "reads return whole frames for every receiver
   count": 7 lock-ups in 35 runs (about 20% per run, 3 to 4% per change).
   Nine Python command patterns, about 500 changes: 0 lock-ups. Driver
@@ -183,6 +270,29 @@ of changes or runs, the number of lock-ups, and what it rules in or out.
 
 ## 6. Decision
 
-Open. Development resumes when a fix from section 4 is chosen, applied
+Open, awaiting the owner. Position at the end of 2026-11-08: the fault
+is in the PIO gateware's receive read-out, in state that no command
+resets (section 3a, unconfirmed as to the exact register but the only
+candidate left by elimination). The driver-side avoidance, holding the
+Pi's RX clock still across each receiver-count command, measured 0
+lock-ups in 900 changes against 9 lock-ups in 900 without it. Proposed
+way forward, for the owner to approve:
+
+1. Make the RX clock hold the driver's normal behaviour (fix 1): on in
+   the shipped module, 200 us, documented in the README and
+   `docs/plan-v1.md`; keep the stall detector and its sysfs attributes
+   as a permanent fault indicator; keep `cmd_gap_us` out (ruled out).
+   Merge from `item/2-rx-wedge-diag` after a final acceptance run of
+   at least 500 changes with the shipped defaults and the usual gate.
+2. Resume development; the parked harness branch rebases on it and
+   its own acceptance (20 consecutive passes) becomes meaningful.
+3. Record the gateware's defects (section 1) as an open gateware item:
+   unreset Pi-clocked `rx_pi_pio` state machine with inferred latches,
+   FIFO clear unsynchronised on both sides, `wrsync_aclr_synch`
+   silently ignored. Whether to fix them at source is the owner's
+   decision and reopens "built unmodified"; the driver avoidance does
+   not depend on it.
+4. Optional confirmation, not needed for 1 to 3: the `state` encoding
+   from a Quartus fitter report, and a seed-sweep rate comparison. Development resumes when a fix from section 4 is chosen, applied
 and measured at 0 lock-ups over at least 500 changes of the triggering
 pattern, or when the owner decides otherwise.

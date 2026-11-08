@@ -9,10 +9,14 @@ its date.
 
 Main development is paused. The PIO gateware's receive stream sometimes
 stops for good until the gateware is reloaded; the driver test harness
-(branch `item/2-driver-harness`, parked unmerged) triggers it in about
-20% of runs. The diagnosis and fix plan is `docs/plan-rx-wedge.md`; its
-section 6 says what reopens this list. Only that subplan, this file and
-documentation are worked on meanwhile.
+(branch `item/2-driver-harness`, parked unmerged) triggers it in 2 to
+6% of runs. The diagnosis is in `docs/plan-rx-wedge.md`: the fault is
+in gateware state no command resets (section 3a); a driver-side
+avoidance (RX clock held still across receiver-count commands, on
+branch `item/2-rx-wedge-diag`, driver 0.3.1) measured 0 lock-ups in 900
+changes against 9 in 900 without. Section 6 proposes the way forward
+and waits for the owner's decision. Nothing else is worked on until
+then.
 
 ## Where things stand (2026-11-08)
 
