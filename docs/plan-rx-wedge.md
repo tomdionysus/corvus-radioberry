@@ -62,9 +62,11 @@ is designed to.
 - Receive only. No command sets PTT (bit 32) or the TX permission bit
   (bit 42). Where TX samples are written they are zero, with both bits
   clear, which `CONTRIBUTING.md` allows without permission.
-- The gateware source is not modified for any shipped image. A
-  SignalTap build for observation (section 3, phase 5) is never
-  installed as `/lib/firmware/radioberry.rbf`.
+- The gateware source is not modified for any shipped image.
+- No JTAG adapter or other diagnosis hardware is available, and none
+  will be. Everything is observed from the Pi: the SPI reply, the
+  stream pins through `pinctrl`, the driver's counters and the
+  behaviour of rebuilt images. The plan is written for that.
 - Results are recorded in section 5 as measured rates with the number of
   trials, dated. A hypothesis is written down as a hypothesis until an
   experiment in section 3 has confirmed or refuted it.
@@ -139,12 +141,15 @@ give a usable rate. One lock-up costs 5.5 s to recover.
     varies strongly with seed: a placement-sensitive crossing in the
     gateware. Rate constant: a logic bug or a protocol-level trigger.
 
-### Phase 5: internal visibility, only if phases 1 to 4 do not settle it
+### If phases 1 to 4 do not settle it
 
-14. SignalTap on the FIFO fill level, `reset_channels`, `rx_tvalid`,
-    `run_ad9866sync` and PLL lock, in a debug build of the gateware used
-    for observation only. Needs a USB Blaster on the board's JTAG; the
-    owner has been asked whether one is available.
+There is no internal visibility into the FPGA. The remaining evidence
+would then be the rates from steps 9 to 13 and whichever domain step 7
+showed dead. The way forward in that case is fix 2 (detect and reload)
+as the stopgap so development can resume, with the lock-up kept as an
+open item, and fix 4 considered only for a change whose effect can be
+measured as a rate difference between two images built from the same
+source.
 
 ## 4. Fixes, in order of preference, each gated on a finding
 
