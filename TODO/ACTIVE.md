@@ -78,14 +78,16 @@ acceptance test.
 
 ## 2. Repository and build skeleton
 
-- [ ] Top-level `CMakeLists.txt` with subdirectories `driver/`, `daemon/`,
+- [x] Top-level `CMakeLists.txt` with subdirectories `driver/`, `daemon/`,
       `tools/`, `gateware/`; the module built through a custom target that
-      invokes kbuild; `FPGATYPE` cache variable; install rules for module,
-      overlay, firmware, binaries, udev rule, system user and unit.
-- [ ] `.editorconfig`, `.clang-format` (Google base, 4 spaces, 100
+      invokes kbuild (`cmake/KernelModule.cmake`); `FPGATYPE` cache
+      variable; install rules for module, firmware and binaries. The
+      overlay, udev rule, system user and unit install rules arrive with
+      the driver and daemon items that create those files.
+- [x] `.editorconfig`, `.clang-format` (Google base, 4 spaces, 100
       columns), SPDX header check and format check under `tools/`.
-- [ ] Catch2 wiring with gcov, lcov report target, ASan and UBSan presets.
-- [ ] `tools/ci-pi.sh`: builds everything on the Pi over SSH, runs unit
+- [x] Catch2 wiring with gcov, lcov report target, ASan and UBSan presets.
+- [x] `tools/ci-pi.sh`: builds everything on the Pi over SSH, runs unit
       tests, sanitizer builds, format and SPDX checks, prints coverage.
       Acceptance: exits 0 on a clean checkout on the Pi.
 

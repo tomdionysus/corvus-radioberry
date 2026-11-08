@@ -17,10 +17,19 @@ endif()
 
 option(RADIOBERRY_BUILD_TESTS "Build the unit tests" ON)
 
+set(FPGATYPE "CL025" CACHE STRING "FPGA on the Radioberry: CL016 or CL025")
+set_property(CACHE FPGATYPE PROPERTY STRINGS CL016 CL025)
+if(NOT FPGATYPE MATCHES "^(CL016|CL025)$")
+    message(FATAL_ERROR "FPGATYPE must be CL016 or CL025, not '${FPGATYPE}'")
+endif()
+set(RADIOBERRY_FIRMWARE_DIR "/lib/firmware" CACHE PATH "Where the driver's gateware is installed")
+
 add_compile_options(-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror)
 
 include(GNUInstallDirs)
 include(cmake/Version.cmake)
+include(cmake/Instrumentation.cmake)
+include(cmake/KernelModule.cmake)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GPIOD REQUIRED IMPORTED_TARGET libgpiodcxx>=2.0)
@@ -35,4 +44,10 @@ if(RADIOBERRY_BUILD_TESTS)
     include(Catch)
 endif()
 
+add_subdirectory(driver)
+add_subdirectory(daemon)
 add_subdirectory(tools)
+add_subdirectory(gateware)
+
+message(STATUS "radioberry ${RADIOBERRY_VERSION}: FPGATYPE=${FPGATYPE}, "
+               "kernel module ${RADIOBERRY_BUILD_MODULE} (${KERNEL_RELEASE})")

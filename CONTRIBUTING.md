@@ -18,8 +18,10 @@ listed under Standing decisions in `TODO/ACTIVE.md` without saying so.
 ## Finishing a piece of work
 
 1. The item's acceptance test in `TODO/ACTIVE.md` passes on the Pi.
-2. `tools/ci-pi.sh` passes (once it exists; until then run the build,
-   tests, format check and SPDX check by hand).
+2. `tools/ci-pi.sh` passes, run on the Pi or from a workstation with
+   `tools/ci-pi.sh --remote [user@]host`. `tools/check-format.sh --fix`
+   applies clang-format 19, which the workstation may not have; run it on
+   the Pi and copy the result back.
 3. Tick the item in `TODO/ACTIVE.md`, move its text to the top of
    `TODO/COMPLETED.md` with the date, and keep `README.md` current if the
    item changed anything a user installs or runs.

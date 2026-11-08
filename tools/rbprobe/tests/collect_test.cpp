@@ -214,6 +214,19 @@ TEST_CASE("identify with no candidate images", "[collect]") {
     CHECK(has(r, "fpga.identify", Severity::kWarning));
 }
 
+TEST_CASE("identify finds images in the installed gateware layout", "[collect]") {
+    FakeSource pi = development_pi();
+    pi.files.erase("/srv/gateware/CL025/radioberry.rbf");
+    pi.files.erase("/srv/gateware/CL016/radioberry.rbf");
+    pi.files["/usr/share/radioberry/gateware/rpi-5/CL025/radioberry.rbf"] = kCl025Image;
+    pi.files["/usr/share/radioberry/gateware/rpi-5/CL025/deeper/too-deep.rbf"] = kCl016Image;
+    Options o = test_options(true);
+    o.gateware_dirs = {"/usr/share/radioberry/gateware"};
+    const Report r = collect(pi, o);
+    CHECK(pi.configure_calls == 1);
+    CHECK(str(r, "fpga.type") == "10CL025");
+}
+
 TEST_CASE("identify deduplicates identical images", "[collect]") {
     FakeSource pi = development_pi();
     pi.files["/lib/firmware/radioberry.rbf"] = kCl016Image;

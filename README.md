@@ -78,7 +78,7 @@ Pi. wdsp is not used.
 sudo apt install build-essential cmake device-tree-compiler \
     linux-headers-rpi-2712 libliquid-dev libgpiod-dev libi2c-dev i2c-tools \
     libyaml-cpp-dev nlohmann-json3-dev libspdlog-dev libsystemd-dev \
-    catch2 lcov clang-format
+    catch2 lcov clang-format-19 rsync
 ```
 
 Boot configuration in `/boot/firmware/config.txt`:
@@ -111,13 +111,24 @@ sudo systemctl enable --now radioberry
 rbprobe         # verify host, overlay, driver, gateware, PA board
 ```
 
-`cmake --install` places `radioberry.ko` under `/lib/modules/$(uname -r)/`,
+`cmake --install` places `radioberry.ko` under `/lib/modules/$(uname -r)/updates/`,
 the device tree overlay under `/boot/firmware/overlays/`, the gateware under
 `/lib/firmware/radioberry.rbf`, `radioberryd` and the tools under
 `/usr/local/bin/`, the udev rule, the `radioberry` system user and group,
 the default `/etc/radioberry/config.yaml`, and the systemd unit. The daemon
 never runs as root. A reboot is required the first time the overlay is
 installed.
+
+`CMakePresets.json` provides `default`, `asan` (AddressSanitizer and
+UndefinedBehaviorSanitizer) and `coverage` presets; with the last,
+`cmake --build --preset coverage --target coverage` runs the tests and
+writes an lcov report to `build-coverage/coverage/html`. The kernel module
+is built when headers for the running kernel are installed
+(`-DKERNEL_RELEASE=` picks another kernel, `-DRADIOBERRY_BUILD_MODULE=OFF`
+skips it). Every gateware image goes to
+`/usr/local/share/radioberry/gateware/rpi-5/<type>/`; the one for
+`FPGATYPE` (default `CL025`) is also installed as
+`/lib/firmware/radioberry.rbf`.
 
 Until the components in the status table exist, only the `cmake`,
 `ctest` and `cmake --install` steps work, and they build, test and install
@@ -165,7 +176,12 @@ TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
 
 Development happens on `develop`, one branch per TODO item squash-merged
 into it; `main` receives `develop` only at version tags. `tools/ci-pi.sh`,
-run against a Pi with the hardware attached, is the merge gate. The full
+run against a Pi with the hardware attached, is the merge gate: on the Pi
+it runs the format check (`tools/check-format.sh`, clang-format 19), the
+SPDX check (`tools/check-spdx.sh`), the release, sanitizer and coverage
+builds with their tests, and prints the coverage summary. From a
+workstation, `tools/ci-pi.sh --remote [user@]host` copies the working tree
+to the Pi and runs it there. The full
 working conventions are in `CONTRIBUTING.md`.
 
 ## Licence

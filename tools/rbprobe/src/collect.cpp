@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <functional>
 #include <map>
 #include <set>
 
@@ -430,18 +431,20 @@ private:
                 files.emplace_back(path, std::move(*content));
             }
         };
-        for (const auto& dir : opt_.gateware_dirs) {
+        // Images sit up to three levels down, as in rpi-5/CL025/radioberry.rbf.
+        std::function<void(const std::string&, int)> walk = [&](const std::string& dir, int depth) {
             auto names = src_.list_dir(dir);
             std::sort(names.begin(), names.end());
             for (const auto& name : names) {
                 const std::string path = dir + "/" + name;
                 consider(path);
-                auto inner = src_.list_dir(path);
-                std::sort(inner.begin(), inner.end());
-                for (const auto& sub : inner) {
-                    consider(path + "/" + sub);
+                if (depth > 1) {
+                    walk(path, depth - 1);
                 }
             }
+        };
+        for (const auto& dir : opt_.gateware_dirs) {
+            walk(dir, 3);
         }
         return files;
     }

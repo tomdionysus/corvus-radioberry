@@ -3,6 +3,17 @@
 Newest first. Each entry gives the date, what was done, and where the
 result lives.
 
+- 2026-11-08: Repository and build skeleton (section 2): `driver/`,
+  `daemon/` and `gateware/` CMake subdirectories, `FPGATYPE` (CL016 or
+  CL025, default CL025) selecting the image installed as
+  `/lib/firmware/radioberry.rbf`, a kbuild wrapper in
+  `cmake/KernelModule.cmake`, `CMakePresets.json` with default, asan and
+  coverage presets, an lcov `coverage` target, `.editorconfig`,
+  `tools/check-format.sh`, `tools/check-spdx.sh` and the merge gate
+  `tools/ci-pi.sh` (local or `--remote`). Acceptance: `tools/ci-pi.sh`
+  exits 0 on a fresh clone on the development Pi, 49 tests in each of the
+  three builds, 98.3 percent line coverage. `rbprobe --identify` now also
+  searches the installed `rpi-5/<type>/` layout.
 - 2026-11-08: `rbprobe` (section 1) built in `tools/rbprobe/`, with the
   shared `tools/common/` library (SHA-256, catalogue of known upstream
   gateware images, passive serial FPGA loader over libgpiod 2). Probes sit
