@@ -32,6 +32,10 @@ its date.
   against a fake device and, in `rbdrivertest`, against the driver.
 - `radioberryd` serves Protocol 1 receive over UDP and TCP; piHPSDR and
   WSJT-X decoded 40 m FT8 off air through it. It does not transmit.
+- `ft8rx` (`examples/ft8`, optional): a receive-only Protocol 1 FT8
+  decoder; 23 messages in 6 live 40 m slots through `radioberryd`.
+  Samples decode only Q first, while piHPSDR reads I first and works;
+  open question, see `docs/examples.md`.
 - Next: Protocol 1 transmit (section 3), on the session and transmit
   policy already merged.
 
@@ -112,8 +116,10 @@ Nothing open.
 - [ ] Protocol 2: discovery, General, DDC and DUC specific, High Priority
       both ways, DDC I/Q at 48 to 384 ksps, DUC I/Q at 192 ksps resampled
       with liquid-dsp, Mic/Line and Wideband declared absent, client
-      ownership and timeout, fail-safe on sequence gaps. Acceptance:
-      piHPSDR in Protocol 2 mode receives.
+      ownership and timeout, fail-safe on sequence gaps. `ft8rx`
+      (`examples/ft8`) gains Protocol 2, selectable at the command line.
+      Acceptance: piHPSDR in Protocol 2 mode receives, and `ft8rx`
+      decodes over Protocol 2.
 - [ ] Real-time setup: thread priorities, CPU affinity, socket buffer
       sizes, `SO_PRIORITY`; RX packet jitter over Wi-Fi measured and
       recorded in `docs/platform.md`.

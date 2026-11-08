@@ -16,6 +16,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 option(RADIOBERRY_BUILD_TESTS "Build the unit tests" ON)
+option(RADIOBERRY_BUILD_EXAMPLES "Build the example clients (examples/)" OFF)
 
 set(FPGATYPE "CL025" CACHE STRING "FPGA on the Radioberry: CL016 or CL025")
 set_property(CACHE FPGATYPE PROPERTY STRINGS CL016 CL025)
@@ -48,6 +49,9 @@ add_subdirectory(driver)
 add_subdirectory(daemon)
 add_subdirectory(tools)
 add_subdirectory(gateware)
+if(RADIOBERRY_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
 
 message(STATUS "radioberry ${RADIOBERRY_VERSION}: FPGATYPE=${FPGATYPE}, "
                "kernel module ${RADIOBERRY_BUILD_MODULE} (${KERNEL_RELEASE})")

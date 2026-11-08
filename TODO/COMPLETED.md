@@ -3,6 +3,19 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-08: Example FT8 client `ft8rx` (`examples/ft8`, built with
+  `-DRADIOBERRY_BUILD_EXAMPLES=ON`, off by default; the `default` and
+  `asan` presets turn it on so the gate builds and tests it). Receive-only
+  Protocol 1: one receiver at 48 ksps, decimated to 3200 sps with
+  liquid-dsp (unity-gain Kaiser low-pass at 1600 Hz, 1501 taps), decoded
+  per UTC slot with Corvus HF's port of ft8_lib (the owner's code,
+  licensed here as GPL-2.0-or-later; ft8_lib's message code vendored with
+  its MIT licence). `ft8_tests`: decimator passband and stopband, and
+  synthesised FT8 at 48 ksps in noise decoded through the same chain (one
+  message at -10 dB SNR with frequency, DT and SNR checked; three across
+  the band). Live on the development Pi, 40 m: 23 messages in 6 slots, no
+  packets lost. FT8 decodes only with each sample's second value as I
+  (7 messages against none, consecutive slots); `docs/examples.md`.
 - 2026-11-08: PA and transmit policy (`daemon/src/tx_policy.cpp`). MOX is
   granted only when transmit is allowed, a client owns the radio, no
   fault is latched and the TX watchdog (default 120 s) has not tripped;

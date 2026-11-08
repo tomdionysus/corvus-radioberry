@@ -6,7 +6,8 @@
       "displayName": "Release with debug info",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "RADIOBERRY_BUILD_EXAMPLES": "ON"
       }
     },
     {
@@ -15,7 +16,8 @@
       "binaryDir": "${sourceDir}/build-asan",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "RADIOBERRY_SANITIZE": "ON"
+        "RADIOBERRY_SANITIZE": "ON",
+        "RADIOBERRY_BUILD_EXAMPLES": "ON"
       }
     },
     {
