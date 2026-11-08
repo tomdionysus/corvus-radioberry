@@ -189,6 +189,15 @@ FakeSource working_pi() {
     s.files["/dev/radioberry"] = "";
     s.links["/sys/bus/spi/devices/spi0.0/driver"] = "../../../../bus/spi/drivers/radioberry";
     s.files["/lib/firmware/radioberry.rbf"] = kCl025Image;
+    s.files.erase("/proc/device-tree/radioberry/compatible");
+    s.files.erase("/proc/device-tree/radioberry/status");
+    s.files["/sys/bus/spi/devices/spi0.0/modalias"] = "spi:radioberry\n";
+    s.files["/sys/bus/spi/devices/spi0.0/of_node/compatible"] =
+        std::string("sdr,radioberry") + '\0';
+    s.files["/sys/bus/spi/devices/spi0.0/gateware_version"] = "75.3\n";
+    s.files["/sys/bus/spi/devices/spi0.0/fpga_type"] = "10CL025\n";
+    s.files["/sys/bus/spi/devices/spi0.0/receivers"] = "6\n";
+    s.files["/sys/bus/spi/devices/spi0.0/transmitters"] = "1\n";
     s.files.erase("/etc/init.d/radioberryd");
     s.files["/usr/local/bin/radioberryd"] = "";
     s.commands[{"/usr/local/bin/radioberryd", "--version"}] = {0, "radioberryd v0.1.0\n"};

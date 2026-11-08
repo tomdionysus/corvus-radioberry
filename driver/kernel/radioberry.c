@@ -1,0 +1,1072 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+/*
+ * Radioberry 2.x on the Raspberry Pi 5.
+ *
+ * Binds to the "sdr,radioberry" device on spi0 created by the radioberry
+ * overlay. On probe it loads the gateware through passive serial, reads
+ * the gateware identity over SPI, claims two RP1 PIO state machines for the
+ * RX and TX streams and keeps their DMA running, and creates
+ * /dev/radioberry (see include/radioberry_ioctl.h for the interface).
+ *
+ * Built only on the stock rp1-pio kernel API. Stream DMA uses rp1-pio's
+ * bounce buffers: up to RB_DMA_SLOTS periods are in flight per direction
+ * and a FIFO-priority kernel thread refills them, so the state machines
+ * never wait for a restart.
+ *
+ * The PIO programs and the overall design follow the upstream Radioberry
+ * Pi 5 driver by Johan Maas, PA3GSB (public domain, Unlicense).
+ */
+
+#include <linux/delay.h>
+#include <linux/firmware.h>
+#include <linux/fs.h>
+#include <linux/gpio/consumer.h>
+#include <linux/kthread.h>
+#include <linux/miscdevice.h>
+#include <linux/module.h>
+#include <linux/mutex.h>
+#include <linux/pio_rp1.h>
+#include <linux/poll.h>
+#include <linux/sched.h>
+#include <linux/slab.h>
+#include <linux/spi/spi.h>
+#include <linux/spinlock.h>
+#include <linux/uaccess.h>
+#include <linux/wait.h>
+
+#include "radioberry_ioctl.h"
+#include "rb_logic.h"
+#include "rb_pio.h"
+
+#define RB_DRIVER_VERSION ((0u << 16) | (1u << 8) | 0u)
+#define RB_DRIVER_VERSION_STRING "0.1.0"
+
+#define RB_FIRMWARE_NAME "radioberry.rbf"
+#define RB_DMA_SLOTS 4
+#define RB_RX_SLOT_BYTES (32 * 1024)
+#define RB_RX_MIN_PERIOD 256
+#define RB_TX_SLOT_BYTES 1024 /* 256 samples, 5.3 ms at 48 ksps */
+#define RB_CHUNK_BYTES 4096
+
+static bool load_gateware = true;
+module_param(load_gateware, bool, 0444);
+MODULE_PARM_DESC(load_gateware, "Load " RB_FIRMWARE_NAME " into the FPGA on probe (default 1)");
+
+static unsigned int rx_clkdiv = RB_RX_CLKDIV_DEFAULT;
+module_param(rx_clkdiv, uint, 0444);
+MODULE_PARM_DESC(rx_clkdiv, "RX state machine clock divider (default 2)");
+
+static unsigned int tx_clkdiv = RB_TX_CLKDIV_DEFAULT;
+module_param(tx_clkdiv, uint, 0444);
+MODULE_PARM_DESC(tx_clkdiv, "TX state machine clock divider (default 8)");
+
+static unsigned int rx_ring_kib = 512;
+module_param(rx_ring_kib, uint, 0444);
+MODULE_PARM_DESC(rx_ring_kib, "RX ring size in KiB, rounded up to a power of two (default 512)");
+
+static unsigned int tx_ring_kib = 64;
+module_param(tx_ring_kib, uint, 0444);
+MODULE_PARM_DESC(tx_ring_kib, "TX ring size in KiB, rounded up to a power of two (default 64)");
+
+struct rb_stream {
+	int sm;
+	int prog_offset;
+	bool prog_loaded;
+	u8 *slot[RB_DMA_SLOTS];
+	u32 slot_bytes[RB_DMA_SLOTS];
+	unsigned int submitted; /* free running slot counters */
+	unsigned int completed;
+	atomic_t inflight;
+};
+
+struct rb_dev {
+	struct spi_device *spi;
+	struct device *dev;
+	struct gpio_desc *nconfig, *dclk, *data, *conf_done, *nstatus;
+	struct rb_identity id;
+
+	struct mutex cmd_lock; /* SPI commands */
+	u8 *spi_tx, *spi_rx;   /* DMA-safe command buffers */
+	bool ptt;
+
+	struct rp1_pio_client *pio;
+	struct rb_stream rx, tx;
+
+	spinlock_t rx_lock; /* parser, rx ring, rx statistics */
+	struct rb_rx_parser parser;
+	struct rb_ring rx_ring;
+	u8 *rx_ring_buf;
+	u32 rx_period;
+	unsigned int receivers;
+	unsigned int rate_code;
+	bool rx_overrun;
+	wait_queue_head_t rx_wait;
+
+	spinlock_t tx_lock; /* tx ring, tx statistics */
+	struct rb_ring tx_ring;
+	u8 *tx_ring_buf;
+	bool tx_starved;
+	wait_queue_head_t tx_wait;
+
+	struct mutex io_lock; /* read and write bounce buffers */
+	u8 *io_buf;
+	u32 *pack_buf;
+
+	struct task_struct *worker;
+	wait_queue_head_t work_wait;
+
+	atomic_t open;
+	struct miscdevice misc;
+	struct radioberry_stats stats;
+};
+
+/* ---- SPI control ---------------------------------------------------- */
+
+static int rb_command_locked(struct rb_dev *rb, const u8 *tx, u8 *rx)
+{
+	struct spi_transfer t = {
+		.tx_buf = rb->spi_tx,
+		.rx_buf = rb->spi_rx,
+		.len = RB_CMD_BYTES,
+	};
+	int ret;
+
+	lockdep_assert_held(&rb->cmd_lock);
+	memcpy(rb->spi_tx, tx, RB_CMD_BYTES);
+	ret = spi_sync_transfer(rb->spi, &t, 1);
+	if (ret)
+		return ret;
+	if (rx)
+		memcpy(rx, rb->spi_rx, RB_CMD_BYTES);
+	rb->ptt = rb_cmd_ptt(tx);
+	return 0;
+}
+
+static int rb_command_safe(struct rb_dev *rb, u8 *rx)
+{
+	u8 tx[RB_CMD_BYTES];
+	int ret;
+
+	rb_cmd_safe(tx);
+	mutex_lock(&rb->cmd_lock);
+	ret = rb_command_locked(rb, tx, rx);
+	mutex_unlock(&rb->cmd_lock);
+	return ret;
+}
+
+/* Polls the identity word until the gateware has left its reset. */
+static int rb_read_identity(struct rb_dev *rb)
+{
+	unsigned long deadline = jiffies + msecs_to_jiffies(4000);
+	u8 rx[RB_CMD_BYTES];
+	int ret;
+
+	do {
+		ret = rb_command_safe(rb, rx);
+		if (ret)
+			return ret;
+		rb_reply_parse(rx, &rb->id);
+		if (rb_identity_valid(&rb->id))
+			return 0;
+		msleep(100);
+	} while (time_before(jiffies, deadline));
+
+	dev_err(rb->dev, "gateware identity not valid (reply %6ph); is the FPGA configured?\n", rx);
+	return -ETIMEDOUT;
+}
+
+/* ---- gateware ------------------------------------------------------- */
+
+static int rb_wait_nstatus(struct rb_dev *rb, int level, unsigned int timeout_us)
+{
+	unsigned int waited;
+
+	for (waited = 0; waited < timeout_us; waited += 10) {
+		if (gpiod_get_value_cansleep(rb->nstatus) == level)
+			return 0;
+		udelay(10);
+	}
+	return -ETIMEDOUT;
+}
+
+static int rb_configure_fpga(struct rb_dev *rb, const u8 *image, size_t size)
+{
+	size_t i;
+	int bit;
+
+	gpiod_set_value_cansleep(rb->dclk, 0);
+	gpiod_set_value_cansleep(rb->data, 0);
+	gpiod_set_value_cansleep(rb->nconfig, 0);
+	udelay(5);
+	if (rb_wait_nstatus(rb, 0, 1000)) {
+		gpiod_set_value_cansleep(rb->nconfig, 1);
+		dev_err(rb->dev, "nSTATUS stayed high while nCONFIG was low\n");
+		return -EIO;
+	}
+	gpiod_set_value_cansleep(rb->nconfig, 1);
+	if (rb_wait_nstatus(rb, 1, 10000)) {
+		dev_err(rb->dev, "nSTATUS stayed low after nCONFIG was released\n");
+		return -EIO;
+	}
+	udelay(5);
+
+	for (i = 0; i < size; i++) {
+		for (bit = 0; bit < 8; bit++) {
+			gpiod_set_value_cansleep(rb->data, (image[i] >> bit) & 1);
+			gpiod_set_value_cansleep(rb->dclk, 1);
+			gpiod_set_value_cansleep(rb->dclk, 0);
+		}
+		if ((i & 0xfff) == 0xfff)
+			cond_resched();
+	}
+	gpiod_set_value_cansleep(rb->data, 0);
+
+	if (!gpiod_get_value_cansleep(rb->nstatus)) {
+		dev_err(rb->dev, "nSTATUS went low: the FPGA rejected the gateware\n");
+		return -EIO;
+	}
+	if (!gpiod_get_value_cansleep(rb->conf_done)) {
+		dev_err(rb->dev, "CONF_DONE stayed low: %s does not match this FPGA\n",
+			RB_FIRMWARE_NAME);
+		return -EIO;
+	}
+	for (i = 0; i < 64; i++) {
+		gpiod_set_value_cansleep(rb->dclk, 1);
+		gpiod_set_value_cansleep(rb->dclk, 0);
+	}
+	return 0;
+}
+
+static int rb_load_gateware(struct rb_dev *rb)
+{
+	const struct firmware *fw;
+	int ret;
+
+	ret = request_firmware(&fw, RB_FIRMWARE_NAME, rb->dev);
+	if (ret) {
+		dev_err(rb->dev, "cannot load /lib/firmware/%s: %d\n", RB_FIRMWARE_NAME, ret);
+		return ret;
+	}
+	ret = rb_configure_fpga(rb, fw->data, fw->size);
+	if (!ret)
+		dev_info(rb->dev, "gateware %s configured (%zu bytes)\n", RB_FIRMWARE_NAME,
+			 fw->size);
+	release_firmware(fw);
+	if (ret)
+		return ret;
+
+	/* The gateware holds itself in reset for about 1.7 s after loading. */
+	msleep(1800);
+	return 0;
+}
+
+/* ---- streams -------------------------------------------------------- */
+
+static void rb_rx_dma_done(void *param)
+{
+	struct rb_dev *rb = param;
+	struct rb_stream *s = &rb->rx;
+	unsigned int idx = s->completed++ % RB_DMA_SLOTS;
+	const u32 *words = (const u32 *)s->slot[idx];
+	unsigned int n = s->slot_bytes[idx] / 4;
+	unsigned int frame_bytes;
+	unsigned long flags;
+	bool queued = false;
+	unsigned int i;
+
+	spin_lock_irqsave(&rb->rx_lock, flags);
+	frame_bytes = rb_rx_frame_bytes(&rb->parser);
+	for (i = 0; i < n; i++) {
+		/* Parse while closed to stay in sync, but queue nothing. */
+		if (!rb_rx_feed(&rb->parser, words[i]) || !atomic_read(&rb->open))
+			continue;
+		if (rb_ring_put(&rb->rx_ring, rb->parser.frame, frame_bytes)) {
+			rb->stats.rx_frames++;
+			queued = true;
+		} else {
+			rb->stats.rx_overrun_frames++;
+			rb->rx_overrun = true;
+		}
+	}
+	rb->stats.rx_words += n;
+	spin_unlock_irqrestore(&rb->rx_lock, flags);
+
+	atomic_dec(&s->inflight);
+	if (queued || rb->rx_overrun)
+		wake_up_interruptible(&rb->rx_wait);
+	wake_up(&rb->work_wait);
+}
+
+static void rb_tx_dma_done(void *param)
+{
+	struct rb_dev *rb = param;
+
+	rb->tx.completed++;
+	atomic_dec(&rb->tx.inflight);
+	wake_up(&rb->work_wait);
+}
+
+static int rb_rx_submit(struct rb_dev *rb)
+{
+	struct rb_stream *s = &rb->rx;
+	unsigned int idx;
+	int ret;
+
+	while (atomic_read(&s->inflight) < RB_DMA_SLOTS) {
+		idx = s->submitted % RB_DMA_SLOTS;
+		s->slot_bytes[idx] = READ_ONCE(rb->rx_period);
+		atomic_inc(&s->inflight);
+		ret = rp1_pio_sm_xfer_data(rb->pio, s->sm, RP1_PIO_DIR_FROM_SM, s->slot_bytes[idx],
+					   s->slot[idx], 0, rb_rx_dma_done, rb);
+		if (ret) {
+			atomic_dec(&s->inflight);
+			if (ret == -EBUSY)
+				return 0;
+			dev_err_ratelimited(rb->dev, "RX DMA submit failed: %d\n", ret);
+			return ret;
+		}
+		s->submitted++;
+	}
+	return 0;
+}
+
+static int rb_tx_submit(struct rb_dev *rb)
+{
+	struct rb_stream *s = &rb->tx;
+	unsigned long flags;
+	unsigned int idx;
+	u32 bytes;
+	int ret;
+
+	while (atomic_read(&s->inflight) < RB_DMA_SLOTS) {
+		idx = s->submitted % RB_DMA_SLOTS;
+		spin_lock_irqsave(&rb->tx_lock, flags);
+		bytes = rb_ring_get(&rb->tx_ring, s->slot[idx], RB_TX_SLOT_BYTES);
+		if (!bytes && rb->ptt && !atomic_read(&s->inflight) && !rb->tx_starved) {
+			rb->stats.tx_underruns++;
+			rb->tx_starved = true;
+		}
+		if (bytes)
+			rb->tx_starved = false;
+		spin_unlock_irqrestore(&rb->tx_lock, flags);
+		if (!bytes)
+			return 0;
+		wake_up_interruptible(&rb->tx_wait);
+
+		atomic_inc(&s->inflight);
+		ret = rp1_pio_sm_xfer_data(rb->pio, s->sm, RP1_PIO_DIR_TO_SM, bytes, s->slot[idx], 0,
+					   rb_tx_dma_done, rb);
+		if (ret) {
+			atomic_dec(&s->inflight);
+			dev_err_ratelimited(rb->dev, "TX DMA submit failed: %d; %u bytes dropped\n",
+					    ret, bytes);
+			return ret;
+		}
+		s->submitted++;
+		spin_lock_irqsave(&rb->tx_lock, flags);
+		rb->stats.tx_words += bytes / 4;
+		spin_unlock_irqrestore(&rb->tx_lock, flags);
+	}
+	return 0;
+}
+
+static bool rb_work_pending(struct rb_dev *rb)
+{
+	unsigned long flags;
+	bool tx_data;
+
+	if (kthread_should_stop() || atomic_read(&rb->rx.inflight) < RB_DMA_SLOTS)
+		return true;
+	if (atomic_read(&rb->tx.inflight) >= RB_DMA_SLOTS)
+		return false;
+	spin_lock_irqsave(&rb->tx_lock, flags);
+	tx_data = rb_ring_used(&rb->tx_ring) != 0;
+	spin_unlock_irqrestore(&rb->tx_lock, flags);
+	return tx_data;
+}
+
+static int rb_worker(void *arg)
+{
+	struct rb_dev *rb = arg;
+
+	while (!kthread_should_stop()) {
+		wait_event_interruptible_timeout(rb->work_wait, rb_work_pending(rb),
+						 msecs_to_jiffies(100));
+		/* Back off on a submit error rather than spin on it. */
+		if (rb_rx_submit(rb) || rb_tx_submit(rb))
+			msleep(10);
+	}
+	return 0;
+}
+
+static int rb_setup_pins(struct rb_dev *rb, int sm, const unsigned int *pins,
+			 const bool *outputs, unsigned int count)
+{
+	struct rp1_pio_sm_set_pindirs_args dirs = { .sm = (u16)sm };
+	struct rp1_pio_sm_set_pins_args low = { .sm = (u16)sm };
+	unsigned int i;
+	int ret;
+
+	for (i = 0; i < count; i++) {
+		struct rp1_gpio_set_function_args fn = {
+			.gpio = (u16)pins[i], .fn = RP1_GPIO_FUNC_PIO,
+		};
+		struct rp1_gpio_set_pulls_args pulls = {
+			.gpio = (u16)pins[i], .up = 0, .down = outputs[i] ? 0 : 1,
+		};
+
+		ret = rp1_pio_gpio_set_function(rb->pio, &fn);
+		if (ret < 0)
+			return ret;
+		ret = rp1_pio_gpio_set_pulls(rb->pio, &pulls);
+		if (ret < 0)
+			return ret;
+		dirs.mask |= BIT(pins[i]);
+		if (outputs[i]) {
+			dirs.dirs |= BIT(pins[i]);
+			low.mask |= BIT(pins[i]);
+		}
+	}
+	ret = rp1_pio_sm_set_pindirs(rb->pio, &dirs);
+	if (ret < 0)
+		return ret;
+	return rp1_pio_sm_set_pins(rb->pio, &low);
+}
+
+static int rb_setup_stream(struct rb_dev *rb, struct rb_stream *s, bool tx)
+{
+	static const unsigned int rx_pins[] = { RB_GPIO_RX_CLK, RB_GPIO_RX_READY, RB_GPIO_RX_D0,
+						RB_GPIO_RX_D0 + 1, RB_GPIO_RX_D0 + 2,
+						RB_GPIO_RX_D0 + 3 };
+	static const bool rx_out[] = { true, false, false, false, false, false };
+	static const unsigned int tx_pins[] = { RB_GPIO_TX_CLK, RB_GPIO_TX_DATA, RB_GPIO_TX_READY };
+	static const bool tx_out[] = { true, true, false };
+	const struct rb_pio_program *prog = tx ? &rb_tx_program : &rb_rx_program;
+	unsigned int dir = tx ? RP1_PIO_DIR_TO_SM : RP1_PIO_DIR_FROM_SM;
+	struct rp1_pio_sm_claim_args claim = { .mask = 0 };
+	struct rp1_pio_add_program_args add = { .num_instrs = prog->length,
+						.origin = RP1_PIO_ORIGIN_ANY };
+	struct rp1_pio_sm_set_enabled_args off = { 0 };
+	struct rp1_pio_sm_clear_fifos_args clear = { 0 };
+	struct rp1_pio_sm_init_args init = { 0 };
+	struct rb_sm_config cfg;
+	unsigned int i;
+	int ret;
+
+	s->sm = rp1_pio_sm_claim(rb->pio, &claim);
+	if (s->sm < 0) {
+		dev_err(rb->dev, "no free PIO state machine for %s: %d\n", tx ? "TX" : "RX", s->sm);
+		return s->sm;
+	}
+	off.mask = BIT(s->sm);
+	rp1_pio_sm_set_enabled(rb->pio, &off);
+
+	for (i = 0; i < RB_DMA_SLOTS; i++) {
+		s->slot[i] = kzalloc(tx ? RB_TX_SLOT_BYTES : RB_RX_SLOT_BYTES, GFP_KERNEL);
+		if (!s->slot[i])
+			return -ENOMEM;
+	}
+	ret = rp1_pio_sm_config_xfer(rb->pio, s->sm, dir, tx ? RB_TX_SLOT_BYTES : RB_RX_SLOT_BYTES,
+				     RB_DMA_SLOTS);
+	if (ret < 0) {
+		dev_err(rb->dev, "%s DMA configuration failed: %d\n", tx ? "TX" : "RX", ret);
+		return ret;
+	}
+
+	memcpy(add.instrs, prog->instructions, prog->length * sizeof(u16));
+	ret = rp1_pio_add_program(rb->pio, &add);
+	if (ret < 0) {
+		dev_err(rb->dev, "cannot load the %s PIO program: %d\n", tx ? "TX" : "RX", ret);
+		return ret;
+	}
+	s->prog_offset = ret;
+	s->prog_loaded = true;
+
+	ret = tx ? rb_setup_pins(rb, s->sm, tx_pins, tx_out, ARRAY_SIZE(tx_pins))
+		 : rb_setup_pins(rb, s->sm, rx_pins, rx_out, ARRAY_SIZE(rx_pins));
+	if (ret < 0) {
+		dev_err(rb->dev, "cannot hand the %s pins to PIO: %d\n", tx ? "TX" : "RX", ret);
+		return ret;
+	}
+
+	cfg = tx ? rb_tx_sm_config(s->prog_offset, tx_clkdiv)
+		 : rb_rx_sm_config(s->prog_offset, rx_clkdiv);
+	init.sm = (u16)s->sm;
+	init.initial_pc = (u16)s->prog_offset;
+	init.config.clkdiv = cfg.clkdiv;
+	init.config.execctrl = cfg.execctrl;
+	init.config.shiftctrl = cfg.shiftctrl;
+	init.config.pinctrl = cfg.pinctrl;
+	ret = rp1_pio_sm_init(rb->pio, &init);
+	if (ret < 0) {
+		dev_err(rb->dev, "cannot configure the %s state machine: %d\n", tx ? "TX" : "RX",
+			ret);
+		return ret;
+	}
+	clear.sm = (u16)s->sm;
+	rp1_pio_sm_clear_fifos(rb->pio, &clear);
+	return 0;
+}
+
+static int rb_start_streams(struct rb_dev *rb)
+{
+	struct rp1_pio_sm_set_enabled_args on = {
+		.mask = (u16)(BIT(rb->rx.sm) | BIT(rb->tx.sm)), .enable = 1,
+	};
+	int ret;
+
+	ret = rp1_pio_sm_set_enabled(rb->pio, &on);
+	if (ret < 0) {
+		dev_err(rb->dev, "cannot start the state machines: %d\n", ret);
+		return ret;
+	}
+	rb->worker = kthread_run(rb_worker, rb, "radioberry");
+	if (IS_ERR(rb->worker)) {
+		ret = PTR_ERR(rb->worker);
+		rb->worker = NULL;
+		return ret;
+	}
+	sched_set_fifo(rb->worker);
+	return 0;
+}
+
+static void rb_stop_streams(struct rb_dev *rb)
+{
+	struct rp1_pio_sm_set_enabled_args off = { 0 };
+	unsigned int i;
+
+	if (rb->worker) {
+		kthread_stop(rb->worker);
+		rb->worker = NULL;
+	}
+	if (rb->pio) {
+		if (rb->rx.sm >= 0)
+			off.mask |= BIT(rb->rx.sm);
+		if (rb->tx.sm >= 0)
+			off.mask |= BIT(rb->tx.sm);
+		if (off.mask)
+			rp1_pio_sm_set_enabled(rb->pio, &off);
+		/* Unclaims the state machines, frees DMA and waits for callbacks. */
+		rp1_pio_close(rb->pio);
+		rb->pio = NULL;
+	}
+	for (i = 0; i < RB_DMA_SLOTS; i++) {
+		kfree(rb->rx.slot[i]);
+		kfree(rb->tx.slot[i]);
+		rb->rx.slot[i] = NULL;
+		rb->tx.slot[i] = NULL;
+	}
+}
+
+/* ---- character device ----------------------------------------------- */
+
+static struct rb_dev *rb_from_file(struct file *file)
+{
+	return container_of(file->private_data, struct rb_dev, misc);
+}
+
+static int rb_open(struct inode *inode, struct file *file)
+{
+	struct rb_dev *rb = rb_from_file(file);
+	unsigned long flags;
+
+	if (atomic_cmpxchg(&rb->open, 0, 1) != 0)
+		return -EBUSY;
+
+	spin_lock_irqsave(&rb->rx_lock, flags);
+	rb_ring_reset(&rb->rx_ring);
+	rb->rx_overrun = false;
+	spin_unlock_irqrestore(&rb->rx_lock, flags);
+	spin_lock_irqsave(&rb->tx_lock, flags);
+	rb_ring_reset(&rb->tx_ring);
+	rb->tx_starved = false;
+	spin_unlock_irqrestore(&rb->tx_lock, flags);
+	return stream_open(inode, file);
+}
+
+static int rb_release(struct inode *inode, struct file *file)
+{
+	struct rb_dev *rb = rb_from_file(file);
+	unsigned long flags;
+	int ret;
+
+	spin_lock_irqsave(&rb->tx_lock, flags);
+	rb_ring_reset(&rb->tx_ring);
+	spin_unlock_irqrestore(&rb->tx_lock, flags);
+
+	ret = rb_command_safe(rb, NULL);
+	if (ret)
+		dev_err(rb->dev, "safe command on close failed: %d\n", ret);
+	atomic_set(&rb->open, 0);
+	return 0;
+}
+
+static bool rb_rx_ready(struct rb_dev *rb, unsigned int frame_bytes)
+{
+	unsigned long flags;
+	bool ready;
+
+	spin_lock_irqsave(&rb->rx_lock, flags);
+	ready = rb_ring_used(&rb->rx_ring) >= frame_bytes;
+	spin_unlock_irqrestore(&rb->rx_lock, flags);
+	return ready;
+}
+
+static ssize_t rb_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
+{
+	struct rb_dev *rb = rb_from_file(file);
+	unsigned int frame_bytes;
+	unsigned long flags;
+	size_t done = 0;
+	u32 chunk, got;
+	int ret;
+
+	spin_lock_irqsave(&rb->rx_lock, flags);
+	frame_bytes = rb_rx_frame_bytes(&rb->parser);
+	spin_unlock_irqrestore(&rb->rx_lock, flags);
+	if (count < frame_bytes)
+		return -EINVAL;
+
+	if (!rb_rx_ready(rb, frame_bytes)) {
+		if (file->f_flags & O_NONBLOCK)
+			return -EAGAIN;
+		ret = wait_event_interruptible(rb->rx_wait, rb_rx_ready(rb, frame_bytes));
+		if (ret)
+			return ret;
+	}
+
+	mutex_lock(&rb->io_lock);
+	while (done + frame_bytes <= count) {
+		chunk = (u32)min_t(size_t, count - done, RB_CHUNK_BYTES);
+		chunk -= chunk % frame_bytes;
+		if (!chunk)
+			break;
+		spin_lock_irqsave(&rb->rx_lock, flags);
+		if (rb_rx_frame_bytes(&rb->parser) != frame_bytes) {
+			spin_unlock_irqrestore(&rb->rx_lock, flags);
+			break; /* receiver count changed under us */
+		}
+		got = rb_ring_used(&rb->rx_ring);
+		got -= got % frame_bytes;
+		got = rb_ring_get(&rb->rx_ring, rb->io_buf, min(chunk, got));
+		spin_unlock_irqrestore(&rb->rx_lock, flags);
+		if (!got)
+			break;
+		if (copy_to_user(buf + done, rb->io_buf, got)) {
+			mutex_unlock(&rb->io_lock);
+			return done ? (ssize_t)done : -EFAULT;
+		}
+		done += got;
+	}
+	mutex_unlock(&rb->io_lock);
+	return (ssize_t)done;
+}
+
+static bool rb_tx_space(struct rb_dev *rb, u32 bytes)
+{
+	unsigned long flags;
+	bool space;
+
+	spin_lock_irqsave(&rb->tx_lock, flags);
+	space = rb_ring_free(&rb->tx_ring) >= bytes;
+	spin_unlock_irqrestore(&rb->tx_lock, flags);
+	return space;
+}
+
+static ssize_t rb_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
+{
+	struct rb_dev *rb = rb_from_file(file);
+	unsigned long flags;
+	size_t done = 0;
+	u32 chunk;
+	int ret;
+
+	if (count % RB_TX_SAMPLE_BYTES)
+		return -EINVAL;
+
+	mutex_lock(&rb->io_lock);
+	while (done < count) {
+		chunk = (u32)min_t(size_t, count - done, RB_CHUNK_BYTES);
+		if (!rb_tx_space(rb, chunk)) {
+			if (file->f_flags & O_NONBLOCK) {
+				mutex_unlock(&rb->io_lock);
+				return done ? (ssize_t)done : -EAGAIN;
+			}
+			mutex_unlock(&rb->io_lock);
+			ret = wait_event_interruptible(rb->tx_wait, rb_tx_space(rb, chunk));
+			if (ret)
+				return done ? (ssize_t)done : ret;
+			mutex_lock(&rb->io_lock);
+		}
+		if (copy_from_user(rb->io_buf, buf + done, chunk)) {
+			mutex_unlock(&rb->io_lock);
+			return done ? (ssize_t)done : -EFAULT;
+		}
+		rb_tx_pack(rb->io_buf, rb->pack_buf, chunk / RB_TX_SAMPLE_BYTES);
+		spin_lock_irqsave(&rb->tx_lock, flags);
+		rb_ring_put(&rb->tx_ring, (const u8 *)rb->pack_buf, chunk);
+		spin_unlock_irqrestore(&rb->tx_lock, flags);
+		wake_up(&rb->work_wait);
+		done += chunk;
+	}
+	mutex_unlock(&rb->io_lock);
+	return (ssize_t)done;
+}
+
+static __poll_t rb_poll(struct file *file, poll_table *wait)
+{
+	struct rb_dev *rb = rb_from_file(file);
+	unsigned long flags;
+	__poll_t mask = 0;
+
+	poll_wait(file, &rb->rx_wait, wait);
+	poll_wait(file, &rb->tx_wait, wait);
+	spin_lock_irqsave(&rb->rx_lock, flags);
+	if (rb_ring_used(&rb->rx_ring) >= rb_rx_frame_bytes(&rb->parser))
+		mask |= EPOLLIN | EPOLLRDNORM;
+	if (rb->rx_overrun)
+		mask |= EPOLLERR;
+	spin_unlock_irqrestore(&rb->rx_lock, flags);
+	if (rb_tx_space(rb, RB_TX_SAMPLE_BYTES))
+		mask |= EPOLLOUT | EPOLLWRNORM;
+	return mask;
+}
+
+static void rb_observe_command(struct rb_dev *rb, const u8 *tx)
+{
+	unsigned int receivers, rate_code;
+	unsigned long flags;
+
+	if (!rb_cmd_general(tx, &receivers, &rate_code))
+		return;
+	if (receivers > rb->id.receivers)
+		receivers = rb->id.receivers;
+	spin_lock_irqsave(&rb->rx_lock, flags);
+	if (receivers != rb->receivers) {
+		rb_rx_set_receivers(&rb->parser, receivers);
+		rb_ring_reset(&rb->rx_ring);
+		rb->receivers = receivers;
+	}
+	rb->rate_code = rate_code;
+	WRITE_ONCE(rb->rx_period, rb_rx_period_bytes(rate_code, receivers, RB_RX_MIN_PERIOD,
+						     RB_RX_SLOT_BYTES));
+	spin_unlock_irqrestore(&rb->rx_lock, flags);
+}
+
+static long rb_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+	struct rb_dev *rb = rb_from_file(file);
+	void __user *uarg = (void __user *)arg;
+	unsigned long flags;
+	int ret;
+
+	switch (cmd) {
+	case RADIOBERRY_IOC_INFO: {
+		struct radioberry_info info = { 0 };
+
+		info.abi_version = RADIOBERRY_ABI_VERSION;
+		info.driver_version = RB_DRIVER_VERSION;
+		info.gateware_major = rb->id.major;
+		info.gateware_minor = rb->id.minor;
+		info.fpga_type = rb->id.fpga_type;
+		info.receivers = rb->id.receivers;
+		info.transmitters = rb->id.transmitters;
+		spin_lock_irqsave(&rb->rx_lock, flags);
+		info.active_receivers = (u8)rb->receivers;
+		info.rx_rate_code = (u8)rb->rate_code;
+		spin_unlock_irqrestore(&rb->rx_lock, flags);
+		return copy_to_user(uarg, &info, sizeof(info)) ? -EFAULT : 0;
+	}
+	case RADIOBERRY_IOC_COMMAND: {
+		struct radioberry_command c;
+
+		if (copy_from_user(&c, uarg, sizeof(c)))
+			return -EFAULT;
+		rb_cmd_sanitise(c.tx);
+		mutex_lock(&rb->cmd_lock);
+		ret = rb_command_locked(rb, c.tx, c.rx);
+		if (!ret) {
+			rb->stats.commands++;
+			rb_observe_command(rb, c.tx);
+		}
+		mutex_unlock(&rb->cmd_lock);
+		if (ret)
+			return ret;
+		wake_up(&rb->work_wait);
+		return copy_to_user(uarg, &c, sizeof(c)) ? -EFAULT : 0;
+	}
+	case RADIOBERRY_IOC_STATS: {
+		struct radioberry_stats st;
+
+		spin_lock_irqsave(&rb->rx_lock, flags);
+		rb->stats.rx_resyncs = rb->parser.resyncs;
+		rb->stats.rx_dropped_words = rb->parser.dropped;
+		rb->stats.rx_ring_frames =
+			rb_ring_used(&rb->rx_ring) / rb_rx_frame_bytes(&rb->parser);
+		rb->stats.rx_period_bytes = rb->rx_period;
+		rb->stats.flags = rb->rx_overrun ? RADIOBERRY_STATS_RX_OVERRUN : 0;
+		rb->rx_overrun = false;
+		st = rb->stats;
+		spin_unlock_irqrestore(&rb->rx_lock, flags);
+		spin_lock_irqsave(&rb->tx_lock, flags);
+		st.tx_words = rb->stats.tx_words;
+		st.tx_underruns = rb->stats.tx_underruns;
+		st.tx_ring_words = rb_ring_used(&rb->tx_ring) / 4;
+		spin_unlock_irqrestore(&rb->tx_lock, flags);
+		if (READ_ONCE(rb->ptt))
+			st.flags |= RADIOBERRY_STATS_PTT;
+		return copy_to_user(uarg, &st, sizeof(st)) ? -EFAULT : 0;
+	}
+	default:
+		return -ENOTTY;
+	}
+}
+
+static const struct file_operations rb_fops = {
+	.owner = THIS_MODULE,
+	.open = rb_open,
+	.release = rb_release,
+	.read = rb_read,
+	.write = rb_write,
+	.poll = rb_poll,
+	.unlocked_ioctl = rb_ioctl,
+	.compat_ioctl = compat_ptr_ioctl,
+};
+
+/* ---- sysfs ---------------------------------------------------------- */
+
+/*
+ * Read-only identity on the SPI device (/sys/bus/spi/devices/spi0.0/), so
+ * tools can report it without opening the exclusive character device.
+ */
+static ssize_t gateware_version_show(struct device *dev, struct device_attribute *attr,
+				     char *buf)
+{
+	struct rb_dev *rb = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%u.%u\n", rb->id.major, rb->id.minor);
+}
+static DEVICE_ATTR_RO(gateware_version);
+
+static ssize_t fpga_type_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct rb_dev *rb = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%s\n", rb->id.fpga_type == RADIOBERRY_FPGA_CL025 ? "10CL025" :
+				       rb->id.fpga_type == RADIOBERRY_FPGA_CL016 ? "10CL016" :
+										  "unknown");
+}
+static DEVICE_ATTR_RO(fpga_type);
+
+static ssize_t receivers_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct rb_dev *rb = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%u\n", rb->id.receivers);
+}
+static DEVICE_ATTR_RO(receivers);
+
+static ssize_t transmitters_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct rb_dev *rb = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%u\n", rb->id.transmitters);
+}
+static DEVICE_ATTR_RO(transmitters);
+
+static struct attribute *rb_attrs[] = {
+	&dev_attr_gateware_version.attr,
+	&dev_attr_fpga_type.attr,
+	&dev_attr_receivers.attr,
+	&dev_attr_transmitters.attr,
+	NULL,
+};
+ATTRIBUTE_GROUPS(rb);
+
+/* ---- probe and remove ----------------------------------------------- */
+
+static int rb_alloc_rings(struct rb_dev *rb)
+{
+	u32 rx_size = roundup_pow_of_two(max(rx_ring_kib, 16u) * 1024u);
+	u32 tx_size = roundup_pow_of_two(max(tx_ring_kib, 4u) * 1024u);
+
+	rb->rx_ring_buf = kvzalloc(rx_size, GFP_KERNEL);
+	rb->tx_ring_buf = kvzalloc(tx_size, GFP_KERNEL);
+	rb->io_buf = kzalloc(RB_CHUNK_BYTES, GFP_KERNEL);
+	rb->pack_buf = kzalloc(RB_CHUNK_BYTES, GFP_KERNEL);
+	rb->spi_tx = kzalloc(RB_CMD_BYTES, GFP_KERNEL);
+	rb->spi_rx = kzalloc(RB_CMD_BYTES, GFP_KERNEL);
+	if (!rb->rx_ring_buf || !rb->tx_ring_buf || !rb->io_buf || !rb->pack_buf ||
+	    !rb->spi_tx || !rb->spi_rx)
+		return -ENOMEM;
+	rb_ring_init(&rb->rx_ring, rb->rx_ring_buf, rx_size);
+	rb_ring_init(&rb->tx_ring, rb->tx_ring_buf, tx_size);
+	return 0;
+}
+
+static void rb_free(struct rb_dev *rb)
+{
+	kvfree(rb->rx_ring_buf);
+	kvfree(rb->tx_ring_buf);
+	kfree(rb->io_buf);
+	kfree(rb->pack_buf);
+	kfree(rb->spi_tx);
+	kfree(rb->spi_rx);
+}
+
+static int rb_get_gpios(struct rb_dev *rb)
+{
+	rb->nconfig = devm_gpiod_get(rb->dev, "nconfig", GPIOD_OUT_HIGH);
+	if (IS_ERR(rb->nconfig))
+		return dev_err_probe(rb->dev, PTR_ERR(rb->nconfig), "nconfig GPIO\n");
+	rb->dclk = devm_gpiod_get(rb->dev, "dclk", GPIOD_OUT_LOW);
+	if (IS_ERR(rb->dclk))
+		return dev_err_probe(rb->dev, PTR_ERR(rb->dclk), "dclk GPIO\n");
+	rb->data = devm_gpiod_get(rb->dev, "data0", GPIOD_OUT_LOW);
+	if (IS_ERR(rb->data))
+		return dev_err_probe(rb->dev, PTR_ERR(rb->data), "data0 GPIO\n");
+	rb->conf_done = devm_gpiod_get(rb->dev, "conf-done", GPIOD_IN);
+	if (IS_ERR(rb->conf_done))
+		return dev_err_probe(rb->dev, PTR_ERR(rb->conf_done), "conf-done GPIO\n");
+	rb->nstatus = devm_gpiod_get(rb->dev, "nstatus", GPIOD_IN);
+	if (IS_ERR(rb->nstatus))
+		return dev_err_probe(rb->dev, PTR_ERR(rb->nstatus), "nstatus GPIO\n");
+	return 0;
+}
+
+static int rb_probe(struct spi_device *spi)
+{
+	struct rb_dev *rb;
+	int ret;
+
+	rb = devm_kzalloc(&spi->dev, sizeof(*rb), GFP_KERNEL);
+	if (!rb)
+		return -ENOMEM;
+	rb->spi = spi;
+	rb->dev = &spi->dev;
+	rb->rx.sm = -1;
+	rb->tx.sm = -1;
+	mutex_init(&rb->cmd_lock);
+	mutex_init(&rb->io_lock);
+	spin_lock_init(&rb->rx_lock);
+	spin_lock_init(&rb->tx_lock);
+	init_waitqueue_head(&rb->rx_wait);
+	init_waitqueue_head(&rb->tx_wait);
+	init_waitqueue_head(&rb->work_wait);
+	atomic_set(&rb->rx.inflight, 0);
+	atomic_set(&rb->tx.inflight, 0);
+	spi_set_drvdata(spi, rb);
+
+	spi->bits_per_word = 8;
+	ret = spi_setup(spi);
+	if (ret)
+		return dev_err_probe(rb->dev, ret, "SPI setup\n");
+
+	ret = rb_get_gpios(rb);
+	if (ret)
+		return ret;
+
+	rb->pio = rp1_pio_open();
+	if (IS_ERR(rb->pio)) {
+		ret = PTR_ERR(rb->pio);
+		rb->pio = NULL;
+		return dev_err_probe(rb->dev, ret, "RP1 PIO\n");
+	}
+
+	ret = rb_alloc_rings(rb);
+	if (ret)
+		goto err_pio;
+
+	if (load_gateware) {
+		ret = rb_load_gateware(rb);
+		if (ret)
+			goto err_pio;
+	} else if (!gpiod_get_value_cansleep(rb->conf_done)) {
+		dev_err(rb->dev, "load_gateware=0 but the FPGA is not configured\n");
+		ret = -ENODEV;
+		goto err_pio;
+	}
+
+	ret = rb_read_identity(rb);
+	if (ret)
+		goto err_pio;
+	dev_info(rb->dev, "gateware %u.%u, FPGA %s, %u receivers, %u transmitter(s)\n",
+		 rb->id.major, rb->id.minor, rb->id.fpga_type == 2 ? "10CL025" : "10CL016",
+		 rb->id.receivers, rb->id.transmitters);
+
+	rb->receivers = 1;
+	rb->rate_code = 0;
+	rb_rx_init(&rb->parser, 1);
+	rb->rx_period = rb_rx_period_bytes(0, 1, RB_RX_MIN_PERIOD, RB_RX_SLOT_BYTES);
+
+	ret = rb_setup_stream(rb, &rb->rx, false);
+	if (ret)
+		goto err_streams;
+	ret = rb_setup_stream(rb, &rb->tx, true);
+	if (ret)
+		goto err_streams;
+	ret = rb_start_streams(rb);
+	if (ret)
+		goto err_streams;
+	dev_info(rb->dev, "RX on PIO state machine %d (program at %d), TX on %d (program at %d)\n",
+		 rb->rx.sm, rb->rx.prog_offset, rb->tx.sm, rb->tx.prog_offset);
+
+	rb->misc.minor = MISC_DYNAMIC_MINOR;
+	rb->misc.name = "radioberry";
+	rb->misc.fops = &rb_fops;
+	rb->misc.parent = rb->dev;
+	ret = misc_register(&rb->misc);
+	if (ret)
+		goto err_streams;
+	return 0;
+
+err_streams:
+	rb_stop_streams(rb);
+	rb_command_safe(rb, NULL);
+	rb_free(rb);
+	return ret;
+err_pio:
+	rp1_pio_close(rb->pio);
+	rb->pio = NULL;
+	rb_free(rb);
+	return ret;
+}
+
+static void rb_remove(struct spi_device *spi)
+{
+	struct rb_dev *rb = spi_get_drvdata(spi);
+
+	misc_deregister(&rb->misc);
+	rb_stop_streams(rb);
+	rb_command_safe(rb, NULL);
+	rb_free(rb);
+}
+
+static const struct of_device_id rb_of_match[] = {
+	{ .compatible = "sdr,radioberry" },
+	{}
+};
+MODULE_DEVICE_TABLE(of, rb_of_match);
+
+static const struct spi_device_id rb_spi_ids[] = {
+	{ "radioberry", 0 },
+	{}
+};
+MODULE_DEVICE_TABLE(spi, rb_spi_ids);
+
+static struct spi_driver rb_driver = {
+	.driver = {
+		.name = "radioberry",
+		.of_match_table = rb_of_match,
+		.dev_groups = rb_groups,
+	},
+	.probe = rb_probe,
+	.remove = rb_remove,
+	.id_table = rb_spi_ids,
+};
+module_spi_driver(rb_driver);
+
+MODULE_DESCRIPTION("Radioberry 2.x SDR on the Raspberry Pi 5 (RP1 PIO)");
+MODULE_LICENSE("GPL");
+MODULE_VERSION(RB_DRIVER_VERSION_STRING);
+MODULE_SOFTDEP("pre: rp1_pio");

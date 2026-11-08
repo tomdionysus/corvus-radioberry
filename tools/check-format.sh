@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 # Checks C and C++ formatting against .clang-format with clang-format 19.
-# With --fix, rewrites the files instead. The kernel module follows the
-# kernel's own style and is not checked here.
+# With --fix, rewrites the files instead. The kernel module and the ABI
+# header it shares with userspace follow the kernel's own style and are not
+# checked here.
 set -eu
 
 cd "$(git rev-parse --show-toplevel)"
@@ -24,7 +25,7 @@ if ! "$clang_format" --version | grep -q 'version 19\.'; then
 fi
 
 files=$(git ls-files -co --exclude-standard -- '*.c' '*.h' '*.cpp' '*.hpp' |
-    grep -v '^driver/kernel/' || true)
+    grep -v -e '^driver/kernel/' -e '^driver/include/' || true)
 if [ -z "$files" ]; then
     echo "format: no files"
     exit 0

@@ -110,15 +110,14 @@ TEST_CASE("development Pi: host section", "[collect]") {
 TEST_CASE("development Pi: boot, firmware and software", "[collect]") {
     FakeSource pi = development_pi();
     const Report r = collect(pi, test_options());
-    CHECK(flag(r, "boot.overlay.node"));
-    CHECK(str(r, "boot.overlay.status") == "okay");
+    CHECK(flag(r, "boot.overlay.upstream"));
+    CHECK_FALSE(flag(r, "boot.overlay.active"));
+    CHECK(has(r, "boot.overlay", Severity::kBlocker));
     CHECK(str(r, "boot.spi0_0.modalias") == "spi:radioberry_ctrl_spi");
     CHECK(r.root.at("boot.spi0_0.driver")->is_null());
     CHECK(flag(r, "boot.rp1_pio_loaded"));
     CHECK(flag(r, "boot.i2c_arm"));
     CHECK(r.root.at("boot.spidev")->items().empty());
-    CHECK_FALSE(has_id(r, "boot.overlay"));
-    CHECK_FALSE(has_id(r, "boot.spi"));
 
     CHECK(flag(r, "firmware.known"));
     CHECK(r.root.at("firmware.size")->as_int() == static_cast<long>(kRpi4Image.size()));
@@ -162,6 +161,15 @@ TEST_CASE("working Pi: radio can run", "[collect]") {
     CHECK(holders[0].find("command")->as_string() == "radioberryd");
     CHECK(has(r, "driver.busy", Severity::kInfo));
     CHECK(str(r, "boot.spi0_0.driver") == "radioberry");
+    CHECK(str(r, "fpga.gateware.version") == "75.3");
+    CHECK(str(r, "fpga.gateware.fpga") == "10CL025");
+    CHECK(r.root.at("fpga.gateware.receivers")->as_int() == 6);
+    CHECK(r.root.at("fpga.gateware.transmitters")->as_int() == 1);
+    CHECK(str(r, "fpga.type") == "10CL025");
+    CHECK(str(r, "fpga.type_source") == "driver");
+    CHECK_FALSE(has_id(r, "fpga.type"));
+    CHECK(flag(r, "boot.overlay.active"));
+    CHECK_FALSE(has_id(r, "boot.overlay"));
     CHECK(str(r, "firmware.family") == "rpi-5 PIO");
     CHECK(str(r, "software.daemon.version") == "radioberryd v0.1.0");
     CHECK(str(r, "software.daemon.service_active") == "active");
@@ -175,13 +183,32 @@ TEST_CASE("working Pi: radio can run", "[collect]") {
     CHECK(ports[1].find("family")->as_string() == "ipv6");
 }
 
+TEST_CASE("driver-reported identity: CL016, odd values, mismatch", "[collect]") {
+    FakeSource pi = working_pi();
+    pi.files["/sys/bus/spi/devices/spi0.0/fpga_type"] = "10CL016\n";
+    pi.files["/sys/bus/spi/devices/spi0.0/receivers"] = "many\n";
+    pi.files.erase("/sys/bus/spi/devices/spi0.0/transmitters");
+    Report r = collect(pi, test_options());
+    CHECK(str(r, "fpga.type") == "10CL016");
+    CHECK(r.root.at("fpga.gateware.receivers")->is_null());
+    CHECK(r.root.at("fpga.gateware.transmitters")->is_null());
+    // The installed image is for a CL025.
+    CHECK(has(r, "firmware.fpga", Severity::kBlocker));
+
+    pi.files["/sys/bus/spi/devices/spi0.0/fpga_type"] = "unknown\n";
+    r = collect(pi, test_options());
+    CHECK(r.root.at("fpga.type")->is_null());
+    CHECK(str(r, "fpga.gateware.fpga") == "unknown");
+    CHECK(has(r, "fpga.type", Severity::kInfo));
+}
+
 TEST_CASE("identify is refused while the driver is loaded", "[collect]") {
     FakeSource pi = working_pi();
     const Report r = collect(pi, test_options(true));
     CHECK(pi.configure_calls == 0);
     CHECK_FALSE(flag(r, "fpga.identify.attempted"));
     CHECK(has(r, "fpga.identify", Severity::kWarning));
-    CHECK(str(r, "fpga.type_source") == "unknown");
+    CHECK(str(r, "fpga.type_source") == "driver");
 }
 
 TEST_CASE("identify falls through to the CL016 image", "[collect]") {
@@ -278,13 +305,14 @@ TEST_CASE("boot problems are blockers", "[collect]") {
     pi.files.erase("/proc/device-tree/radioberry/compatible");
     pi.files.erase("/proc/device-tree/radioberry/status");
     pi.files.erase("/sys/bus/spi/devices/spi0.0/modalias");
+    pi.files.erase("/sys/bus/spi/devices/spi0.0/of_node/compatible");
     pi.dirs.erase("/sys/module/rp1_pio");
     pi.files.erase("/dev/i2c-1");
     pi.files["/dev/spidev0.0"] = "";
     pi.files["/dev/spidev10.0"] = "";
     const Report r = collect(pi, test_options());
     CHECK(has(r, "boot.overlay", Severity::kBlocker));
-    CHECK(has(r, "boot.spi", Severity::kBlocker));
+    CHECK_FALSE(flag(r, "boot.overlay.upstream"));
     CHECK(has(r, "boot.rp1_pio", Severity::kBlocker));
     CHECK(has(r, "boot.i2c", Severity::kWarning));
     CHECK(has(r, "boot.spidev", Severity::kBlocker));
@@ -299,10 +327,12 @@ TEST_CASE("driver installed but not loaded, or loaded without a device", "[colle
 
     pi = working_pi();
     pi.files.erase("/dev/radioberry");
+    pi.files.erase("/sys/bus/spi/devices/spi0.0/gateware_version");
     r = collect(pi, test_options());
     CHECK(has(r, "driver.device", Severity::kBlocker));
     CHECK(r.root.at("driver.holders")->items().empty());
     CHECK(has(r, "fpga.type", Severity::kInfo));
+    CHECK(r.root.at("fpga.gateware")->is_null());
 }
 
 TEST_CASE("host details missing", "[collect]") {

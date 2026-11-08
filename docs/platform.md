@@ -90,45 +90,35 @@ Notes:
   rebooted. `/dev/i2c-1` now exists. `i2cdetect -y 1` finds no devices at
   all: no PA ADC at 0x34, no bias pot at 0x2C, no filter board at 0x20 to
   0x22. Buses 13 and 14 are the HDMI DDC links and are irrelevant.
-- `dtparam=spi=off` is overridden by the radioberry overlay, which enables
-  `spi0` and attaches `radioberry_ctrl_spi` at `spi0.0` (48 MHz, mode 3).
-  `gpioinfo` confirms `spi0 CS0` on GPIO 8 and `spi0 CS1` on GPIO 7, and
-  `pinctrl` shows GPIO 9, 10, 11 in SPI0 alt function.
+- `dtparam=spi=off` is overridden by this project's radioberry overlay,
+  which enables `spi0` and puts the `sdr,radioberry` device at `spi0.0`
+  (12.5 MHz, mode 3) with the five FPGA configuration GPIOs. `gpioinfo`
+  shows `spi0 CS0` on GPIO 8 and `spi0 CS1` on GPIO 7, and `pinctrl` GPIO
+  9, 10, 11 in SPI0 alt function.
 - The overlay also disables `spidev0` and `spidev1` and enables `rp1_pio`.
-  `/proc/device-tree/radioberry` exists with `compatible = "sdr,radioberry"`.
 
 ## Radioberry software state
 
-What is present:
+Installed from this repository by `cmake --install` (2026-11-08):
 
 | Path | State |
 |---|---|
-| `/boot/firmware/overlays/radioberry.dtbo` | installed, overlay active |
+| `/boot/firmware/overlays/radioberry.dtbo` | this project's overlay, active |
+| `/lib/modules/<kernel>/updates/radioberry.ko` | loads at boot; `/dev/radioberry` present; gateware identity under `/sys/bus/spi/devices/spi0.0/` |
 | `/lib/firmware/radioberry.rbf` | this project's CL025 PIO build, gateware 75.3 |
-| `/usr/local/bin/rbprobe`, `/usr/local/share/radioberry/gateware/` | installed from this repository by `cmake --install` |
+| `/usr/local/include/radioberry_ioctl.h` | ABI header |
+| `/usr/local/bin/rbprobe`, `/usr/local/share/radioberry/gateware/` | probe and both gateware images |
+
+Not from this repository:
+
+| Path | State |
+|---|---|
 | `/usr/local/bin/pihpsdr` | built 2026-11-07 from the g0orx submodule |
-| `/usr/local/lib/libwdsp.so` | built from a g0orx/wdsp checkout (49084f5, 2022-01-17) |
-| `/usr/local/include/wdsp.h` | installed |
-| `/etc/systemd/system/radioberry.service` | installed, disabled |
-| `/etc/init.d/radioberryd` | installed; systemd generates a compatibility unit for it at every boot |
-| upstream tag archive `radioberry@rpi5.zip` (commit 269e402, 2025-12-16) | present on the Pi |
+| `/usr/local/lib/libwdsp.so`, `/usr/local/include/wdsp.h` | built from a g0orx/wdsp checkout (49084f5, 2022-01-17) |
 
-What is missing:
-
-- No `radioberry.ko` anywhere on disk, nothing under `/lib/modules/*/`, and
-  no module loaded. Consequently no `/dev/radioberry`.
-- No `/usr/local/bin/radioberry` Protocol 1 daemon. The service unit points
-  at it and would fail to start.
-- No `/usr/local/include/radioberry_ioctl.h`.
-- The extracted upstream build tree was deleted; only the archive remains.
-- The directory the upstream driver Makefile hard-codes for
-  `KBUILD_EXTRA_SYMBOLS` exists but is empty.
-
-Shell history shows repeated attempts on 2026-11-07 to build with the
-upstream top-level Makefile (which still targets the rpi-4 paths), then the
-rpi-5 driver and daemon directly, then the tag archive, followed by
-removing everything and rebuilding the overlay by hand. The journal for the
-radioberry service is empty, so the daemon never ran under systemd.
+The upstream init script, its `radioberry.service`, overlay and archive
+are kept in the root account's home directory, out of the system paths.
+No radioberry daemon or service is installed yet.
 
 ## Kernel facts that decide whether the upstream driver can build
 

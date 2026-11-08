@@ -100,41 +100,40 @@ acceptance test.
 
 ## 3. Kernel driver (`driver/`)
 
-- [ ] Port the RP1 PIO plus DMA driver to the stock 6.18 `rp1-pio` API:
-      remove `KBUILD_EXTRA_SYMBOLS`, replace the two
-      `rp1_pio_sm_buffer_virt` uses with kernel buffers passed through
-      `rp1_pio_sm_xfer_data`, keep the RX metadata resync and the TX
-      kfifo. Acceptance: `modprobe radioberry` on the Pi creates
-      `/dev/radioberry`, `dmesg` shows both state machines claimed, no
-      warnings.
-- [ ] Device tree overlay built from `driver/radioberry.dts`, installed
-      to `/boot/firmware/overlays/`. Acceptance: overlay present after
-      reboot, `spi0.0` is `radioberry_ctrl_spi`.
-- [ ] Gateware loading via `request_firmware`, with CONF_DONE and
-      nSTATUS checks reported as errors, not printk only. Wait out the
-      gateware's 1.7 s reset before reading the identity word
-      (`gateware/README.md` section 2). The driver works
-      with both the CL016 and CL025 images; the install selects the image
-      for the board's FPGA (`FPGATYPE`), and the development board is
-      always CL025. Acceptance: ioctl returns non-zero gateware major
-      version.
+- [x] Driver on the stock 6.18 `rp1-pio` API (`driver/kernel/`): SPI
+      driver bound to the overlay's `sdr,radioberry` device, gateware
+      load over gpiod, two PIO state machines with bounce-buffered DMA
+      kept four periods deep by a FIFO-priority kernel thread, RX metadata
+      resync, TX ring, safe command on close. Acceptance met 2026-11-08:
+      the module loads at boot, creates `/dev/radioberry`, `dmesg` shows
+      both state machines claimed, no warnings.
+- [x] Device tree overlay `driver/radioberry.dts` installed to
+      `/boot/firmware/overlays/`. Acceptance met: after reboot `spi0.0` is
+      `sdr,radioberry` (modalias `spi:radioberry`), bound to the driver.
+- [x] Gateware loading via `request_firmware` with CONF_DONE and nSTATUS
+      errors failing the probe, and the identity polled until the
+      gateware leaves its reset. Acceptance met: gateware 75.3 read on
+      every probe (about 2.3 s from load to identity).
 - [ ] Stable ioctl ABI header `driver/include/radioberry_ioctl.h`
-      installed to `/usr/local/include`; versioned struct with
-      gateware info and command path. Acceptance: daemon and tools build
-      against the installed header only.
-- [ ] `rbprobe` reads gateware major and minor, FPGA type, receiver and
-      transmitter counts through the ioctl ABI when the driver is loaded,
-      and flags a mismatch with the installed image. Acceptance: on the
-      development Pi with the driver loaded, `rbprobe` reports the CL025
-      gateware version without `--identify`.
-- [ ] Read path returns whole sample frames for 1 to the gateware's
-      receiver count (4 on CL016, 6 on CL025), with
-      `poll()` support and a non-blocking mode. Acceptance: `tools/rbcat`
-      streams 10 minutes at 48 ksps with zero resync messages.
-- [ ] Write path accepts arbitrary block lengths, reports FIFO underrun
-      and overrun counters through a sysfs or ioctl query.
-- [ ] Module parameters and sysfs: FPGA type, receiver count, PIO clock
-      divider, debug level.
+      installed to `/usr/local/include` (done; ABI version 1 with info,
+      command and statistics). Acceptance: daemon and tools build against
+      the installed header only.
+- [x] `rbprobe` reports gateware version, FPGA type, receiver and
+      transmitter counts when the driver is bound, from the driver's sysfs
+      attributes (no need to open the exclusive device), and flags a
+      mismatch with the installed image. Acceptance met on the
+      development Pi.
+- [ ] Read path: whole frames for 1 to the gateware's receiver count,
+      `poll()`, non-blocking mode (implemented; 185 million words without
+      a resync in a test program). Acceptance: `tools/rbcat` streams
+      10 minutes at 48 ksps with zero resyncs.
+- [ ] Write path: whole samples, ring, underrun counter (implemented, not
+      yet exercised). Acceptance: `rbcat`-style writer pushes zero samples
+      with PTT and TX permission clear and the TX word counter advances at
+      48 ksps.
+- [ ] Module parameters and sysfs: `load_gateware`, `rx_clkdiv`,
+      `tx_clkdiv`, ring sizes and the identity attributes exist; still to
+      add a gateware reload attribute and a debug level.
 - [ ] Unit test harness under `tools/driver-tests/` (userspace, against
       `/dev/radioberry`).
 

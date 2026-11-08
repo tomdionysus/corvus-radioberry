@@ -4,6 +4,7 @@
 #
 #   radioberry_add_kernel_module(<name>
 #       SOURCE_DIR <dir with Kbuild>
+#       [INCLUDE_DIR <extra header dir, passed to kbuild as RB_INCLUDE>]
 #       SOURCES <files that trigger a rebuild>...)
 #
 # Adds target <name>_module, which runs `make -C <kernel build dir> M=...`
@@ -29,7 +30,7 @@ if(RADIOBERRY_BUILD_MODULE AND NOT EXISTS "${KERNEL_BUILD_DIR}/Makefile")
 endif()
 
 function(radioberry_add_kernel_module name)
-    cmake_parse_arguments(ARG "" "SOURCE_DIR" "SOURCES" ${ARGN})
+    cmake_parse_arguments(ARG "" "SOURCE_DIR;INCLUDE_DIR" "SOURCES" ${ARGN})
     if(NOT RADIOBERRY_BUILD_MODULE)
         return()
     endif()
@@ -38,7 +39,7 @@ function(radioberry_add_kernel_module name)
     add_custom_command(
         OUTPUT ${ko}
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${ARG_SOURCE_DIR} ${work}
-        COMMAND make -C ${KERNEL_BUILD_DIR} M=${work} modules
+        COMMAND make -C ${KERNEL_BUILD_DIR} M=${work} RB_INCLUDE=${ARG_INCLUDE_DIR} modules
         DEPENDS ${ARG_SOURCES}
         COMMENT "Building kernel module ${name}.ko for ${KERNEL_RELEASE}"
         VERBATIM)

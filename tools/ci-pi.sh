@@ -76,6 +76,8 @@ cmake --build --preset asan -j "$jobs"
 ctest --preset asan
 
 step "coverage"
+# Test discovery runs the binaries while building; clear stale counters first.
+[ -d build-coverage ] && find build-coverage -name '*.gcda' -delete
 cmake --preset coverage >/dev/null
 cmake --build --preset coverage -j "$jobs"
 cmake --build --preset coverage --target coverage

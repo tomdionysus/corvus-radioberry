@@ -115,15 +115,16 @@ capabilities needed for real-time threads.
 
 ### 4.2 Structure
 
-- Platform driver bound to the `sdr,radioberry` device tree node. Pins
-  come from the overlay through pinctrl and gpiod descriptors: five
-  configuration lines, the RX and TX PIO pins, SPI through the kernel SPI
-  subsystem as today.
+- SPI driver bound to the overlay's `sdr,radioberry` device on `spi0`
+  chip select 0 (SPI mode 3, 12.5 MHz). The five configuration lines are
+  gpiod descriptors from the same node; the stream pins are handed to the
+  RP1 PIO at run time.
 - `probe()`: claim GPIO, load gateware via `request_firmware`, verify
-  CONF_DONE and nSTATUS, read the gateware identity over SPI, then claim two
-  PIO state machines and configure cyclic DMA for each direction. Any
-  failure unwinds completely and fails the probe with a specific error.
-  A sysfs `reload` attribute repeats the gateware load.
+  CONF_DONE and nSTATUS, poll the gateware identity over SPI until it
+  leaves its reset, then claim two PIO state machines and start their DMA.
+  Any failure unwinds completely and fails the probe with a specific
+  error. Identity is published in sysfs. A sysfs `reload` attribute will
+  repeat the gateware load.
 - One character device, exclusive open, with `read`, `write`, `ioctl`,
   `poll` and `mmap`.
 - Pure logic (RX word parsing and metadata resync, frame assembly, TX
@@ -132,9 +133,13 @@ capabilities needed for real-time threads.
 
 ### 4.3 RX path
 
-- Cyclic DMA from the RX state machine with a configurable period, default
-  one millisecond of samples at the current rate and receiver count.
-  No restart gap exists in cyclic mode.
+- The stock `rp1-pio` gives kernel clients cyclic DMA only through its
+  character device, so the driver uses the exported bounce-buffered
+  `rp1_pio_sm_xfer_data()`: four periods in flight, refilled by a
+  FIFO-priority kernel thread (the completion callback runs in softirq
+  context and the call allocates). The period is one millisecond of
+  samples at the current rate and receiver count. With periods queued
+  ahead there is no restart gap.
 - The period callback parses words, checks the metadata nibble sequence,
   resynchronises on a miss and increments counters (resync events, dropped
   words, overruns) instead of logging.
@@ -142,25 +147,27 @@ capabilities needed for real-time threads.
   userspace. `read()` returns any whole number of samples up to the
   request, `poll()` wakes at a configurable watermark, and `mmap()` exposes
   the ring for zero-copy consumers. Ring overrun sets a flag readable by
-  ioctl and `POLLERR`; data is dropped in whole frames and counted.
+  ioctl and `POLLERR`; data is dropped in whole frames and counted. While
+  the device is closed the parser keeps sync and nothing is queued.
 - Receiver count and sample rate follow the gateware command the daemon
   issues; the driver observes the command and resizes its parsing. The
   gateware has six receivers on the CL025 and four on the CL016
-  (`gateware/README.md`).
+  (`gateware/README.md`). Words in flight across a receiver-count change
+  count as resyncs.
 - Capacity: with the upstream PIO clocking one RX value takes 42 PIO
-  cycles at 100 MHz, at most about 2.38 million values per second, enough
-  for six receivers at 192 ksps or three at 384 ksps. The driver either
-  limits the receiver count per rate accordingly or runs the RX state
-  machine faster; `rbcat` measures which works before the design is
-  frozen.
+  cycles at 100 MHz, at most about 2.38 million values per second,
+  measured at 2.37 million: six receivers at 192 ksps or three at
+  384 ksps. Up to that limit, streaming on the development board ran with
+  no resyncs. The daemon limits receiver count per rate accordingly.
 
 ### 4.4 TX path
 
-- Cyclic DMA to the TX state machine with the same millisecond period.
+- Bounce-buffered DMA to the TX state machine, periods of 256 samples,
+  fed from a ring by the same kernel thread.
 - `write()` accepts any whole number of 16-bit I/Q samples and appends to
-  a ring; DMA runs continuously while the device is in transmit, filling
-  with zero samples when the ring is empty and counting the underrun
-  instead of stalling the PIO program.
+  the ring. When the ring is empty the driver sends nothing and counts an
+  underrun if PTT is set; it never invents samples, so the gateware's own
+  PTT hang-time watchdog ends transmit when samples stop.
 - Low and high watermarks, underrun and overrun counts, and ring fill are
   readable by ioctl, so the daemon can pace Protocol 1 and Protocol 2
   transmit streams against the real device clock.

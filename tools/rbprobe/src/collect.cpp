@@ -80,6 +80,18 @@ private:
         return std::nullopt;
     }
 
+    Node int_file(const std::string& path) {
+        const auto text = file_trimmed(path);
+        if (!text) {
+            return Node();
+        }
+        try {
+            return Node(std::stol(*text));
+        } catch (const std::exception&) {
+            return Node();
+        }
+    }
+
     std::optional<std::string> file_trimmed(const std::string& path) {
         auto content = src_.read_file(path);
         if (!content) {
@@ -242,22 +254,31 @@ private:
     Node boot() {
         Node n = Node::map();
 
+        // This project's overlay puts an "sdr,radioberry" device on spi0
+        // chip select 0. The upstream overlay instead creates a root node
+        // "radioberry" and an spi0.0 device "radioberry_ctrl_spi".
+        const std::string spi_dir = "/sys/bus/spi/devices/spi0.0";
+        const auto compatible = src_.read_file(spi_dir + "/of_node/compatible");
+        const bool ours = compatible && compatible->find("sdr,radioberry") != std::string::npos;
+        const auto modalias = file_trimmed(spi_dir + "/modalias");
+        const bool upstream = src_.exists("/proc/device-tree/radioberry") ||
+                              modalias.value_or("") == "spi:radioberry_ctrl_spi";
+
         Node overlay = Node::map();
-        const auto compatible = src_.read_file("/proc/device-tree/radioberry/compatible");
-        const bool node_ok = compatible && compatible->find("sdr,radioberry") != std::string::npos;
-        overlay.set("node", node_ok);
-        overlay.set("status", file_trimmed("/proc/device-tree/radioberry/status"));
+        overlay.set("active", ours);
+        overlay.set("upstream", upstream);
         n.set("overlay", std::move(overlay));
-        if (!node_ok) {
+        if (upstream) {
             add(Severity::kBlocker, "boot.overlay",
-                "no sdr,radioberry device tree node; add dtoverlay=radioberry to config.txt");
+                "the upstream Radioberry overlay is installed; install this project's "
+                "radioberry.dtbo and reboot");
+        } else if (!ours) {
+            add(Severity::kBlocker, "boot.overlay",
+                "no sdr,radioberry device on spi0.0; add dtoverlay=radioberry to config.txt");
         }
 
         Node spi = Node::map();
-        const std::string spi_dir = "/sys/bus/spi/devices/spi0.0";
-        const bool spi_present = src_.exists(spi_dir);
-        spi.set("present", spi_present);
-        const auto modalias = file_trimmed(spi_dir + "/modalias");
+        spi.set("present", src_.exists(spi_dir));
         spi.set("modalias", modalias);
         Node bound;
         if (auto link = src_.read_link(spi_dir + "/driver")) {
@@ -265,10 +286,6 @@ private:
         }
         spi.set("driver", bound);
         n.set("spi0_0", std::move(spi));
-        if (!spi_present || modalias.value_or("") != "spi:radioberry_ctrl_spi") {
-            add(Severity::kBlocker, "boot.spi",
-                "spi0.0 is not the radioberry_ctrl_spi device created by the overlay");
-        }
 
         const bool pio = src_.exists("/sys/module/rp1_pio");
         n.set("rp1_pio_loaded", pio);
@@ -521,21 +538,41 @@ private:
         }
         n.set("config_lines", config_lines());
 
+        // With the driver bound, its sysfs attributes give the identity the
+        // gateware reports over SPI.
+        Node gateware;
+        const std::string sysfs = "/sys/bus/spi/devices/spi0.0/";
+        if (auto version = file_trimmed(sysfs + "gateware_version")) {
+            gateware = Node::map();
+            gateware.set("version", *version);
+            const auto fpga = file_trimmed(sysfs + "fpga_type");
+            gateware.set("fpga", fpga);
+            gateware.set("receivers", int_file(sysfs + "receivers"));
+            gateware.set("transmitters", int_file(sysfs + "transmitters"));
+            if (!identified_ && fpga) {
+                if (*fpga == "10CL025") {
+                    identified_ = FpgaType::k10CL025;
+                    type_from_driver_ = true;
+                } else if (*fpga == "10CL016") {
+                    identified_ = FpgaType::k10CL016;
+                    type_from_driver_ = true;
+                }
+            }
+        }
+
         Node type;
         Node type_source = "unknown";
         if (identified_) {
             type = std::string(to_string(*identified_));
-            type_source = "identify";
+            type_source = type_from_driver_ ? "driver" : "identify";
         }
         n.set("type", type);
         n.set("type_source", type_source);
-        // Gateware identity is read through the driver's ioctl interface,
-        // which does not exist yet; it is reported as absent.
-        n.set("gateware", Node());
+        n.set("gateware", gateware);
 
         if (!identified_) {
             add(Severity::kInfo, "fpga.type",
-                loaded_ ? "FPGA type not known: the driver does not report it yet"
+                loaded_ ? "FPGA type not known: the driver is loaded but not bound"
                         : "FPGA type not known: run rbprobe --identify with the driver unloaded");
         }
         if (identified_ && installed_ && installed_->fpga != *identified_) {
@@ -735,6 +772,7 @@ private:
     bool loaded_ = false;
     std::optional<KnownImage> installed_;
     std::optional<FpgaType> identified_;
+    bool type_from_driver_ = false;
     std::vector<Finding> findings_;
 };
 

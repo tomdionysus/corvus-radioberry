@@ -3,6 +3,15 @@
 Newest first. Each entry gives the date, what was done, and where the
 result lives.
 
+- 2026-11-08: Kernel driver (section 3, first four items and the rbprobe
+  identity item): `driver/kernel/radioberry.c` with its pure logic in
+  `rb_logic.h` and `rb_pio.h` (unit tested, PIO register words checked
+  against upstream's), overlay `driver/radioberry.dts`, ABI header
+  `driver/include/radioberry_ioctl.h`, sysfs identity attributes, and
+  `rbprobe` support for this project's overlay and the driver's identity.
+  Installed on the development Pi: loads at boot, gateware 75.3 read,
+  receive streaming verified up to the PIO bus capacity with zero resyncs.
+  Upstream's init script and service moved out of the system paths.
 - 2026-11-08: CL016 PIO gateware built (seed 5) and committed as
   `gateware/rpi-5/CL016/radioberry.rbf`, shipped with its AD9866 TX output
   timing violation documented (`rffe_ad9866_tx[1]` -3.23 ns). Not tested

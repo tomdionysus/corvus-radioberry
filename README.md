@@ -27,11 +27,12 @@ Debian trixie packages.
 | Work tracking | `TODO/` | current |
 | Platform probe (`rbprobe`) | `tools/rbprobe/` | working; gateware identity via the driver waits for the driver |
 | FPGA gateware (Hermes-Lite 2 Radioberry PIO variants, 10CL025 and 10CL016) | `gateware/` | both built; CL025 verified on hardware; CL016 untested and misses AD9866 TX output timing (see `gateware/PROVENANCE.md`) |
-| Kernel driver (`radioberry.ko`, RP1 PIO plus DMA) | `driver/` | planned |
+| Kernel driver (`radioberry.ko`, RP1 PIO plus DMA) and overlay | `driver/` | working: loads gateware, receive streaming verified; transmit path not yet exercised |
 | Radio daemon `radioberryd` (Protocol 1 and Protocol 2, PA control) | `daemon/` | planned |
 | Further tooling (loader, stream dump, protocol probes) | `tools/` | planned |
 
-`rbprobe` and the gateware install today. `TODO/ACTIVE.md` is the authoritative list of
+`rbprobe`, the gateware, the kernel module, the overlay and the ABI
+header install today. `TODO/ACTIVE.md` is the authoritative list of
 what is being built and in which order.
 
 ## Target hardware and host
@@ -140,8 +141,8 @@ skips it). Every gateware image goes to
 `/lib/firmware/radioberry.rbf`.
 
 Until the components in the status table exist, only the `cmake`,
-`ctest` and `cmake --install` steps work, and they build, test and install
-`rbprobe`.
+`ctest` and `cmake --install` steps work; there is no daemon or service
+to enable yet.
 
 ## Using the radio
 
