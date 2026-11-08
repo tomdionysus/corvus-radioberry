@@ -3,6 +3,17 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-08: Hardware validation, transmit into a 50 ohm dummy load with
+  the PA enabled, output measured by the owner on an inline meter (50 W
+  scale), on the owner's go-ahead for each step: a 1 kHz tone at half of
+  full scale, 10 s per step, `radioberryd --allow-tx --allow-pa
+  --drive-ceiling N`. Drive 64 (TX gain code 10 of 39): no reading;
+  drive 128 (code 20): 0.9 W; drive 170 (code 26): 3.2 W, 5.5 dB above
+  code 20 over 6 codes. The gateware maps drive to the AD9866 TX gain
+  code as ((drive + 4) >> 3) + (drive >> 5). Each step: PTT and PA enable
+  on and off together for 10.0 s, about 48 000 samples per second to the
+  gateware, no blocks dropped, no faults. The setup's maximum is about
+  4.8 W; drive 170 is the owner's earlier distortion-free limit.
 - 2026-11-08: Hardware validation, transmit at zero drive into a 50 ohm
   dummy load, PA disabled, on the owner's go-ahead: `radioberryd
   --allow-tx --drive-ceiling 0 --tx-watchdog-s 15` with a Protocol 1

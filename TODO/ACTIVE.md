@@ -49,8 +49,10 @@ its date.
   seen in the duplex receiver 110 dB above the floor during MOX only.
   On-air sideband not yet established (receive is mirrored read I
   first; transmit may be).
-- Next: section 6's PA step with the owner's go-ahead and a power
-  measurement; meanwhile Protocol 2 (section 3).
+- PA step done: 0.9 W at drive 128, 3.2 W at drive 170 (the owner's
+  known distortion-free limit) into a 50 ohm dummy load, half-scale tone.
+- Next: the on-air sideband check (HackRF), then the FT8 end-to-end run;
+  meanwhile Protocol 2 (section 3).
 
 ## Standing decisions
 
@@ -161,5 +163,4 @@ Transmit items each need the owner's go-ahead at the time.
 
 - [ ] SparkSDR and Quisk receive and tune via Protocol 1.
 - [ ] Receive via Protocol 2.
-- [ ] Transmit into a dummy load with PA enabled, output measured.
 - [ ] FT8 and corvus-protocol end-to-end run, logged in `docs/`.
