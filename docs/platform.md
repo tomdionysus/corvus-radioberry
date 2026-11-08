@@ -169,7 +169,9 @@ No radioberry daemon or service is installed yet.
   the FPGA as it is), or only the gateware with
   `echo 1 > /sys/bus/spi/devices/spi0.0/reload`. The gateware reload is
   also the only recovery from the receive lock-up described in
-  `plan-rx-wedge.md`: `rbcat` reporting no frames, or `rbdrivertest`
-  hanging in `read()`, means the FPGA has stopped; reload and carry on.
+  `fault-rx-lockup.md`, which driver 0.4.0 works around; should it occur
+  anyway, `rx_stalled` there reads 1 and the kernel log says "RX stream
+  stalled". Reload and carry on, and record the circumstances in the
+  fault document.
 - Reboots and config changes are fine at any time; the desktop session is
   not in use for anything that must survive them.

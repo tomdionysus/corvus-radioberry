@@ -41,8 +41,8 @@
 #include "rb_logic.h"
 #include "rb_pio.h"
 
-#define RB_DRIVER_VERSION ((0u << 16) | (3u << 8) | 0u)
-#define RB_DRIVER_VERSION_STRING "0.3.0"
+#define RB_DRIVER_VERSION ((0u << 16) | (4u << 8) | 0u)
+#define RB_DRIVER_VERSION_STRING "0.4.0"
 
 #define RB_FIRMWARE_NAME "radioberry.rbf"
 #define RB_DMA_SLOTS 4
@@ -71,15 +71,42 @@ static unsigned int tx_ring_kib = 64;
 module_param(tx_ring_kib, uint, 0444);
 MODULE_PARM_DESC(tx_ring_kib, "TX ring size in KiB, rounded up to a power of two (default 64)");
 
-static bool debug;
-module_param(debug, bool, 0644);
-MODULE_PARM_DESC(debug, "Log rate-limited diagnostics: resyncs, overruns, underruns, commands");
+static unsigned int debug;
+module_param(debug, uint, 0644);
+MODULE_PARM_DESC(debug, "0: quiet; 1: rate-limited resyncs, overruns, underruns, commands; "
+			"2: every command and receiver-count change, unlimited");
 
 #define rb_debug(rb, fmt, ...)                                              \
 	do {                                                                \
 		if (READ_ONCE(debug))                                       \
 			dev_info_ratelimited((rb)->dev, fmt, ##__VA_ARGS__); \
 	} while (0)
+
+#define rb_trace(rb, fmt, ...)                                   \
+	do {                                                     \
+		if (READ_ONCE(debug) >= 2)                       \
+			dev_info((rb)->dev, fmt, ##__VA_ARGS__); \
+	} while (0)
+
+/* RX words must arrive within this time while run is set, or the stream is stalled. */
+#define RB_STALL_MS 200
+
+/*
+ * Workaround for the PIO gateware's receive lock-up, docs/fault-rx-lockup.md.
+ * The gateware clears its RX FIFO asynchronously at every receiver-count
+ * change, and the FIFO's read side and the state machine that streams it to
+ * the Pi run on the clock this driver's RX state machine drives. If that
+ * clock has an edge while the clear is asserted or released, the read-out
+ * can lock up for good (only a gateware reload recovers). With the RX state
+ * machine stopped across the command the clock stands still and the window
+ * cannot be hit: measured 0 lock-ups in 4500 changes against 17 in 1800
+ * without the hold. 0 disables the hold (for measuring the fault).
+ */
+#define RB_RX_CLOCK_HOLD_US_DEFAULT 200
+static unsigned int rx_clock_hold_us = RB_RX_CLOCK_HOLD_US_DEFAULT;
+module_param(rx_clock_hold_us, uint, 0644);
+MODULE_PARM_DESC(rx_clock_hold_us,
+		 "Stop the RX state machine, so the Pi's RX clock is still, from before a receiver-count command until this many microseconds after it (default 200; 0: never, exposes the gateware's RX lock-up)");
 
 struct rb_stream {
 	int sm;
@@ -101,6 +128,13 @@ struct rb_dev {
 	struct mutex cmd_lock; /* SPI commands */
 	u8 *spi_tx, *spi_rx;   /* DMA-safe command buffers */
 	bool ptt;
+	bool run; /* run bit of the last command sent */
+
+	/* Stall detection, worker thread only. */
+	u64 rx_words_seen;
+	unsigned long rx_last_progress;
+	bool rx_stalled;
+	u64 rx_stalls;
 
 	struct rp1_pio_client *pio;
 	struct rb_stream rx, tx;
@@ -153,6 +187,7 @@ static int rb_command_locked(struct rb_dev *rb, const u8 *tx, u8 *rx)
 	if (rx)
 		memcpy(rx, rb->spi_rx, RB_CMD_BYTES);
 	rb->ptt = rb_cmd_ptt(tx);
+	WRITE_ONCE(rb->run, (tx[0] & RADIOBERRY_CMD_RUN) != 0);
 	return 0;
 }
 
@@ -415,6 +450,44 @@ static bool rb_work_pending(struct rb_dev *rb)
 	return tx_data;
 }
 
+/*
+ * The gateware has been seen to stop delivering RX words for good until
+ * it is reloaded. Notes the first RB_STALL_MS without words while run is
+ * set, and the resumption, so the condition is visible in the log and in
+ * sysfs (rx_stalled, rx_stalls).
+ */
+static void rb_check_stall(struct rb_dev *rb)
+{
+	unsigned long flags;
+	u64 words;
+
+	spin_lock_irqsave(&rb->rx_lock, flags);
+	words = rb->stats.rx_words;
+	spin_unlock_irqrestore(&rb->rx_lock, flags);
+
+	if (words != rb->rx_words_seen) {
+		rb->rx_words_seen = words;
+		rb->rx_last_progress = jiffies;
+		if (rb->rx_stalled) {
+			rb->rx_stalled = false;
+			dev_warn(rb->dev, "RX stream resumed\n");
+		}
+		return;
+	}
+	if (!READ_ONCE(rb->run)) {
+		rb->rx_last_progress = jiffies;
+		return;
+	}
+	if (!rb->rx_stalled &&
+	    time_after(jiffies, rb->rx_last_progress + msecs_to_jiffies(RB_STALL_MS))) {
+		rb->rx_stalled = true;
+		rb->rx_stalls++;
+		dev_warn(rb->dev,
+			 "RX stream stalled: no words for %u ms with run set (receivers %u, rate code %u, %d RX periods in flight)\n",
+			 RB_STALL_MS, rb->receivers, rb->rate_code, atomic_read(&rb->rx.inflight));
+	}
+}
+
 static int rb_worker(void *arg)
 {
 	struct rb_dev *rb = arg;
@@ -422,6 +495,7 @@ static int rb_worker(void *arg)
 	while (!kthread_should_stop()) {
 		wait_event_interruptible_timeout(rb->work_wait, rb_work_pending(rb),
 						 msecs_to_jiffies(100));
+		rb_check_stall(rb);
 		/* Back off on a submit error rather than spin on it. */
 		if (rb_rx_submit(rb) || rb_tx_submit(rb))
 			msleep(10);
@@ -644,6 +718,9 @@ static void rb_reset_stream_state(struct rb_dev *rb)
 	rb->rx_overrun = false;
 	memset(&rb->stats, 0, sizeof(rb->stats));
 	spin_unlock_irqrestore(&rb->rx_lock, flags);
+	rb->rx_words_seen = 0;
+	rb->rx_last_progress = jiffies;
+	rb->rx_stalled = false;
 	spin_lock_irqsave(&rb->tx_lock, flags);
 	rb_ring_reset(&rb->tx_ring);
 	rb->tx_starved = false;
@@ -870,6 +947,8 @@ static void rb_observe_command(struct rb_dev *rb, const u8 *tx)
 		receivers = rb->id.receivers;
 	spin_lock_irqsave(&rb->rx_lock, flags);
 	if (receivers != rb->receivers) {
+		rb_trace(rb, "receivers %u -> %u, rate code %u -> %u\n", rb->receivers, receivers,
+			 rb->rate_code, rate_code);
 		rb_rx_set_receivers(&rb->parser, receivers);
 		rb_ring_reset(&rb->rx_ring);
 		rb->receivers = receivers;
@@ -906,20 +985,49 @@ static long rb_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	}
 	case RADIOBERRY_IOC_COMMAND: {
 		struct radioberry_command c;
+		unsigned int hold = READ_ONCE(rx_clock_hold_us);
+		unsigned int receivers, rate_code;
+		bool held = false;
 
 		if (copy_from_user(&c, uarg, sizeof(c)))
 			return -EFAULT;
 		rb_cmd_sanitise(c.tx);
 		mutex_lock(&rb->cmd_lock);
+		/*
+		 * RX lock-up workaround (see rx_clock_hold_us above and
+		 * docs/fault-rx-lockup.md, section 7): a receiver-count change clears
+		 * the gateware's RX FIFO, whose read side runs on the clock this
+		 * driver's RX state machine drives. With the state machine stopped
+		 * that clock is still while the clear is asserted and released.
+		 */
+		if (hold && rb->pio && rb_cmd_general(c.tx, &receivers, &rate_code) &&
+		    receivers != READ_ONCE(rb->receivers)) {
+			struct rp1_pio_sm_set_enabled_args off = { .mask = (u16)BIT(rb->rx.sm) };
+
+			held = rp1_pio_sm_set_enabled(rb->pio, &off) == 0;
+			if (held)
+				udelay(20);
+		}
 		ret = rb_command_locked(rb, c.tx, c.rx);
 		if (!ret) {
 			rb->stats.commands++;
 			rb_observe_command(rb, c.tx);
 		}
+		if (held) {
+			struct rp1_pio_sm_set_enabled_args on = { .mask = (u16)BIT(rb->rx.sm),
+								  .enable = 1 };
+
+			usleep_range(hold, hold + hold / 4);
+			rp1_pio_sm_set_enabled(rb->pio, &on);
+			rb_trace(rb, "RX clock held for the receiver-count change\n");
+		}
 		mutex_unlock(&rb->cmd_lock);
 		if (ret)
 			return ret;
-		rb_debug(rb, "command %6ph reply %6ph\n", c.tx, c.rx);
+		if (READ_ONCE(debug) >= 2)
+			dev_info(rb->dev, "command %6ph reply %6ph\n", c.tx, c.rx);
+		else
+			rb_debug(rb, "command %6ph reply %6ph\n", c.tx, c.rx);
 		wake_up(&rb->work_wait);
 		return copy_to_user(uarg, &c, sizeof(c)) ? -EFAULT : 0;
 	}
@@ -1033,12 +1141,32 @@ static ssize_t reload_store(struct device *dev, struct device_attribute *attr, c
 }
 static DEVICE_ATTR_WO(reload);
 
+/* 1 while no RX words have arrived for RB_STALL_MS with run set. */
+static ssize_t rx_stalled_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct rb_dev *rb = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", READ_ONCE(rb->rx_stalled) ? 1 : 0);
+}
+static DEVICE_ATTR_RO(rx_stalled);
+
+/* Stalls seen since the module loaded. */
+static ssize_t rx_stalls_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct rb_dev *rb = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%llu\n", READ_ONCE(rb->rx_stalls));
+}
+static DEVICE_ATTR_RO(rx_stalls);
+
 static struct attribute *rb_attrs[] = {
 	&dev_attr_gateware_version.attr,
 	&dev_attr_fpga_type.attr,
 	&dev_attr_receivers.attr,
 	&dev_attr_transmitters.attr,
 	&dev_attr_reload.attr,
+	&dev_attr_rx_stalled.attr,
+	&dev_attr_rx_stalls.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(rb);

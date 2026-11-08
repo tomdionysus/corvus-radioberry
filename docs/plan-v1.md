@@ -183,6 +183,12 @@ capabilities needed for real-time threads.
   bytes out and the six reply bytes in. Serialised with a mutex; the SPI
   transfer completes before return. Gateware identity and driver
   statistics are separate read-only ioctls.
+- A command that changes the receiver count is sent with the RX PIO state
+  machine stopped, so the Pi's RX clock stands still while the gateware
+  clears its receive FIFO, and restarted `rx_clock_hold_us` (200) later.
+  This avoids the gateware's receive lock-up (`docs/fault-rx-lockup.md`);
+  a stall detector in the worker reports the condition in the log and in
+  sysfs if it occurs anyway.
 - The ABI header is installed for the daemon and tools and is the only
   interface between them and the module.
 
@@ -292,7 +298,9 @@ the report logic is tested against an in-memory machine.
   DDCs on the CL016, six on the CL025), one DUC, 48 to 384 ksps, no
   wideband, diversity or audio.
 - The gateware is built here from the unmodified Hermes-Lite 2 source;
-  CL016 ships with its documented timing violation.
+  CL016 ships with its documented timing violation. The PIO variant's
+  receive lock-up is worked around in the driver, not fixed at source
+  (`docs/fault-rx-lockup.md`).
 - No external ADC for PA_CUR in v1; PA current is not reported.
 - Tooling and conventions as listed in `TODO/ACTIVE.md` under Standing
   decisions.

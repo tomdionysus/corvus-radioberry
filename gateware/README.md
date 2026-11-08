@@ -128,6 +128,12 @@ SPI (section 4) and is the authority at run time.
   receivers at 192 ksps (2.30 M/s) but only three at 384 ksps. Measured on
   the development board: 2.37 million values per second at saturation,
   and no stream errors below it.
+- Every receiver-count change asynchronously clears the RX FIFO, whose
+  read side and the `rx_pi_pio` state machine run on the Pi's clock. If
+  the Pi's clock is running while the clear is asserted and released, the
+  read-out can lock up for good until the gateware is reloaded
+  (`docs/fault-rx-lockup.md`). The driver therefore holds its RX clock
+  still across every receiver-count command.
 
 ## 6. CN301 outputs and what keys the transmitter
 

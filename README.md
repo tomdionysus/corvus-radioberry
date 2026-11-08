@@ -26,14 +26,14 @@ Debian trixie packages.
 | Platform probe `rbprobe` | `tools/rbprobe/` | working |
 | Stream tool `rbcat` | `tools/rbcat/` | working |
 | Command tool `rbctl` | `tools/rbctl/` | working |
-| FPGA gateware, Hermes-Lite 2 Radioberry PIO variants 75.3 | `gateware/` | CL025 built and verified on hardware, with a receive-stream lock-up under diagnosis (`docs/plan-rx-wedge.md`); CL016 built, untested, misses AD9866 TX output timing (`gateware/PROVENANCE.md`) |
-| Kernel driver `radioberry.ko`, overlay, ABI header | `driver/` | working: loads the gateware at boot, receive streaming verified, TX path carried zero samples with PTT clear; sysfs `reload`, `debug` parameter |
+| FPGA gateware, Hermes-Lite 2 Radioberry PIO variants 75.3 | `gateware/` | CL025 built and verified on hardware; its receive-stream lock-up (`docs/fault-rx-lockup.md`) is worked around by the driver; CL016 built, untested, misses AD9866 TX output timing (`gateware/PROVENANCE.md`) |
+| Kernel driver `radioberry.ko`, overlay, ABI header | `driver/` | working: loads the gateware at boot, receive streaming verified, TX path carried zero samples with PTT clear; sysfs `reload`, stall indicator, `debug` parameter |
 | Radio daemon `radioberryd` (OpenHPSDR Protocol 1 and 2, PA control) | `daemon/` | not started |
 | Loader and protocol tools (`rbload`, `p1probe`, `p2probe`) | `tools/` | not started |
 
 There is no daemon yet, so no SDR client can use the radio. The design of
 the whole stack is in `docs/plan-v1.md`; the open work, in order, is in
-`TODO/ACTIVE.md`, currently paused for the lock-up diagnosis.
+`TODO/ACTIVE.md`.
 
 ## Target hardware and host
 
@@ -137,10 +137,19 @@ to `build-coverage/coverage/html`.
   open; statistics restart from zero; if it fails, opening the device
   gives ENODEV until a reload succeeds). Module parameters:
   `load_gateware` (default 1), `rx_clkdiv` (2), `tx_clkdiv` (8),
-  `rx_ring_kib` (512), `tx_ring_kib` (64), and `debug` (0; writable at
-  run time in `/sys/module/radioberry/parameters/debug`), which logs
-  rate-limited diagnostics: each command with its reply, RX resyncs and
-  dropped words per DMA period, RX ring overruns and TX underruns.
+  `rx_ring_kib` (512), `tx_ring_kib` (64), `rx_clock_hold_us` (200) and
+  `debug` (0); the last two are writable at run time in
+  `/sys/module/radioberry/parameters/`. `debug` 1 logs rate-limited
+  diagnostics: each command with its reply, RX resyncs and dropped words
+  per DMA period, RX ring overruns and TX underruns; 2 traces every
+  command and receiver-count change without rate limiting.
+- The PIO gateware can lock up its receive stream at a receiver-count
+  change (`docs/fault-rx-lockup.md`). The driver works around it by
+  holding its RX clock still from just before a receiver-count command
+  until `rx_clock_hold_us` after it (0 disables the hold). Should the
+  stream stop anyway, the driver logs "RX stream stalled" after 200 ms
+  without RX words while run is set, sysfs `rx_stalled` reads 1 and
+  `rx_stalls` counts the events; writing 1 to `reload` recovers.
 - `/dev/radioberry` is the interface for the daemon and tools: exclusive
   open, whole RX frames from `read()`, TX samples to `write()`, gateware
   commands, identity and statistics by ioctl. `driver/include/radioberry_ioctl.h`
@@ -183,7 +192,7 @@ to `build-coverage/coverage/html`.
 ## Repository layout
 
 ```
-docs/      design (plan-v1.md), lock-up subplan (plan-rx-wedge.md), host, amplifier, upstream survey
+docs/      design (plan-v1.md), RX lock-up fault report (fault-rx-lockup.md), host, amplifier, upstream survey
 gateware/  gateware source, built bitfiles per FPGA, provenance, toolchain
 driver/    kernel module, device tree overlay, ABI header, logic tests
 daemon/    radioberryd (not started)

@@ -5,19 +5,6 @@ dependencies are done. Each item names its acceptance test. A finished
 item is removed from here and recorded at the top of `COMPLETED.md` with
 its date.
 
-## PAUSED (2026-11-08)
-
-Main development is paused. The PIO gateware's receive stream sometimes
-stops for good until the gateware is reloaded; the driver test harness
-(branch `item/2-driver-harness`, parked unmerged) triggers it in 2 to
-6% of runs. The diagnosis is in `docs/plan-rx-wedge.md`: the fault is
-in gateware state no command resets (section 3a); a driver-side
-avoidance (RX clock held still across receiver-count commands, on
-branch `item/2-rx-wedge-diag`, driver 0.3.1) measured 0 lock-ups in 900
-changes against 9 in 900 without. Section 6 proposes the way forward
-and waits for the owner's decision. Nothing else is worked on until
-then.
-
 ## Where things stand (2026-11-08)
 
 - Built, installed and verified on the development Pi: `rbprobe`, the
@@ -34,10 +21,14 @@ then.
   with PTT set.
 - `rbctl` sends single gateware commands; it refuses anything that can
   transmit without `--allow-tx`, which has not been used on hardware.
-- An RX lock-up in the PIO gateware is under diagnosis
-  (`docs/plan-rx-wedge.md`). Driver 0.3.0 and all tools are installed
-  and work; the lock-up has only been triggered by the parked harness.
-- Next, after the pause: section 2 (driver remainder), then the daemon.
+- The PIO gateware's RX lock-up (`docs/fault-rx-lockup.md`) is worked
+  around by driver 0.4.0, which holds its RX clock still across every
+  receiver-count command and reports a stalled stream in the log and in
+  sysfs. Accepted as the fix (Standing decisions); the gateware defect
+  itself is an owner-gated item in section 5.
+- Next: the driver test harness (section 2, parked on
+  `item/2-driver-harness`, which rebases on `develop` first), then the
+  daemon.
 
 ## Standing decisions
 
@@ -57,6 +48,15 @@ then.
   older GPIO-mode gateware and are not used. CL016 ships with a documented
   AD9866 TX output timing violation (`gateware/PROVENANCE.md`).
 - Development FPGA is a 10CL025. The driver supports CL016 and CL025.
+- The PIO gateware's RX lock-up (`docs/fault-rx-lockup.md`) is resolved
+  by the driver's RX clock hold (`rx_clock_hold_us`, default 200), which
+  measured 0 lock-ups in 4500 receiver-count changes against 17 in 1800
+  without it. This is accepted as the fix. It is not reinvestigated and
+  the gateware item in section 5 is not started unless the stall
+  indicator fires with the hold on: sysfs `rx_stalled` = 1, `rx_stalls`
+  > 0, or "RX stream stalled" in the kernel log. If that happens, record
+  the circumstances in the fault document's section 8 and reopen from
+  there; otherwise, a stream that stops is a new fault, not this one.
 - No transmit test on the development board without the owner's explicit
   permission for that specific test. Transmit code is proved first against
   fakes. Writing samples to the TX path with PTT and the TX permission bit
@@ -88,9 +88,6 @@ then.
 
 ## 2. Kernel driver remainder (`driver/`)
 
-- [ ] Resolve the RX lock-up per `docs/plan-rx-wedge.md`. Acceptance:
-      the fix chosen there measured at 0 lock-ups over at least 500
-      receiver-count changes of the triggering pattern on the Pi.
 - [ ] Userspace test harness `tools/driver-tests/` against
       `/dev/radioberry` (parked on `item/2-driver-harness`): exclusive
       open, frame alignment for every receiver count, non-blocking reads,
@@ -143,6 +140,16 @@ then.
 
 ## 5. Gateware
 
+- [ ] Fix the RX lock-up at source. Not taken in order: only on the
+      owner's explicit instruction, since it reopens "built unmodified"
+      (`docs/fault-rx-lockup.md`, section 9). The changes: synchronise the
+      RX FIFO clear on both sides with the real `dcfifo` parameters, give
+      `rx_pi_pio` a reset or safe-state recovery, remove its inferred
+      latches, constrain the Pi RX clock at 20 MHz; version the image so
+      `rbprobe` tells it apart. Acceptance: with `rx_clock_hold_us=0`,
+      0 lock-ups in at least 600 harness runs against the shipped image's
+      rate of about 6% per run, and no regression in `rbcat` streaming to
+      the PIO bus ceiling.
 - [ ] Test the CL016 image on a CL016 board, receive and transmit, when
       one is available.
 

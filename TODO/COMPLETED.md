@@ -3,6 +3,23 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-08: Driver 0.4.0: the PIO gateware's RX lock-up resolved by
+  a driver workaround (`docs/fault-rx-lockup.md`). Diagnosed from the Pi
+  alone: the fault is an asynchronous crossing at the RX FIFO clear that
+  every receiver-count change asserts, against the Pi-driven read clock;
+  no command recovers it, TX keeps running, the rate moves with fitter
+  placement (seven seeds, 0 to 8 lock-ups per 150 harness runs) and the
+  state machine is one-hot without safe-state recovery. The driver now
+  stops its RX PIO state machine from just before a receiver-count
+  command until `rx_clock_hold_us` (200) after it, and a stall detector
+  logs "RX stream stalled" and exposes sysfs `rx_stalled` and
+  `rx_stalls`; `debug` gained level 2 (trace every command). Measured:
+  0 lock-ups in 4500 changes with the hold against 17 in 1800 without,
+  no change in stream counters. Acceptance on the development Pi with
+  the installed 0.4.0 and its defaults: 100 harness runs (600 changes),
+  0 stalls, 0 harness failures. The gateware source fix is an
+  owner-gated item in `TODO/ACTIVE.md` section 5. Design note added to
+  `docs/plan-v1.md` 4.5 and 9.
 - 2026-11-08: Driver 0.3.0: words in flight across a receiver-count
   change are discarded, not counted as resyncs. After a change the RX
   parser settles until two consecutive clean frames of the new layout
