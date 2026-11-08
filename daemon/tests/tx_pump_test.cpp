@@ -119,3 +119,23 @@ TEST_CASE("a TX device error is reported once and ends the pump", "[tx]") {
         CHECK(rig.faults.size() == 1);
     }
 }
+
+TEST_CASE("the TX pump drops blocks beyond its ring limit", "[tx]") {
+    FakeDevice device;
+    SpscRing<TxBlock> ring{4};
+    std::vector<Fault> faults;
+    std::atomic<bool> stop{false};
+    TxPump pump{device, ring, [&](const Fault& f) { faults.push_back(f); }, 0, 8};
+    for (int i = 0; i < 3; ++i) {
+        TxBlock* b = ring.acquire();
+        b->size = 16;  // 4 samples
+        ring.publish();
+    }
+    for (int i = 0; i < 3; ++i) {
+        REQUIRE(pump.step(stop));
+    }
+    CHECK(pump.blocks() == 2);
+    CHECK(pump.blocks_dropped() == 1);  // 8 queued + 4 would exceed 8
+    CHECK(device.written.size() == 32);
+    CHECK(faults.empty());
+}

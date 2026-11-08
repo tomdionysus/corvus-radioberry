@@ -32,15 +32,18 @@ const Peer kB{0x0a000002, 50001, false};
 const Peer kTcp{0x0a000003, 50002, true};
 
 struct Rig {
+    explicit Rig(TxPolicyOptions o = {}) : policy(control, session, o) {}
     Control control;
     SpscRing<TxBlock> tx{2};
     FakeLink link;
     GatewareStatus status;
     Session session{[this] { control.safe(); }, 3s};
+    TxPolicy policy;
     Server server{Identity{{2, 0, 0, 0, 0, 1}, 75, 3, 6},
                   control,
                   tx,
                   session,
+                  policy,
                   [this] { return status; },
                   link};
 
@@ -210,7 +213,7 @@ TEST_CASE("receiver counts beyond the device are zero-filled", "[server]") {
     REQUIRE(rig.link.sent.size() == 1);
 }
 
-TEST_CASE("this version never transmits", "[server]") {
+TEST_CASE("without --allow-tx nothing transmits", "[server]") {
     Rig rig;
     rig.packet(start_packet(1), kA);
     // MOX, drive 255 with PA enable and VNA, and a disabled TX watchdog.
@@ -299,4 +302,96 @@ TEST_CASE("a client that lost the radio to a timeout stops being served", "[serv
     // Its late packets no longer feed the TX ring.
     rig.packet(host_packet(1, {}, {}), kA, 11s);
     CHECK(rig.tx.empty());
+}
+
+namespace {
+
+TxPolicyOptions transmit_allowed() {
+    TxPolicyOptions o;
+    o.allow_tx = true;
+    o.allow_pa = true;
+    o.drive_ceiling = 0x40;
+    return o;
+}
+
+}  // namespace
+
+TEST_CASE("the owner's MOX keys the transmitter through the policy", "[server]") {
+    Rig rig(transmit_allowed());
+    rig.packet(start_packet(1), kA);
+    // Drive 255 with PA enable, then MOX in the second block.
+    rig.packet(host_packet(0, {0x13, 0xffu << 24 | 1u << 19}, {0x01, 14074000}, 0x1000, 0), kA);
+    CHECK(rig.policy.transmitting());
+    CHECK(rig.control.transmit() == TransmitState{true, true, false});
+    CHECK(rig.control.value(0x09) == (0x40u << 24 | 1u << 19));
+    REQUIRE(rig.tx.front() != nullptr);
+    CHECK(rig.tx.front()->bytes[0] == 0x10);
+    // MOX released: PTT, TX permission and PA enable clear; drive kept.
+    rig.packet(host_packet(1, {0x13, 0xffu << 24 | 1u << 19}, {0x00, 0}), kA);
+    CHECK_FALSE(rig.policy.transmitting());
+    CHECK(rig.control.transmit() == TransmitState{});
+    CHECK(rig.control.value(0x09) == 0x40u << 24);
+    for (const Command& c : rig.drain()) {
+        if (c.address == 0x09 && (c.data & (1u << 19)) != 0) {
+            CHECK(c.ptt);  // PA enable only ever goes out with PTT
+        }
+    }
+}
+
+TEST_CASE("MOX in the first block alone does not key", "[server]") {
+    Rig rig(transmit_allowed());
+    rig.packet(start_packet(1), kA);
+    rig.packet(host_packet(0, {0x01, 0}, {0x04, 7074000}), kA);
+    CHECK_FALSE(rig.policy.transmitting());
+}
+
+TEST_CASE("MOX from a client that is not streaming does not key", "[server]") {
+    Rig rig(transmit_allowed());
+    rig.packet(host_packet(0, {0x01, 0}, {0x03, 14074000}), kA);  // before start
+    CHECK_FALSE(rig.policy.transmitting());
+    rig.packet(start_packet(1), kA);
+    rig.packet(host_packet(0, {0x01, 0}, {0x03, 14074000}), kB);  // not the owner
+    CHECK_FALSE(rig.policy.transmitting());
+    CHECK(rig.control.transmit() == TransmitState{});
+}
+
+TEST_CASE("CWX from address 0x0f goes through the policy", "[server]") {
+    Rig rig(transmit_allowed());
+    rig.packet(start_packet(1), kA);
+    rig.packet(host_packet(0, {0x1e, 1u << 24}, {0x00, 0}), kA);  // CWX, no MOX
+    CHECK_FALSE(rig.control.transmit().cwx);
+    CHECK(rig.control.value(0x0f) == 1u << 24);  // the rest of 0x0f is forwarded
+    rig.packet(host_packet(1, {0x1e, 1u << 24}, {0x01, 0}), kA);
+    CHECK(rig.control.transmit().cwx);
+}
+
+TEST_CASE("a host sequence gap while transmitting drops MOX until released", "[server]") {
+    Rig rig(transmit_allowed());
+    rig.packet(start_packet(1), kA);
+    rig.packet(host_packet(0, {0x02, 0}, {0x01, 0}), kA);
+    CHECK(rig.policy.transmitting());
+    rig.tx.pop();
+    rig.packet(host_packet(5, {0x02, 0}, {0x01, 0}), kA);  // packets 1 to 4 lost
+    CHECK(rig.session.latched());
+    CHECK_FALSE(rig.policy.transmitting());
+    CHECK(rig.control.transmit() == TransmitState{});
+    rig.tx.pop();
+    rig.packet(host_packet(6, {0x02, 0}, {0x01, 0}), kA);
+    CHECK_FALSE(rig.policy.transmitting());
+    rig.tx.pop();
+    rig.packet(host_packet(7, {0x02, 0}, {0x00, 0}), kA);  // released
+    rig.tx.pop();
+    rig.packet(host_packet(8, {0x02, 0}, {0x01, 0}), kA);
+    CHECK(rig.policy.transmitting());
+}
+
+TEST_CASE("stopping while transmitting leaves the gateware safe", "[server]") {
+    Rig rig(transmit_allowed());
+    rig.packet(start_packet(1), kA);
+    rig.packet(host_packet(0, {0x13, 0x20u << 24 | 1u << 19}, {0x01, 0}), kA);
+    REQUIRE(rig.policy.transmitting());
+    rig.packet(start_packet(0), kA);
+    CHECK_FALSE(rig.policy.transmitting());
+    CHECK(rig.control.transmit() == TransmitState{});
+    CHECK((*rig.control.value(0x09) & (1u << 19)) == 0);
 }

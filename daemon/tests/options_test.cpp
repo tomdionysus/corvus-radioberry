@@ -15,6 +15,11 @@ TEST_CASE("radioberryd's defaults", "[options]") {
     CHECK_FALSE(o.daemon.mac);
     CHECK(o.daemon.client_timeout == 3s);
     CHECK(o.log_level == "info");
+    CHECK_FALSE(o.daemon.tx.allow_tx);
+    CHECK_FALSE(o.daemon.tx.allow_pa);
+    CHECK(o.daemon.tx.drive_ceiling == 0);
+    CHECK(o.daemon.tx.watchdog == 120s);
+    CHECK(o.daemon.device.tx_ring_limit_words == 4800);
     CHECK_FALSE(o.help);
     CHECK_FALSE(o.version);
     CHECK(usage().find("--client-timeout-ms") != std::string::npos);
@@ -46,4 +51,16 @@ TEST_CASE("radioberryd refuses bad options", "[options]") {
     CHECK_THROWS_AS(parse_options({"--mac", "02:00:5e:0a:0b:ff:00"}), std::invalid_argument);
     CHECK_THROWS_AS(parse_options({"--log-level", "loud"}), std::invalid_argument);
     CHECK_THROWS_AS(parse_options({"--client-timeout-ms", "-1"}), std::invalid_argument);
+    CHECK_THROWS_AS(parse_options({"--drive-ceiling", "256"}), std::invalid_argument);
+    CHECK_THROWS_AS(parse_options({"--tx-watchdog-s", "0"}), std::invalid_argument);
+    CHECK_THROWS_AS(parse_options({"--tx-watchdog-s", "3601"}), std::invalid_argument);
+}
+
+TEST_CASE("radioberryd's transmit options", "[options]") {
+    const Options o = parse_options(
+        {"--allow-tx", "--allow-pa", "--drive-ceiling", "64", "--tx-watchdog-s", "30"});
+    CHECK(o.daemon.tx.allow_tx);
+    CHECK(o.daemon.tx.allow_pa);
+    CHECK(o.daemon.tx.drive_ceiling == 64);
+    CHECK(o.daemon.tx.watchdog == 30s);
 }

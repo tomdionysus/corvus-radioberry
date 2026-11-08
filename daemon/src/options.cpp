@@ -65,6 +65,18 @@ Options parse_options(const std::vector<std::string>& args) {
             o.daemon.mac = mac(value());
         } else if (a == "--client-timeout-ms") {
             o.daemon.client_timeout = std::chrono::milliseconds(number(a, value(), 3'600'000));
+        } else if (a == "--allow-tx") {
+            o.daemon.tx.allow_tx = true;
+        } else if (a == "--allow-pa") {
+            o.daemon.tx.allow_pa = true;
+        } else if (a == "--drive-ceiling") {
+            o.daemon.tx.drive_ceiling = static_cast<std::uint8_t>(number(a, value(), 255));
+        } else if (a == "--tx-watchdog-s") {
+            const unsigned long s = number(a, value(), 3600);
+            if (s == 0) {
+                throw std::invalid_argument("--tx-watchdog-s: at least 1");
+            }
+            o.daemon.tx.watchdog = std::chrono::seconds(s);
         } else if (a == "--log-level") {
             o.log_level = value();
             if (o.log_level != "trace" && o.log_level != "debug" && o.log_level != "info" &&
@@ -82,14 +94,19 @@ std::string usage() {
     return "usage: radioberryd [options]\n"
            "\n"
            "Serves the Radioberry to SDR clients over openHPSDR Protocol 1 (Hermes-Lite 2\n"
-           "dialect), UDP and TCP. This version receives only: it never sets PTT or the\n"
-           "TX permission bit, and it claims no PA interlock.\n"
+           "dialect), UDP and TCP. It transmits only with --allow-tx, only for the client\n"
+           "that owns the radio, and only while that client holds MOX. It claims no PA\n"
+           "interlock.\n"
            "\n"
            "  --device PATH            radioberry.ko device (default /dev/radioberry)\n"
            "  --address IPV4           address to listen on (default all)\n"
            "  --port N                 Protocol 1 port (default 1024)\n"
            "  --mac XX:XX:XX:XX:XX:XX  MAC reported by discovery (default: the interface's)\n"
            "  --client-timeout-ms N    silence that ends a client's stream (default 3000)\n"
+           "  --allow-tx               let the owning client transmit (default: receive only)\n"
+           "  --allow-pa               let the client enable the PA while transmitting\n"
+           "  --drive-ceiling N        highest drive level sent, 0 to 255 (default 0)\n"
+           "  --tx-watchdog-s N        longest continuous MOX, seconds (default 120)\n"
            "  --log-level LEVEL        trace, debug, info, warn or error (default info)\n"
            "  --version                print the version and exit\n"
            "  -h, --help               print this and exit\n";

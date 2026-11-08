@@ -7,8 +7,13 @@
 
 namespace radioberry::daemon {
 
-TxPump::TxPump(Device& device, SpscRing<TxBlock>& ring, FaultSink sink, int wait_ms)
-    : device_(device), ring_(ring), sink_(std::move(sink)), wait_ms_(wait_ms) {}
+TxPump::TxPump(Device& device, SpscRing<TxBlock>& ring, FaultSink sink, int wait_ms,
+               std::uint32_t ring_limit_words)
+    : device_(device),
+      ring_(ring),
+      sink_(std::move(sink)),
+      wait_ms_(wait_ms),
+      ring_limit_words_(ring_limit_words) {}
 
 bool TxPump::step(const std::atomic<bool>& stop) {
     if (failed_) {
@@ -27,6 +32,12 @@ bool TxPump::step(const std::atomic<bool>& stop) {
         return true;
     }
     try {
+        if (offset_ == 0 && block->size > 0 && ring_limit_words_ > 0 &&
+            device_.stats().tx_ring_words + block->size / kTxSampleBytes > ring_limit_words_) {
+            ring_.pop();
+            ++blocks_dropped_;
+            return true;
+        }
         if (offset_ < block->size) {
             if (!device_.wait(false, true, wait_ms_).writable) {
                 return true;

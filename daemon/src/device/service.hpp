@@ -23,6 +23,8 @@ struct DeviceOptions {
     std::chrono::nanoseconds stats_period = std::chrono::milliseconds(100);
     std::chrono::nanoseconds stall_after = std::chrono::milliseconds(250);
     int wait_ms = 10;
+    // See TxPump; 0 is no limit.
+    std::uint32_t tx_ring_limit_words = 0;
 };
 
 // What the device layer has done and seen, for status reports and tests.
@@ -35,6 +37,7 @@ struct DeviceSnapshot {
     std::uint64_t rx_blocks_dropped = 0;
     std::uint64_t tx_blocks = 0;
     std::uint64_t tx_bytes = 0;
+    std::uint64_t tx_blocks_dropped = 0;
     bool cw_or_ptt = false;
     bool external_cw_key = false;
     bool stalled = false;

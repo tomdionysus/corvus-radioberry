@@ -11,7 +11,7 @@ DeviceService::DeviceService(Device& device, FaultSink sink, DeviceOptions optio
       monitor_(sink, options.stall_after),
       rx_pump_(device, control_, rx_ring_, monitor_, sink, std::move(clock),
                {options.stats_period, options.wait_ms}),
-      tx_pump_(device, tx_ring_, sink, options.wait_ms) {}
+      tx_pump_(device, tx_ring_, sink, options.wait_ms, options.tx_ring_limit_words) {}
 
 DeviceService::~DeviceService() { stop(); }
 
@@ -61,6 +61,7 @@ DeviceSnapshot DeviceService::snapshot() const {
     s.rx_blocks_dropped = rx_pump_.blocks_dropped();
     s.tx_blocks = tx_pump_.blocks();
     s.tx_bytes = tx_pump_.bytes();
+    s.tx_blocks_dropped = tx_pump_.blocks_dropped();
     s.cw_or_ptt = rx_pump_.cw_or_ptt();
     s.external_cw_key = rx_pump_.external_cw_key();
     s.stalled = monitor_.stalled();

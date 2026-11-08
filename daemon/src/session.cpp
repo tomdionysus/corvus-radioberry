@@ -96,15 +96,18 @@ void Session::fault(const std::string& why) {
                  why);
 }
 
-bool Session::mox(bool requested, const std::function<void(bool)>& apply) {
+bool Session::mox(const Owner& client, bool requested, const std::function<void(bool)>& apply) {
     const std::lock_guard lock(mutex_);
+    if (!owner_ || !(*owner_ == client)) {
+        return false;
+    }
     if (!requested) {
         if (latched_) {
             spdlog::info("MOX released; fault latch cleared");
         }
         latched_ = false;
     }
-    mox_ = requested && !latched_ && owner_.has_value();
+    mox_ = requested && !latched_;
     if (apply) {
         apply(mox_);
     }

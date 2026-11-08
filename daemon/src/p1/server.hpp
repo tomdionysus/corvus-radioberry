@@ -16,6 +16,7 @@
 #include "device/tx_pump.hpp"
 #include "p1/protocol1.hpp"
 #include "session.hpp"
+#include "tx_policy.hpp"
 
 namespace radioberry::daemon::p1 {
 
@@ -50,13 +51,17 @@ struct ServerCounters {
 //
 // A client streams while it owns the radio in the Session; packets from
 // others are ignored meanwhile. Commands are forwarded to the gateware
-// when their value changes. This version does not transmit: MOX is logged
-// and ignored, and address 0x09 is sent with drive, VNA and PA enable
-// cleared.
+// when their value changes, except the transmit controls: the owner's
+// MOX, address 0x09 (drive, PA enable) and the CWX bit of address 0x0f
+// go through the TxPolicy. The owner's TX samples go to the TX ring.
 class Server {
 public:
     Server(Identity identity, Control& control, SpscRing<TxBlock>& tx, Session& session,
-           std::function<GatewareStatus()> status, Link& link);
+           TxPolicy& policy, std::function<GatewareStatus()> status, Link& link);
+
+    // Address 0x0f bit 24: CWX enable, as the HL2 reads it.
+    static constexpr std::uint8_t kCwConfig = 0x0f;
+    static constexpr std::uint32_t kCwxEnable = 1u << 24;
 
     void on_packet(std::span<const std::uint8_t> packet, const Peer& from,
                    std::chrono::nanoseconds now);
@@ -82,6 +87,7 @@ private:
     Control& control_;
     SpscRing<TxBlock>& tx_;
     Session& session_;
+    TxPolicy& policy_;
     std::function<GatewareStatus()> status_;
     Link& link_;
 
@@ -94,7 +100,6 @@ private:
     unsigned device_receivers_ = 1;
     unsigned status_address_ = 0;
     std::optional<HostCommand> pending_ack_;
-    bool mox_warned_ = false;
     // Values Control refused, so each is logged once.
     std::array<std::optional<std::uint32_t>, Control::kAddresses> refused_{};
     ServerCounters counters_;

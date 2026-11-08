@@ -3,6 +3,22 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-08: Protocol 1 transmit, proved against the fake device (on-air
+  steps are section 6). The owning client's MOX (the second command
+  block's) goes through `TxPolicy` and the session: PTT and the TX
+  permission bit only while granted; 0x09 drive capped at the ceiling,
+  VNA cleared, PA enable only with MOX and `--allow-pa`; CWX from 0x0f
+  bit 24 only with MOX (stricter than the HL2); MOX dropped and latched
+  on a host sequence gap, TX queue full, TX underrun, invalid TX block,
+  RX queue full or device error, and on the watchdog. The client's TX
+  I/Q goes to the driver, the driver's TX ring kept within 100 ms
+  (blocks beyond it dropped). Address-0 C3 stays zero, as this HL2 build
+  sends it. `radioberryd --allow-tx --allow-pa --drive-ceiling N
+  --tx-watchdog-s N`; defaults receive only, ceiling 0, watchdog 120 s.
+  Tests: the policy, the server and the whole daemon over loopback (MOX
+  keys PTT, drive capped, samples delivered intact, MOX released and
+  stop leave nothing that can transmit, a device underrun drops and
+  latches MOX); release, ASan and UBSan builds pass.
 - 2026-11-08: Example FT8 client `ft8rx` (`examples/ft8`, built with
   `-DRADIOBERRY_BUILD_EXAMPLES=ON`, off by default; the `default` and
   `asan` presets turn it on so the gate builds and tests it). Receive-only

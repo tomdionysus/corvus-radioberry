@@ -71,7 +71,7 @@ std::vector<std::uint8_t> receive_all(int fd, std::size_t n) {
 }
 
 struct Running {
-    explicit Running(FakeDevice& device) : daemon(device, options()) {
+    explicit Running(FakeDevice& device, DaemonOptions o = options()) : daemon(device, o) {
         thread = std::thread([this] { result = daemon.run(stop); });
     }
     ~Running() { finish(); }
@@ -263,4 +263,90 @@ TEST_CASE("an interface MAC is found or not, without failing", "[daemon]") {
     o.mac.reset();
     const Daemon daemon(device, o);
     CHECK(daemon.identity().mac == mac.value_or(std::array<std::uint8_t, 6>{}));
+}
+
+TEST_CASE("radioberryd transmits for the owner when allowed", "[daemon]") {
+    FakeDevice device;
+    device.idle_wait_ms = 1;
+    DaemonOptions o = Running::options();
+    o.tx.allow_tx = true;
+    o.tx.drive_ceiling = 0x20;
+    Running r(device, o);
+    const sockaddr_in to = loopback(r.daemon.port());
+    Socket client(SOCK_DGRAM);
+    const auto start = start_packet(1);
+    ::sendto(client.fd, start.data(), start.size(), 0, reinterpret_cast<const sockaddr*>(&to),
+             sizeof to);
+    // Drive 255 asked for, MOX set, every TX sample I = 0x1234, Q = 0x5678.
+    for (std::uint32_t seq = 0; seq < 5; ++seq) {
+        const auto p = host_packet(seq, {0x13, 0xffu << 24}, {0x01, 0}, 0x1234, 0x5678);
+        ::sendto(client.fd, p.data(), p.size(), 0, reinterpret_cast<const sockaddr*>(&to),
+                 sizeof to);
+    }
+    bool keyed = false;
+    for (int i = 0; i < 400 && !keyed; ++i) {
+        std::this_thread::sleep_for(5ms);
+        const std::lock_guard lock(device.mutex);
+        for (const Command& c : device.commands) {
+            keyed = keyed || (c.ptt && (c.flags & Command::kTxPermit) != 0);
+        }
+        keyed = keyed && device.written.size() >= 4 * 126;
+    }
+    REQUIRE(keyed);
+    {
+        const std::lock_guard lock(device.mutex);
+        CHECK(device.written[0] == 0x12);
+        CHECK(device.written[3] == 0x78);
+        bool capped = false;
+        for (const Command& c : device.commands) {
+            if (c.address == 0x09) {
+                CHECK((c.data >> 24) <= 0x20);
+                capped = capped || (c.data >> 24) == 0x20;
+            }
+        }
+        CHECK(capped);
+    }
+    // MOX released: the next commands carry no PTT.
+    const auto off = host_packet(5, {0x13, 0xffu << 24}, {0x00, 0});
+    ::sendto(client.fd, off.data(), off.size(), 0, reinterpret_cast<const sockaddr*>(&to),
+             sizeof to);
+    const auto stop = start_packet(0);
+    ::sendto(client.fd, stop.data(), stop.size(), 0, reinterpret_cast<const sockaddr*>(&to),
+             sizeof to);
+    for (int i = 0; i < 400 && r.daemon.server().running(); ++i) {
+        std::this_thread::sleep_for(5ms);
+    }
+    CHECK(r.finish());
+    const std::lock_guard lock(device.mutex);
+    CHECK_FALSE(device.commands.back().can_transmit());
+}
+
+TEST_CASE("a device fault while transmitting drops MOX in the daemon", "[daemon]") {
+    FakeDevice device;
+    device.idle_wait_ms = 1;
+    DaemonOptions o = Running::options();
+    o.tx.allow_tx = true;
+    Running r(device, o);
+    const sockaddr_in to = loopback(r.daemon.port());
+    Socket client(SOCK_DGRAM);
+    const auto start = start_packet(1);
+    ::sendto(client.fd, start.data(), start.size(), 0, reinterpret_cast<const sockaddr*>(&to),
+             sizeof to);
+    const auto mox = host_packet(0, {0x02, 0}, {0x01, 0});
+    ::sendto(client.fd, mox.data(), mox.size(), 0, reinterpret_cast<const sockaddr*>(&to),
+             sizeof to);
+    for (int i = 0; i < 400 && !r.daemon.policy().transmitting(); ++i) {
+        std::this_thread::sleep_for(5ms);
+    }
+    REQUIRE(r.daemon.policy().transmitting());
+    {
+        const std::lock_guard lock(device.mutex);
+        device.stats_.tx_underruns += 3;  // reported at the next statistics poll
+    }
+    for (int i = 0; i < 400 && !r.daemon.session().latched(); ++i) {
+        std::this_thread::sleep_for(5ms);
+    }
+    CHECK(r.daemon.session().latched());
+    CHECK_FALSE(r.daemon.policy().transmitting());
+    CHECK(r.daemon.device().control().transmit() == TransmitState{});
 }

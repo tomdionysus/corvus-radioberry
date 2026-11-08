@@ -13,11 +13,12 @@
 namespace radioberry::daemon::p1 {
 
 Server::Server(Identity identity, Control& control, SpscRing<TxBlock>& tx, Session& session,
-               std::function<GatewareStatus()> status, Link& link)
+               TxPolicy& policy, std::function<GatewareStatus()> status, Link& link)
     : identity_(identity),
       control_(control),
       tx_(tx),
       session_(session),
+      policy_(policy),
       status_(std::move(status)),
       link_(link) {}
 
@@ -76,6 +77,8 @@ void Server::on_packet(std::span<const std::uint8_t> packet, const Peer& from,
                 apply_locked(c);
             }
             if (from_client) {
+                // The second block is the later command; its MOX stands.
+                policy_.update(owner(from), host->commands[1].mox, now);
                 queue_tx_locked(*host);
             }
             return;
@@ -170,10 +173,6 @@ void Server::start_locked(const Peer& from) {
 }
 
 void Server::apply_locked(const HostCommand& c) {
-    if (c.mox && !mox_warned_) {
-        spdlog::warn("the client asked for MOX; this version does not transmit");
-    }
-    mox_warned_ = c.mox;
     if (c.ack) {
         pending_ack_ = c;
     }
@@ -195,7 +194,10 @@ void Server::apply_locked(const HostCommand& c) {
         packer_.set_receivers(want);
         data = (data & ~0x78u) | (run - 1) << 3;
     } else if (c.address == Control::kTxDrive) {
-        data &= ~Control::kTxDriveHazards;
+        policy_.set_tx_drive(data);
+        return;
+    } else if (c.address == kCwConfig) {
+        policy_.set_cwx((data & kCwxEnable) != 0);
     }
     if (control_.value(c.address) == data || refused_[c.address] == data) {
         return;

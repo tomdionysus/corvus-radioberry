@@ -25,7 +25,11 @@ struct TxBlock {
 // end any transmission.
 class TxPump {
 public:
-    TxPump(Device& device, SpscRing<TxBlock>& ring, FaultSink sink, int wait_ms);
+    // With `ring_limit_words` above 0, a block that would take the
+    // driver's TX ring above that many samples is dropped rather than
+    // queued, which bounds the transmit latency.
+    TxPump(Device& device, SpscRing<TxBlock>& ring, FaultSink sink, int wait_ms,
+           std::uint32_t ring_limit_words = 0);
 
     // One pass: waits for a block (until `stop` or a ring wake-up), then
     // up to wait_ms for room in the driver, and writes what fits. A block
@@ -37,17 +41,20 @@ public:
     bool failed() const { return failed_.load(); }
     std::uint64_t blocks() const { return blocks_.load(); }
     std::uint64_t bytes() const { return bytes_.load(); }
+    std::uint64_t blocks_dropped() const { return blocks_dropped_.load(); }
 
 private:
     Device& device_;
     SpscRing<TxBlock>& ring_;
     FaultSink sink_;
     int wait_ms_;
+    std::uint32_t ring_limit_words_;
     std::size_t offset_ = 0;  // bytes of the front block already written
 
     std::atomic<bool> failed_{false};
     std::atomic<std::uint64_t> blocks_{0};
     std::atomic<std::uint64_t> bytes_{0};
+    std::atomic<std::uint64_t> blocks_dropped_{0};
 };
 
 }  // namespace radioberry::daemon

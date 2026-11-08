@@ -41,8 +41,9 @@ public:
     // the next update().
     void set_tx_drive(std::uint32_t requested);
     void set_cwx(bool requested);
-    // The owner's MOX request, once per packet.
-    void update(bool mox_requested, std::chrono::nanoseconds now);
+    // The owner's MOX request, once per packet; a client that does not
+    // own the radio changes nothing.
+    void update(const Owner& client, bool mox_requested, std::chrono::nanoseconds now);
     // The watchdog.
     void tick(std::chrono::nanoseconds now);
 

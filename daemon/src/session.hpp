@@ -73,7 +73,8 @@ public:
     // called with the result under the session's lock, the lock fault()
     // and the safe state are taken under, so a fault cannot fall between
     // granting MOX and acting on it.
-    bool mox(bool requested, const std::function<void(bool)>& apply = {});
+    // A client that does not own the radio is refused without effect.
+    bool mox(const Owner& client, bool requested, const std::function<void(bool)>& apply = {});
     bool latched() const;
     // MOX is granted now.
     bool transmitting() const;

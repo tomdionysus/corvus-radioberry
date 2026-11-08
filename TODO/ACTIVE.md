@@ -38,8 +38,12 @@ its date.
   piHPSDR reads I first and also decodes, so the daemon is left as is.
   Received frequencies read 162 Hz low at 7.075 MHz (about -23 ppm,
   five stations against PSK Reporter); `docs/examples.md`.
-- Next: Protocol 1 transmit (section 3), on the session and transmit
-  policy already merged.
+- `radioberryd` transmits for the owning client only with `--allow-tx`
+  (PTT and TX permission while MOX is granted, drive capped by
+  `--drive-ceiling`, PA enable only with `--allow-pa`), proved against
+  the fake device. Nothing has transmitted on air.
+- Next: frequency calibration (section 3), then section 6's transmit
+  steps with the owner's go-ahead.
 
 ## Standing decisions
 
@@ -108,18 +112,6 @@ Nothing open.
       signals (the RX offset is -162 Hz at 7.075 MHz, about -23 ppm, from
       PSK Reporter). Acceptance: `ft8rx` frequencies within 10 Hz of the
       PSK Reporter median on two bands. Needed before transmit on air.
-- [ ] Protocol 1 transmit (receive is done): MOX from the owning client
-      to PTT through the transmit policy, the client's TX I/Q to the
-      driver at 48 ksps with the ring kept within the gateware's TX
-      buffer latency, address-0 C3 reporting TX FIFO underflow and
-      overflow as the HL2 does (piHPSDR reads its bits 7..6 while
-      transmitting), drive and PA enable from 0x09 through the policy,
-      CWX, and MOX cleared on every stream fault, all through `TxPolicy`
-      and `Session`; the policy's options on the command line
-      (`--allow-tx`, `--allow-pa`, `--drive-ceiling`, `--tx-watchdog-s`).
-      Acceptance: every path
-      proved against the fake device, then section 6's transmit steps
-      with the owner's go-ahead.
 - [ ] Protocol 2: discovery, General, DDC and DUC specific, High Priority
       both ways, DDC I/Q at 48 to 384 ksps, DUC I/Q at 192 ksps resampled
       with liquid-dsp, Mic/Line and Wideband declared absent, client

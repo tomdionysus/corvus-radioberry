@@ -81,26 +81,27 @@ TEST_CASE("a silent owner is released after the timeout", "[session]") {
 
 TEST_CASE("MOX is the owner's, and a fault while transmitting latches", "[session]") {
     Rig rig;
-    CHECK_FALSE(rig.session.mox(true));  // nobody owns the radio
+    CHECK_FALSE(rig.session.mox(kA, true));  // nobody owns the radio
     rig.session.claim(kA, 0s);
-    CHECK(rig.session.mox(true));
+    CHECK(rig.session.mox(kA, true));
 
     rig.session.fault("sequence gap");
     CHECK(rig.session.latched());
     CHECK(rig.safe == 1);
     CHECK(rig.session.faults() == 1);
-    CHECK_FALSE(rig.session.mox(true));  // held: refused
-    rig.session.fault("again");          // no MOX now: counted only
+    CHECK_FALSE(rig.session.mox(kA, true));  // held: refused
+    rig.session.fault("again");              // no MOX now: counted only
     CHECK(rig.safe == 1);
     CHECK(rig.session.faults() == 2);
-    CHECK_FALSE(rig.session.mox(false));  // released: latch cleared
+    CHECK_FALSE(rig.session.mox(kA, false));  // released: latch cleared
     CHECK_FALSE(rig.session.latched());
-    CHECK(rig.session.mox(true));
+    CHECK(rig.session.mox(kA, true));
 
     // Losing the owner clears MOX and the latch.
     rig.session.fault("gap");
     rig.session.release(kA, "done");
     CHECK_FALSE(rig.session.latched());
     rig.session.claim(kB, 1s);
-    CHECK(rig.session.mox(true));
+    CHECK_FALSE(rig.session.mox(kA, true));  // no longer the owner
+    CHECK(rig.session.mox(kB, true));
 }

@@ -13,6 +13,7 @@
 #include "p1/server.hpp"
 #include "radioberry/device.hpp"
 #include "session.hpp"
+#include "tx_policy.hpp"
 
 namespace radioberry::daemon {
 
@@ -22,7 +23,9 @@ struct DaemonOptions {
     std::optional<std::array<std::uint8_t, 6>> mac;  // default: interface_mac()
     // A streaming client silent this long loses the radio.
     std::chrono::nanoseconds client_timeout = std::chrono::seconds(3);
-    DeviceOptions device;
+    // The driver's TX ring is kept within 100 ms at 48 ksps.
+    DeviceOptions device{.tx_ring_limit_words = 4800};
+    TxPolicyOptions tx;
 };
 
 // radioberryd: the device layer, the session, the Protocol 1 server and
@@ -46,6 +49,7 @@ public:
     const p1::Identity& identity() const { return identity_; }
     p1::Server& server() { return server_; }
     Session& session() { return session_; }
+    TxPolicy& policy() { return policy_; }
     DeviceService& device() { return service_; }
 
 private:
@@ -56,6 +60,7 @@ private:
     p1::Identity identity_;
     Session session_;
     DeviceService service_;
+    TxPolicy policy_;
     Network network_;
     p1::Server server_;
     bool p2_discovery_logged_ = false;

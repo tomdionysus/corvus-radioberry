@@ -38,9 +38,10 @@ Daemon::Daemon(Device& device, DaemonOptions options)
       session_([this] { service_.control().safe(); }, options.client_timeout),
       service_(
           device, [this](const Fault& fault) { on_fault(fault); }, options.device),
+      policy_(service_.control(), session_, options.tx),
       network_(options.address, options.port),
       server_(
-          identity_, service_.control(), service_.tx(), session_,
+          identity_, service_.control(), service_.tx(), session_, policy_,
           [this] {
               const DeviceSnapshot s = service_.snapshot();
               return p1::GatewareStatus{s.cw_or_ptt, s.external_cw_key};
@@ -76,10 +77,17 @@ void Daemon::on_packet(std::span<const std::uint8_t> packet, const Peer& from,
 }
 
 bool Daemon::run(const std::atomic<bool>& stop) {
-    spdlog::info(
-        "gateware {}.{}, {} receivers; Protocol 1 on port {}; this version does not "
-        "transmit and claims no PA interlock",
-        identity_.version_major, identity_.version_minor, identity_.receivers, port());
+    const TxPolicyOptions& tx = policy_.options();
+    spdlog::info("gateware {}.{}, {} receivers; Protocol 1 on port {}", identity_.version_major,
+                 identity_.version_minor, identity_.receivers, port());
+    if (tx.allow_tx) {
+        spdlog::warn(
+            "transmit allowed: drive ceiling {}, PA {}, watchdog {} s; no PA interlock is claimed",
+            tx.drive_ceiling, tx.allow_pa ? "allowed" : "not allowed",
+            std::chrono::duration_cast<std::chrono::seconds>(tx.watchdog).count());
+    } else {
+        spdlog::info("transmit not allowed (--allow-tx): receive only");
+    }
     if (!service_.start()) {
         return false;
     }
@@ -99,7 +107,9 @@ bool Daemon::run(const std::atomic<bool>& stop) {
     };
     while (!stop && !service_.failed()) {
         network_.poll(100, handler);
-        session_.tick(clock());
+        const auto now = clock();
+        session_.tick(now);
+        policy_.tick(now);
         server_.tick();
     }
     const bool failed = service_.failed();

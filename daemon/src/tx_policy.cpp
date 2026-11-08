@@ -28,7 +28,7 @@ void TxPolicy::set_cwx(bool requested) {
     cwx_requested_ = requested;
 }
 
-void TxPolicy::update(bool mox_requested, std::chrono::nanoseconds now) {
+void TxPolicy::update(const Owner& client, bool mox_requested, std::chrono::nanoseconds now) {
     const std::lock_guard lock(mutex_);
     if (mox_requested && !options_.allow_tx) {
         if (!refusal_logged_) {
@@ -38,7 +38,7 @@ void TxPolicy::update(bool mox_requested, std::chrono::nanoseconds now) {
     } else if (!mox_requested) {
         refusal_logged_ = false;
     }
-    session_.mox(mox_requested && options_.allow_tx,
+    session_.mox(client, mox_requested && options_.allow_tx,
                  [&](bool granted) { apply_locked(granted, now); });
 }
 
@@ -61,7 +61,8 @@ void TxPolicy::tick(std::chrono::nanoseconds now) {
 
 bool TxPolicy::transmitting() const {
     const std::lock_guard lock(mutex_);
-    return granted_;
+    // A fault or a lost owner may have made the gateware safe since.
+    return granted_ && session_.transmitting();
 }
 
 std::uint32_t TxPolicy::effective_tx_drive(bool transmitting) const {
