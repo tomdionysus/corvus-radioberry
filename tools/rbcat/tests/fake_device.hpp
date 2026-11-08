@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <vector>
@@ -19,7 +20,8 @@ public:
 // A CL025 behind radioberry.ko. Each read delivers `read_seconds` of
 // frames at the configured rate (times `rate_scale`) and advances the
 // clock by that much. Every receiver carries the constant sample
-// (`i_value`, `q_value`).
+// (`i_value`, `q_value`). The TX ring drains at 48 ksps of fake time,
+// `tx_rate_scale` times that.
 class FakeDevice final : public Device {
 public:
     explicit FakeDevice(FakeClock& clock);
@@ -45,6 +47,15 @@ public:
     std::function<void(FakeDevice&)> on_read;
     std::size_t reads = 0;
     std::size_t stats_calls = 0;
+
+    std::uint32_t tx_capacity_words = 16384;
+    double tx_rate_scale = 1.0;
+    double tx_drain_credit = 0;
+    // Most bytes one write accepts; writes that return 0.
+    std::size_t tx_write_limit = SIZE_MAX;
+    int interrupted_writes = 0;
+    std::uint64_t tx_bytes_written = 0;
+    bool tx_nonzero_written = false;
 };
 
 }  // namespace radioberry::cat::test

@@ -32,6 +32,9 @@ struct Options {
     double settle_seconds = 0.5;
     // Progress line on stderr every this many seconds; 0 for none.
     double interval_seconds = 0;
+    // Also write zero TX samples at the gateware's 48 ksps, PTT and the
+    // TX permission bit clear.
+    bool tx_zeros = false;
     ReportFormat format = ReportFormat::kText;
 };
 

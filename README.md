@@ -145,10 +145,15 @@ to `build-coverage/coverage/html`.
   `--yaml`. `--output iq24` writes the frames to stdout as read (24-bit
   big-endian I and Q per receiver), `--output iq16` the top 16 bits of
   each value as little-endian int16; the report then goes to stderr.
-  `--interval S` prints a progress line every S seconds. It never sets
+  `--interval S` prints a progress line every S seconds. `--tx-zeros`
+  also writes zero TX samples, keeping about 50 ms queued in the driver,
+  and reports the TX word rate, underruns and the lowest queue level; the
+  gateware drains and discards them because PTT is clear. It never sets
   PTT or the TX permission bit. Exit status 0 means a clean stream (no
-  faults after settling, frame rate within 1%), 1 stream faults or a
-  device error, 2 a usage error.
+  faults after settling, frame rate within 1%, and with `--tx-zeros` a
+  TX word rate within 1% of 48000 per second, no underruns and a queue
+  that never ran empty), 1 stream faults or a device error, 2 a usage
+  error.
 - Receive capacity over the PIO bus is about 2.37 million values per
   second: up to six receivers at 192 ksps or three at 384 ksps.
 

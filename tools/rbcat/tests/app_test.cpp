@@ -204,3 +204,67 @@ TEST_CASE("report of a stream stopped while settling", "[app]") {
     CHECK(report.at("stream_clean")->as_bool() == false);
     CHECK_FALSE(stream_clean(o, result));
 }
+
+TEST_CASE("tx zeros report and verdict", "[app][tx]") {
+    Harness h;
+    Run r = h.run({"--seconds", "2", "--tx-zeros", "--json"});
+    CHECK(r.code == kExitClean);
+    auto j = nlohmann::json::parse(r.out);
+    CHECK(j["settings"]["tx_zeros"] == true);
+    CHECK(j["tx"]["tx_word_rate"].get<double>() > 47900);
+    CHECK(j["tx"]["tx_word_rate"].get<double>() < 48100);
+    CHECK(j["tx"]["expected_tx_word_rate"] == 48000);
+    CHECK(j["tx"]["tx_underruns"] == 0);
+    CHECK(j["tx"]["tx_ring_target_words"] == 2400);
+    CHECK(j["tx"]["tx_ring_min_words"].get<int>() > 0);
+    CHECK(j["tx"]["bytes_written_to_device"].get<long>() > 0);
+    CHECK(j["safety"]["driver_ptt_flag"] == false);
+    CHECK(j["safety"]["gateware_reported_tx"] == false);
+
+    Harness plain;
+    r = plain.run({"--seconds", "0.1", "--json"});
+    j = nlohmann::json::parse(r.out);
+    CHECK(j["settings"]["tx_zeros"] == false);
+    CHECK_FALSE(j.contains("tx"));
+}
+
+TEST_CASE("tx faults exit 1", "[app][tx]") {
+    Harness slow;
+    slow.device.tx_rate_scale = 0.9;
+    CHECK(slow.run({"--seconds", "2", "--tx-zeros"}).code == kExitStreamError);
+
+    Harness underrun;
+    underrun.setup = [](FakeDevice& d) {
+        d.on_read = [](FakeDevice& dev) {
+            if (dev.reads == 900) {
+                dev.stats_.tx_underruns += 1;
+            }
+        };
+    };
+    CHECK(underrun.run({"--seconds", "1", "--tx-zeros"}).code == kExitStreamError);
+
+    // A device that does not drain: no words, but the ring never empties.
+    Harness stuck;
+    stuck.device.tx_rate_scale = 0;
+    CHECK(stuck.run({"--seconds", "2", "--tx-zeros"}).code == kExitStreamError);
+    Harness stuck_short;
+    stuck_short.device.tx_rate_scale = 0;
+    CHECK(stuck_short.run({"--seconds", "0.5", "--tx-zeros"}).code == kExitClean);
+
+    // A ring found empty: the device drains faster than rbcat tops up.
+    Harness starved;
+    starved.device.tx_rate_scale = 60;
+    CHECK(starved.run({"--seconds", "0.5", "--tx-zeros"}).code == kExitStreamError);
+}
+
+TEST_CASE("tx verdict pieces", "[app][tx]") {
+    Options o;
+    StreamResult r;
+    CHECK(tx_clean(o, r));
+    o.tx_zeros = true;
+    CHECK_FALSE(tx_clean(o, r));  // ring never sampled
+    r.tx_ring_min_words = 10;
+    CHECK(tx_clean(o, r));  // under a second: rate not judged
+    r.tx_ring_min_words = 0;
+    CHECK_FALSE(tx_clean(o, r));
+}

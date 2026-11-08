@@ -32,6 +32,22 @@ Node rx_counters(const radioberry_stats& from, const radioberry_stats& to) {
 
 }  // namespace
 
+bool tx_clean(const Options& options, const StreamResult& result) {
+    if (!options.tx_zeros) {
+        return true;
+    }
+    const radioberry_stats& a = result.measure_start;
+    const radioberry_stats& b = result.end;
+    if (b.tx_underruns != a.tx_underruns || result.tx_ring_min_words.value_or(0) == 0) {
+        return false;
+    }
+    if (result.seconds < 1) {
+        return true;
+    }
+    const double rate = static_cast<double>(b.tx_words - a.tx_words) / result.seconds;
+    return std::abs(rate - kTxRate) <= kTxRate * 0.01;
+}
+
 bool stream_clean(const Options& options, const StreamResult& result) {
     const radioberry_stats& a = result.measure_start;
     const radioberry_stats& b = result.end;
@@ -40,11 +56,11 @@ bool stream_clean(const Options& options, const StreamResult& result) {
         return false;
     }
     if (result.seconds < 1) {
-        return true;
+        return tx_clean(options, result);
     }
     const double expected = options.rate_ksps * 1000.0;
     const double rate = static_cast<double>(result.frames) / result.seconds;
-    return std::abs(rate - expected) <= expected * 0.01;
+    return std::abs(rate - expected) <= expected * 0.01 && tx_clean(options, result);
 }
 
 Node build_report(const Options& options, const StreamResult& result) {
@@ -71,6 +87,7 @@ Node build_report(const Options& options, const StreamResult& result) {
     settings.set("output", to_string(options.output));
     settings.set("settle_seconds", options.settle_seconds);
     settings.set("seconds", options.seconds > 0 ? Node(options.seconds) : Node());
+    settings.set("tx_zeros", options.tx_zeros);
     root.set("settings", settings);
 
     Node stream = Node::map();
@@ -103,6 +120,21 @@ Node build_report(const Options& options, const StreamResult& result) {
     root.set("driver", driver);
     root.set("settling", rx_counters(result.before, result.measure_start));
 
+    if (options.tx_zeros) {
+        const std::uint64_t words = result.end.tx_words - result.measure_start.tx_words;
+        Node tx = Node::map();
+        tx.set("tx_words", words);
+        tx.set("tx_word_rate", result.seconds > 0
+                                   ? Node(round_to(static_cast<double>(words) / result.seconds, 10))
+                                   : Node());
+        tx.set("expected_tx_word_rate", static_cast<unsigned>(kTxRate));
+        tx.set("tx_underruns", result.end.tx_underruns - result.measure_start.tx_underruns);
+        tx.set("tx_ring_min_words", result.tx_ring_min_words);
+        tx.set("tx_ring_target_words", kTxTargetWords);
+        tx.set("bytes_written_to_device", result.tx_bytes);
+        root.set("tx", tx);
+    }
+
     Node safety = Node::map();
     bool ptt = false;
     bool permit = false;
@@ -113,6 +145,9 @@ Node build_report(const Options& options, const StreamResult& result) {
     safety.set("commands_sent", static_cast<unsigned long>(result.commands.size()));
     safety.set("ptt_set", ptt);
     safety.set("tx_permission_set", permit);
+    // PTT reported by the driver from the last command it sent.
+    safety.set("driver_ptt_flag", (result.end.flags & RADIOBERRY_STATS_PTT) != 0);
+    safety.set("gateware_reported_tx", result.reply_tx_indicated);
     root.set("safety", safety);
 
     root.set("stream_clean", stream_clean(options, result));

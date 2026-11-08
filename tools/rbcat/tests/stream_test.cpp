@@ -244,3 +244,83 @@ TEST_CASE("commands that could transmit are refused", "[stream]") {
     CHECK(reply.version_major == 75);
     CHECK(device.commands.size() == 1);
 }
+
+TEST_CASE("tx zeros keep the driver's ring topped up at 48 ksps", "[stream][tx]") {
+    Fixture fx;
+    Options o = timed(2.0);
+    o.tx_zeros = true;
+    const StreamResult r = fx.run(o);
+    CHECK_FALSE(fx.device.tx_nonzero_written);
+    CHECK(r.tx_bytes == fx.device.tx_bytes_written);
+    const auto words = r.end.tx_words - r.measure_start.tx_words;
+    CHECK(static_cast<double>(words) == Approx(96000).margin(100));
+    REQUIRE(r.tx_ring_min_words.has_value());
+    CHECK(*r.tx_ring_min_words > kTxTargetWords - 100);
+    CHECK(fx.device.stats_.tx_ring_words <= kTxTargetWords);
+    for (const Command& c : fx.device.commands) {
+        CHECK_FALSE(c.can_transmit());
+    }
+}
+
+TEST_CASE("without tx zeros nothing is written", "[stream][tx]") {
+    Fixture fx;
+    const StreamResult r = fx.run(timed(0.1));
+    CHECK(fx.device.tx_bytes_written == 0);
+    CHECK(r.tx_bytes == 0);
+    CHECK_FALSE(r.tx_ring_min_words.has_value());
+}
+
+TEST_CASE("tx top-up survives short and interrupted writes", "[stream][tx]") {
+    Fixture fx;
+    fx.device.tx_write_limit = 1024;
+    fx.device.interrupted_writes = 2;
+    Options o = timed(1.0);
+    o.tx_zeros = true;
+    const StreamResult r = fx.run(o);
+    CHECK(static_cast<double>(r.end.tx_words - r.measure_start.tx_words) ==
+          Approx(48000).margin(100));
+    CHECK(*r.tx_ring_min_words > 0);
+}
+
+TEST_CASE("a TX ring the device does not drain stays full", "[stream][tx]") {
+    Fixture fx;
+    fx.device.tx_rate_scale = 0;
+    Options o = timed(0.5);
+    o.tx_zeros = true;
+    const StreamResult r = fx.run(o);
+    CHECK(r.end.tx_words == 0);
+    CHECK(fx.device.tx_bytes_written == kTxTargetWords * kTxSampleBytes);
+    CHECK(*r.tx_ring_min_words == kTxTargetWords);
+}
+
+TEST_CASE("tx progress lines", "[stream][tx]") {
+    Fixture fx;
+    Options o = timed(1.5);
+    o.tx_zeros = true;
+    o.interval_seconds = 1.0;
+    fx.run(o);
+    CHECK(fx.progress.str().find(", tx words 4") != std::string::npos);
+    CHECK(fx.progress.str().find(", tx underruns 0\n") != std::string::npos);
+}
+
+TEST_CASE("a reply showing cw_on or external PTT is noted", "[stream]") {
+    struct Keyed final : Device {
+        explicit Keyed(FakeDevice& fake) : d(fake) {}
+        radioberry_info info() override { return d.info(); }
+        radioberry_stats stats() override { return d.stats(); }
+        Reply command(const Command& c) override {
+            Reply r = d.command(c);
+            r.cw_or_ptt = d.commands.size() == 2;
+            return r;
+        }
+        std::size_t read(std::span<std::uint8_t> b) override { return d.read(b); }
+        std::size_t write(std::span<const std::uint8_t> b) override { return d.write(b); }
+        FakeDevice& d;
+    };
+    Fixture fx;
+    Keyed keyed(fx.device);
+    const StreamResult r =
+        run_stream(keyed, fx.clock, timed(0.01), fx.samples, fx.progress, [] { return false; });
+    CHECK(r.reply_tx_indicated);
+    CHECK_FALSE(fx.run(timed(0.01)).reply_tx_indicated);
+}

@@ -69,7 +69,17 @@ std::size_t FakeDevice::read(std::span<std::uint8_t> buffer) {
             put24(&buffer[f * frame + 6 * r + 3], q_value);
         }
     }
-    clock.t += static_cast<double>(frames) / rate;
+    const double dt = static_cast<double>(frames) / rate;
+    clock.t += dt;
+    tx_drain_credit += 48000.0 * tx_rate_scale * dt;
+    const auto drained =
+        std::min<std::uint32_t>(stats_.tx_ring_words, static_cast<std::uint32_t>(tx_drain_credit));
+    tx_drain_credit -= drained;
+    if (stats_.tx_ring_words == 0) {
+        tx_drain_credit = 0;
+    }
+    stats_.tx_ring_words -= drained;
+    stats_.tx_words += drained;
     stats_.rx_frames += frames;
     stats_.rx_words += frames * 2 * n;
     if (on_read) {
@@ -78,6 +88,20 @@ std::size_t FakeDevice::read(std::span<std::uint8_t> buffer) {
     return frames * frame;
 }
 
-std::size_t FakeDevice::write(std::span<const std::uint8_t> buffer) { return buffer.size(); }
+std::size_t FakeDevice::write(std::span<const std::uint8_t> buffer) {
+    if (interrupted_writes > 0) {
+        --interrupted_writes;
+        return 0;
+    }
+    const std::size_t free_bytes =
+        static_cast<std::size_t>(tx_capacity_words - stats_.tx_ring_words) * kTxSampleBytes;
+    const std::size_t n = std::min({buffer.size(), free_bytes, tx_write_limit}) / 4 * 4;
+    tx_nonzero_written =
+        tx_nonzero_written || std::any_of(buffer.begin(), buffer.begin() + static_cast<long>(n),
+                                          [](std::uint8_t b) { return b != 0; });
+    stats_.tx_ring_words += static_cast<std::uint32_t>(n / kTxSampleBytes);
+    tx_bytes_written += n;
+    return n;
+}
 
 }  // namespace radioberry::cat::test

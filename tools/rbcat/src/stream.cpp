@@ -47,14 +47,36 @@ void to_iq16(std::span<const std::uint8_t> data, std::vector<char>& out) {
 }
 
 std::string progress_line(double elapsed, double rate, const radioberry_stats& from,
-                          const radioberry_stats& to) {
+                          const radioberry_stats& to, bool tx) {
     std::ostringstream line;
     line << "rbcat: " << format_double(std::round(elapsed * 10) / 10) << " s, "
          << format_double(std::round(rate * 10) / 10) << " frames/s, resyncs "
          << to.rx_resyncs - from.rx_resyncs << ", dropped words "
          << to.rx_dropped_words - from.rx_dropped_words << ", overruns "
-         << to.rx_overrun_frames - from.rx_overrun_frames << '\n';
+         << to.rx_overrun_frames - from.rx_overrun_frames;
+    if (tx) {
+        line << ", tx words " << to.tx_words - from.tx_words << ", tx underruns "
+             << to.tx_underruns - from.tx_underruns;
+    }
+    line << '\n';
     return line.str();
+}
+
+// Tops the driver's TX ring up to kTxTargetWords with zero samples.
+// Returns the samples that were queued before the top-up.
+std::uint32_t top_up_tx(Device& device, StreamResult& result) {
+    static const std::vector<std::uint8_t> zeros(kTxTargetWords * kTxSampleBytes, 0);
+    const std::uint32_t queued = device.stats().tx_ring_words;
+    std::size_t want = queued < kTxTargetWords ? (kTxTargetWords - queued) * kTxSampleBytes : 0;
+    while (want > 0) {
+        const std::size_t n = device.write(std::span<const std::uint8_t>(zeros.data(), want));
+        if (n == 0) {
+            break;  // interrupted; the next iteration tops up again
+        }
+        result.tx_bytes += n;
+        want -= n;
+    }
+    return queued;
 }
 
 }  // namespace
@@ -96,7 +118,8 @@ StreamResult run_stream(Device& device, Clock& clock, const Options& options, st
     }
     result.commands.push_back(hl2::lna_gain(options.lna_gain_db));
     for (const Command& c : result.commands) {
-        send_receive_only(device, c);
+        result.reply_tx_indicated =
+            send_receive_only(device, c).cw_or_ptt || result.reply_tx_indicated;
     }
 
     result.info = device.info();
@@ -121,6 +144,9 @@ StreamResult run_stream(Device& device, Clock& clock, const Options& options, st
             result.measure_start = result.end = device.stats();
             return result;
         }
+        if (options.tx_zeros) {
+            top_up_tx(device, result);
+        }
         device.read(buffer);
     }
 
@@ -136,6 +162,10 @@ StreamResult run_stream(Device& device, Clock& clock, const Options& options, st
         if (stop()) {
             result.interrupted = true;
             break;
+        }
+        if (options.tx_zeros) {
+            const std::uint32_t queued = top_up_tx(device, result);
+            result.tx_ring_min_words = std::min(queued, result.tx_ring_min_words.value_or(queued));
         }
         const std::size_t got = device.read(buffer);
         const std::span<const std::uint8_t> data(buffer.data(), got - got % frame);
@@ -160,7 +190,8 @@ StreamResult run_stream(Device& device, Clock& clock, const Options& options, st
             const radioberry_stats s = device.stats();
             const double rate =
                 static_cast<double>(result.frames - frames_at_progress) / (now - last_progress);
-            progress << progress_line(now - start, rate, stats_at_progress, s) << std::flush;
+            progress << progress_line(now - start, rate, stats_at_progress, s, options.tx_zeros)
+                     << std::flush;
             frames_at_progress = result.frames;
             stats_at_progress = s;
             last_progress = now;

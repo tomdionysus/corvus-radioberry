@@ -31,6 +31,10 @@ const char* const kUsage =
     "                       SIGTERM)\n"
     "  --settle S           discard S seconds after configuring (default 0.5)\n"
     "  --interval S         progress line on stderr every S seconds\n"
+    "  --tx-zeros           also write zero TX samples at 48 ksps, keeping\n"
+    "                       about 50 ms queued in the driver; PTT and the\n"
+    "                       TX permission bit stay clear, so nothing is\n"
+    "                       transmitted"
     "  --device PATH        default /dev/radioberry\n"
     "  --json               JSON report\n"
     "  --yaml               YAML report\n"
@@ -111,6 +115,8 @@ ParseResult parse_options(std::span<const std::string> args) {
             o.format = ReportFormat::kJson;
         } else if (arg == "--yaml") {
             o.format = ReportFormat::kYaml;
+        } else if (arg == "--tx-zeros") {
+            o.tx_zeros = true;
         } else if (arg == "--rate") {
             const std::string* v = value();
             const auto ksps = v ? parse_number<unsigned>(*v) : std::nullopt;

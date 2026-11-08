@@ -38,6 +38,7 @@ TEST_CASE("defaults", "[options]") {
     CHECK(o.settle_seconds == 0.5);
     CHECK(o.interval_seconds == 0);
     CHECK(o.format == ReportFormat::kText);
+    CHECK_FALSE(o.tx_zeros);
 }
 
 TEST_CASE("every option", "[options]") {
@@ -58,6 +59,7 @@ TEST_CASE("every option", "[options]") {
     CHECK(o.format == ReportFormat::kYaml);
 
     CHECK(ok({"--json"}).format == ReportFormat::kJson);
+    CHECK(ok({"--tx-zeros"}).tx_zeros);
     CHECK(ok({"--output", "iq24"}).output == Output::kIq24);
     CHECK(ok({"--output", "iq24", "--output", "none"}).output == Output::kNone);
     CHECK(ok({"--rate", "96"}).rate_code == 1);

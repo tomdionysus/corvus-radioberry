@@ -12,12 +12,13 @@ its date.
   (load at boot, gateware identity read, receive streaming verified up to
   the PIO bus capacity), the ABI header, and the CI gate
   `tools/ci-pi.sh`.
-- `rbcat` (receive) built and verified on the Pi: 10 minutes at 48 ksps
-  with no stream faults.
+- `rbcat` built and verified on the Pi: 10 minutes at 48 ksps with no
+  stream faults; zero TX samples at 48000 words per second with PTT and
+  the TX permission bit clear and no underruns.
 - `rbprobe` on the Pi reports one blocker: no daemon.
 - Nothing has transmitted. The TX path in the driver exists but has not
   been exercised.
-- Next: the rest of section 1 (`rbcat --tx-zeros`, `rbctl`), then
+- Next: `rbctl` (end of section 1), then
   section 2 (driver remainder), then the daemon.
 
 ## Standing decisions
@@ -69,10 +70,6 @@ its date.
 
 ## 1. Stream tools (`tools/`)
 
-- [ ] `rbcat --tx-zeros`: also writes zero samples at 48 ksps with PTT and
-      TX permission clear. Acceptance: the driver's TX word counter
-      advances at 48000 per second with no underruns, and every command
-      sent has PTT and the TX permission bit clear.
 - [ ] `rbctl`: sends one gateware command (PTT and permission refused
       unless `--allow-tx` is given), prints the reply and the driver's
       info and statistics.

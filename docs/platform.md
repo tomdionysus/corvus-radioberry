@@ -32,6 +32,10 @@ See `pa.md` for the amplifier.
 CONF_DONE (GPIO 22) low, CL025 images configure it, and the driver reads
 FPGA type 10CL025 from the gateware.
 
+The Radioberry's sample clock (76.8 MHz reference) runs about 31 to
+33 ppm fast against the Pi's clock: `rbcat` measures 48001.5 to 48001.6
+RX frames per second at 48 ksps over runs of 5 to 600 s (2026-11-08).
+
 ### Known gateware images
 
 `rbprobe` identifies images by hash. The driver needs this project's

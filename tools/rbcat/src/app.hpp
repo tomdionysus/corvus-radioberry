@@ -30,8 +30,13 @@ struct Environment {
 
 // The report document for a finished stream.
 Node build_report(const Options& options, const StreamResult& result);
-// No faults after settling, frames received, and the frame rate within 1%
-// of the configured rate when at least one second was measured.
+// With --tx-zeros: no TX underruns, the driver's TX ring never found
+// empty, and the TX word rate within 1% of 48000 per second when at least
+// one second was measured. True without --tx-zeros.
+bool tx_clean(const Options& options, const StreamResult& result);
+// No faults after settling, frames received, the frame rate within 1% of
+// the configured rate when at least one second was measured, and
+// tx_clean.
 bool stream_clean(const Options& options, const StreamResult& result);
 
 int run_app(std::span<const std::string> args, Environment& env);

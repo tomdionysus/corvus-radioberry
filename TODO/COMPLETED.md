@@ -3,6 +3,16 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-08: `rbcat --tx-zeros`: writes zero TX samples, topping the
+  driver's TX ring up to 2400 samples (50 ms) from the read loop, and
+  reports TX words, word rate, underruns and the lowest ring level; the
+  verdict requires the rate within 1% of 48000 per second, no underruns
+  and a ring that never ran empty. Commands are unchanged (receive only),
+  and the report records the driver's PTT flag and any reply showing
+  cw_on or external PTT. Acceptance on the development Pi, 60 s: TX
+  words 480 000 per 10 s interval, zero underruns, ring never below 2144
+  samples, PTT and TX permission clear in all 3 commands, driver PTT flag
+  clear; RX clean throughout.
 - 2026-11-08: `rbcat` in `tools/rbcat/`: sets rate, receiver count,
   frequencies (duplex set, so receiver 1 follows its own frequency) and
   LNA gain with PTT and the TX permission bit always clear (any command

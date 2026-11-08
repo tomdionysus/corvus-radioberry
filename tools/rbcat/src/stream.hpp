@@ -42,7 +42,18 @@ struct StreamResult {
     std::uint64_t bytes_out = 0;
     std::vector<Level> levels;
     bool interrupted = false;
+    // With --tx-zeros: bytes written to the device, and the fewest
+    // samples queued in the driver seen before a top-up while measuring.
+    std::uint64_t tx_bytes = 0;
+    std::optional<std::uint32_t> tx_ring_min_words;
+    // Some reply had byte 0 bit 0 set: cw_on or external PTT on the jack.
+    bool reply_tx_indicated = false;
 };
+
+// TX samples kept queued in the driver with --tx-zeros: 50 ms.
+inline constexpr std::uint32_t kTxTargetWords = 2400;
+// The gateware's TX sample rate.
+inline constexpr double kTxRate = 48000.0;
 
 // Configures the receivers and streams until `options.seconds` have been
 // measured or `stop` returns true. Frames go to `samples` in the chosen
