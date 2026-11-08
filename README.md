@@ -24,10 +24,11 @@ Debian trixie packages.
 | Component | Directory | State |
 |---|---|---|
 | Platform probe `rbprobe` | `tools/rbprobe/` | working |
+| Receive stream tool `rbcat` | `tools/rbcat/` | working |
 | FPGA gateware, Hermes-Lite 2 Radioberry PIO variants 75.3 | `gateware/` | CL025 built and verified on hardware; CL016 built, untested, misses AD9866 TX output timing (`gateware/PROVENANCE.md`) |
 | Kernel driver `radioberry.ko`, overlay, ABI header | `driver/` | working: loads the gateware at boot, receive streaming verified; transmit path not yet exercised |
 | Radio daemon `radioberryd` (OpenHPSDR Protocol 1 and 2, PA control) | `daemon/` | not started |
-| Stream and protocol tools (`rbcat`, `rbctl`, `rbload`, `p1probe`, `p2probe`) | `tools/` | not started |
+| Command and protocol tools (`rbctl`, `rbload`, `p1probe`, `p2probe`) | `tools/` | not started |
 
 There is no daemon yet, so no SDR client can use the radio. The design of
 the whole stack is in `docs/plan-v1.md`; the open work, in order, is in
@@ -101,7 +102,7 @@ rbprobe
 | gateware for `FPGATYPE` | `/lib/firmware/radioberry.rbf` |
 | both gateware images | `/usr/local/share/radioberry/gateware/rpi-5/<type>/` |
 | ABI header | `/usr/local/include/radioberry_ioctl.h` |
-| `rbprobe` | `/usr/local/bin/` |
+| `rbprobe`, `rbcat` | `/usr/local/bin/` |
 
 The module is built when headers for the running kernel are installed
 (`-DKERNEL_RELEASE=` picks another kernel, `-DRADIOBERRY_BUILD_MODULE=OFF`
@@ -134,6 +135,20 @@ to `build-coverage/coverage/html`.
   commands, identity and statistics by ioctl. `driver/include/radioberry_ioctl.h`
   documents it. Closing the device sends the gateware a command that
   clears run, PTT, the TX permission bit, PA enable and drive.
+- `rbcat` receives from `/dev/radioberry` without the daemon: it sets the
+  sample rate (`--rate 48|96|192|384`), receiver count (`--receivers`),
+  frequencies (`--freq HZ[,HZ...]`) and LNA gain (`--lna`, -12 to 48 dB),
+  streams for `--seconds` (or until SIGINT or SIGTERM) after a settling
+  time (`--settle`, 0.5 s), and reports frame rate, RMS and peak level
+  per receiver, and the driver's resync, dropped-word and overrun counts
+  over the measurement and over the settling time, as text, `--json` or
+  `--yaml`. `--output iq24` writes the frames to stdout as read (24-bit
+  big-endian I and Q per receiver), `--output iq16` the top 16 bits of
+  each value as little-endian int16; the report then goes to stderr.
+  `--interval S` prints a progress line every S seconds. It never sets
+  PTT or the TX permission bit. Exit status 0 means a clean stream (no
+  faults after settling, frame rate within 1%), 1 stream faults or a
+  device error, 2 a usage error.
 - Receive capacity over the PIO bus is about 2.37 million values per
   second: up to six receivers at 192 ksps or three at 384 ksps.
 
@@ -144,7 +159,7 @@ docs/      design (plan-v1.md), development host, amplifier, upstream survey
 gateware/  gateware source, built bitfiles per FPGA, provenance, toolchain
 driver/    kernel module, device tree overlay, ABI header, logic tests
 daemon/    radioberryd (not started)
-tools/     rbprobe, shared library, CI and check scripts, gateware build
+tools/     rbprobe, rbcat, shared library, CI and check scripts, gateware build
 TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
 ```
 

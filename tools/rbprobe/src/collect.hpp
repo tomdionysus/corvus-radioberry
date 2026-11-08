@@ -5,8 +5,8 @@
 #include <string>
 #include <vector>
 
-#include "node.hpp"
 #include "radioberry/gateware_catalog.hpp"
+#include "radioberry/node.hpp"
 #include "source.hpp"
 
 namespace radioberry::probe {

@@ -32,6 +32,8 @@ if(RADIOBERRY_COVERAGE)
         "*/generated/*"
         "*/live_source.cpp"
         "*/gpiod_config_pins.cpp"
+        "*/linux_device.cpp"
+        "*/rbcat/src/main.cpp"
         CACHE STRING "lcov patterns excluded from the coverage report")
 
     add_custom_target(coverage

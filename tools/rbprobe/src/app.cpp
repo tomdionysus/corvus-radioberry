@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "app.hpp"
 
+#include <sstream>
+
 #include "collect.hpp"
+#include "radioberry/render.hpp"
 #include "radioberry/version.hpp"
-#include "render.hpp"
 
 namespace radioberry::probe {
 namespace {
@@ -28,6 +30,29 @@ constexpr const char* kUsage =
 enum class Format { kText, kJson, kYaml };
 
 }  // namespace
+
+std::string render_probe_text(const Node& root) {
+    std::ostringstream out;
+    out << render_text(root.without({"findings", "radio_can_run"}));
+    if (const Node* findings = root.find("findings")) {
+        out << "\nfindings\n";
+        if (findings->items().empty()) {
+            out << "  none\n";
+        }
+        for (const auto& f : findings->items()) {
+            const Node* severity = f.find("severity");
+            const Node* id = f.find("id");
+            const Node* message = f.find("message");
+            out << "  " << (severity ? scalar_text(*severity) : "") << ' '
+                << (id ? scalar_text(*id) : "") << ": " << (message ? scalar_text(*message) : "")
+                << '\n';
+        }
+    }
+    if (const Node* can_run = root.find("radio_can_run")) {
+        out << "\nradio can run: " << scalar_text(*can_run) << '\n';
+    }
+    return out.str();
+}
 
 int run_app(std::span<const std::string> args, Source& source, std::ostream& out,
             std::ostream& err) {
@@ -68,7 +93,7 @@ int run_app(std::span<const std::string> args, Source& source, std::ostream& out
     const Report report = collect(source, options);
     switch (format) {
         case Format::kText:
-            out << render_text(report.root);
+            out << render_probe_text(report.root);
             break;
         case Format::kJson:
             out << render_json(report.root);

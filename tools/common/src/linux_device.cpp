@@ -1,0 +1,93 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+//
+// The Device interface over the radioberry.ko character device. Hardware
+// glue, exercised on the Pi rather than by the unit tests.
+#include <fcntl.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
+
+#include <cerrno>
+#include <cstring>
+#include <system_error>
+
+#include "radioberry/device.hpp"
+
+namespace radioberry {
+namespace {
+
+[[noreturn]] void fail(const std::string& what) {
+    throw std::system_error(errno, std::generic_category(), what);
+}
+
+class LinuxDevice final : public Device {
+public:
+    explicit LinuxDevice(const std::string& path)
+        : path_(path), fd_(::open(path.c_str(), O_RDWR | O_CLOEXEC)) {
+        if (fd_ < 0) {
+            fail(path);
+        }
+    }
+    ~LinuxDevice() override { ::close(fd_); }
+    LinuxDevice(const LinuxDevice&) = delete;
+    LinuxDevice& operator=(const LinuxDevice&) = delete;
+
+    radioberry_info info() override {
+        radioberry_info info{};
+        if (::ioctl(fd_, RADIOBERRY_IOC_INFO, &info) != 0) {
+            fail(path_ + ": info");
+        }
+        return info;
+    }
+
+    radioberry_stats stats() override {
+        radioberry_stats stats{};
+        if (::ioctl(fd_, RADIOBERRY_IOC_STATS, &stats) != 0) {
+            fail(path_ + ": statistics");
+        }
+        return stats;
+    }
+
+    Reply command(const Command& command) override {
+        radioberry_command c{};
+        const auto bytes = command.encode();
+        std::memcpy(c.tx, bytes.data(), bytes.size());
+        if (::ioctl(fd_, RADIOBERRY_IOC_COMMAND, &c) != 0) {
+            fail(path_ + ": command");
+        }
+        return Reply::decode(std::span<const std::uint8_t, 6>(c.rx, 6));
+    }
+
+    std::size_t read(std::span<std::uint8_t> buffer) override {
+        const ssize_t n = ::read(fd_, buffer.data(), buffer.size());
+        if (n < 0) {
+            if (errno == EINTR) {
+                return 0;
+            }
+            fail(path_ + ": read");
+        }
+        return static_cast<std::size_t>(n);
+    }
+
+    std::size_t write(std::span<const std::uint8_t> buffer) override {
+        const ssize_t n = ::write(fd_, buffer.data(), buffer.size());
+        if (n < 0) {
+            if (errno == EINTR) {
+                return 0;
+            }
+            fail(path_ + ": write");
+        }
+        return static_cast<std::size_t>(n);
+    }
+
+private:
+    std::string path_;
+    int fd_;
+};
+
+}  // namespace
+
+std::unique_ptr<Device> open_device(const std::string& path) {
+    return std::make_unique<LinuxDevice>(path);
+}
+
+}  // namespace radioberry

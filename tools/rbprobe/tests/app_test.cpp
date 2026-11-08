@@ -47,6 +47,30 @@ TEST_CASE("output formats", "[app]") {
     CHECK(yaml.out.find("radio_can_run: false") != std::string::npos);
 }
 
+TEST_CASE("text output lists findings and the verdict", "[app]") {
+    const Run text = run({}, development_pi());
+    CHECK(text.out.find("host\n") == 0);
+    CHECK(text.out.find("\nfindings\n  blocker ") != std::string::npos);
+    CHECK(text.out.find("radio_can_run") == std::string::npos);
+}
+
+TEST_CASE("probe text with no findings and with a malformed one", "[app]") {
+    radioberry::Node root = radioberry::Node::map();
+    root.set("findings", radioberry::Node::seq());
+    root.set("radio_can_run", true);
+    std::string text = render_probe_text(root);
+    CHECK(text.find("findings\n  none\n") != std::string::npos);
+    CHECK(text.find("radio can run: yes") != std::string::npos);
+
+    radioberry::Node bad = radioberry::Node::map();
+    radioberry::Node findings = radioberry::Node::seq();
+    findings.push(radioberry::Node::map());
+    bad.set("findings", findings);
+    text = render_probe_text(bad);
+    CHECK(text.find("findings\n   : \n") != std::string::npos);
+    CHECK(text.find("radio can run") == std::string::npos);
+}
+
 TEST_CASE("identify options", "[app]") {
     FakeSource pi = development_pi();
     std::ostringstream out;

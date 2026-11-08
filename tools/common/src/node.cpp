@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-#include "node.hpp"
+#include "radioberry/node.hpp"
 
-namespace radioberry::probe {
+#include <algorithm>
+#include <array>
+#include <charconv>
+
+namespace radioberry {
 
 Node& Node::set(const std::string& key, Node value) {
     kind_ = Kind::kMap;
@@ -49,4 +53,20 @@ const Node* Node::at(const std::string& path) const {
     return node;
 }
 
-}  // namespace radioberry::probe
+Node Node::without(const std::vector<std::string>& keys) const {
+    Node copy = Node::map();
+    for (const auto& [key, value] : map_) {
+        if (std::find(keys.begin(), keys.end(), key) == keys.end()) {
+            copy.set(key, value);
+        }
+    }
+    return copy;
+}
+
+std::string format_double(double value) {
+    std::array<char, 32> buf{};
+    const auto result = std::to_chars(buf.data(), buf.data() + buf.size(), value);
+    return std::string(buf.data(), result.ptr);
+}
+
+}  // namespace radioberry

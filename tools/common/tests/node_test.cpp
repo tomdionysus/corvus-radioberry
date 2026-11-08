@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-#include "node.hpp"
+#include "radioberry/node.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
-using radioberry::probe::Node;
+using radioberry::Node;
 
 TEST_CASE("node scalars", "[node]") {
     CHECK(Node().is_null());
@@ -13,6 +13,11 @@ TEST_CASE("node scalars", "[node]") {
     CHECK(Node(8LL).as_int() == 8);
     CHECK(Node(9U).as_int() == 9);
     CHECK(Node(10UL).as_int() == 10);
+    CHECK(Node(11ULL).as_int() == 11);
+    CHECK(Node(2.5).as_double() == 2.5);
+    CHECK(Node(2.5).kind() == Node::Kind::kDouble);
+    CHECK(Node(1).is_scalar());
+    CHECK_FALSE(Node::map().is_scalar());
     CHECK(Node("text").as_string() == "text");
     CHECK(Node(std::string("s")).kind() == Node::Kind::kString);
     CHECK(Node(std::optional<std::string>{}).is_null());
@@ -55,4 +60,22 @@ TEST_CASE("node sequences", "[node]") {
     CHECK(s.items()[1].as_string() == "two");
     CHECK(s == s);
     CHECK_FALSE(s == Node::seq());
+}
+
+TEST_CASE("node without keys", "[node]") {
+    Node m = Node::map();
+    m.set("a", 1);
+    m.set("b", 2);
+    m.set("c", 3);
+    const Node rest = m.without({"b", "zz"});
+    REQUIRE(rest.entries().size() == 2);
+    CHECK(rest.entries()[0].first == "a");
+    CHECK(rest.entries()[1].first == "c");
+    CHECK(Node::map().without({"a"}).entries().empty());
+}
+
+TEST_CASE("doubles format in shortest form", "[node]") {
+    CHECK(radioberry::format_double(48000.0) == "48000");
+    CHECK(radioberry::format_double(-6.5) == "-6.5");
+    CHECK(radioberry::format_double(0.1) == "0.1");
 }

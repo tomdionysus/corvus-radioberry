@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-#include "render.hpp"
+#include "radioberry/render.hpp"
 
 #include <yaml-cpp/yaml.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <nlohmann/json.hpp>
 
-using namespace radioberry::probe;
+using namespace radioberry;
 
 namespace {
 
@@ -17,6 +17,7 @@ Node sample() {
     host.set("cores", 4);
     host.set("serial", Node());
     host.set("headers_ok", true);
+    host.set("load", 0.25);
     host.set("empty_map", Node::map());
     Node nets = Node::seq();
     Node n = Node::map();
@@ -68,7 +69,11 @@ nlohmann::ordered_json from_yaml(const YAML::Node& y) {
     if (YAML::convert<bool>::decode(y, b)) {
         return b;
     }
-    return y.as<long long>();
+    long long i = 0;
+    if (YAML::convert<long long>::decode(y, i)) {
+        return i;
+    }
+    return y.as<double>();
 }
 
 }  // namespace
@@ -83,6 +88,7 @@ TEST_CASE("JSON and YAML carry identical content", "[render]") {
     CHECK(json["radio_can_run"] == false);
     CHECK(json["host"]["empty_map"].is_object());
     CHECK(json["host"]["none_list"].is_array());
+    CHECK(json["host"]["load"] == 0.25);
 }
 
 TEST_CASE("YAML quotes strings that look like other types", "[render]") {
@@ -97,40 +103,41 @@ TEST_CASE("YAML quotes strings that look like other types", "[render]") {
     CHECK(y["looks_null"].as<std::string>() == "~");
 }
 
-TEST_CASE("text output lists sections, findings and the verdict", "[render]") {
+TEST_CASE("text output lists sections", "[render]") {
     const std::string text = render_text(sample());
     CHECK(text.find("host\n") == 0);
     CHECK(text.find("  model       Raspberry Pi 5\n") != std::string::npos);
     CHECK(text.find("  serial      -\n") != std::string::npos);
     CHECK(text.find("  headers_ok  yes\n") != std::string::npos);
+    CHECK(text.find("  load        0.25\n") != std::string::npos);
     CHECK(text.find("  empty_map   none\n") != std::string::npos);
     CHECK(text.find("    - name wlan0, nested ...\n") != std::string::npos);
     CHECK(text.find("    - scalar item\n") != std::string::npos);
     CHECK(text.find("version\n  0.0.1\n") != std::string::npos);
-    CHECK(text.find("findings\n  blocker driver.module: no module\n") != std::string::npos);
-    CHECK(text.find("radio can run: no\n") != std::string::npos);
+    CHECK(text.find("findings\n  - severity blocker, id driver.module, message no module\n") !=
+          std::string::npos);
+    CHECK(text.find("radio_can_run\n  no\n") != std::string::npos);
 }
 
-TEST_CASE("text output with no findings", "[render]") {
-    Node root = Node::map();
-    root.set("findings", Node::seq());
-    root.set("radio_can_run", true);
-    const std::string text = render_text(root);
-    CHECK(text.find("findings\n  none\n") != std::string::npos);
-    CHECK(text.find("radio can run: yes") != std::string::npos);
-}
-
-TEST_CASE("text output of a malformed finding and a nested top-level map", "[render]") {
+TEST_CASE("text output of empty and nested top-level values", "[render]") {
     Node root = Node::map();
     Node outer = Node::map();
     Node inner = Node::map();
     inner.set("k", "v");
     outer.set("inner", inner);
     root.set("outer", outer);
-    Node findings = Node::seq();
-    findings.push(Node::map());
-    root.set("findings", findings);
+    root.set("nothing", Node::seq());
     const std::string text = render_text(root);
     CHECK(text.find("outer\n  inner\n    k  v\n") != std::string::npos);
-    CHECK(text.find("findings\n   : \n") != std::string::npos);
+    CHECK(text.find("nothing\n  none\n") != std::string::npos);
+}
+
+TEST_CASE("scalar text", "[render]") {
+    CHECK(scalar_text(Node()) == "-");
+    CHECK(scalar_text(Node(false)) == "no");
+    CHECK(scalar_text(Node(-3)) == "-3");
+    CHECK(scalar_text(Node(1.5)) == "1.5");
+    CHECK(scalar_text(Node("s")) == "s");
+    CHECK(scalar_text(Node::map()).empty());
+    CHECK(scalar_text(Node::seq()).empty());
 }

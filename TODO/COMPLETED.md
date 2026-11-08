@@ -3,6 +3,21 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-08: `rbcat` in `tools/rbcat/`: sets rate, receiver count,
+  frequencies (duplex set, so receiver 1 follows its own frequency) and
+  LNA gain with PTT and the TX permission bit always clear (any command
+  that could transmit is refused), streams RX frames to stdout as iq24 or
+  iq16 or discards them, and reports frame rate, RMS and peak level per
+  receiver and the driver's counters over the measurement and the
+  settling time, as text, JSON or YAML; exit 0 only for a clean stream.
+  Logic tested against a fake device and clock. Shared by the tools in
+  `tools/common/`: the gateware command encoding and Hermes-Lite 2
+  commands (`command.hpp`), the `Device` interface over `/dev/radioberry`
+  (`device.hpp`), and the report tree and renderers moved from `rbprobe`
+  (`node.hpp`, `render.hpp`). Acceptance on the development Pi: 600 s at
+  48 ksps, 28 800 576 frames at 48000.9 frames/s, zero resyncs, dropped
+  words and overruns after settling and during it. Also clean: six
+  receivers at 192 ksps and three at 384 ksps.
 - 2026-11-08: Kernel driver, overlay and ABI header. `driver/kernel/`
   (`radioberry.c`; pure logic in `rb_logic.h` and `rb_pio.h`, unit tested
   in `driver/tests/`, PIO register words checked against upstream's),
