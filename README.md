@@ -9,9 +9,10 @@ component is built from this repository against the current Raspberry Pi OS
 kernel (6.18 and newer) with no dependency on out-of-tree kernel patches.
 
 The code is C++20, with C only where the kernel or a shared ABI header
-requires it. Every component carries unit tests with the aim of complete
-coverage; the kernel module's pure logic is compiled into a userspace test
-binary for the same purpose.
+requires it. Every component carries Catch2 unit tests with the aim of
+complete coverage; the kernel module's pure logic is compiled into a
+userspace test binary for the same purpose. All dependencies come from
+Debian trixie packages.
 
 ## Status
 
@@ -22,7 +23,7 @@ binary for the same purpose.
 | Platform probe (`rbprobe`) | `tools/` | planned, first deliverable |
 | FPGA gateware bitfiles (prebuilt, 10CL025 and 10CL016) | `gateware/` | planned |
 | Kernel driver (`radioberry.ko`, RP1 PIO plus DMA) | `driver/` | planned |
-| Radio daemon (Protocol 1 and Protocol 2, PA control) | `daemon/` | planned |
+| Radio daemon `radioberryd` (Protocol 1 and Protocol 2, PA control) | `daemon/` | planned |
 | Further tooling (loader, stream dump, protocol probes) | `tools/` | planned |
 
 Nothing is installable yet. `TODO/ACTIVE.md` is the authoritative list of
@@ -75,7 +76,9 @@ Pi. wdsp is not used.
 
 ```
 sudo apt install build-essential cmake device-tree-compiler \
-    linux-headers-rpi-2712 libliquid-dev libgpiod-dev libi2c-dev i2c-tools
+    linux-headers-rpi-2712 libliquid-dev libgpiod-dev libi2c-dev i2c-tools \
+    libyaml-cpp-dev nlohmann-json3-dev libspdlog-dev libsystemd-dev \
+    catch2 lcov clang-format
 ```
 
 Boot configuration in `/boot/firmware/config.txt`:
@@ -97,19 +100,24 @@ required by their licence.
 
 ## Build and install
 
-One entry point, run on the Pi from the repository root:
+CMake throughout, run on the Pi from the repository root:
 
 ```
-make            # driver, daemon, tools
-sudo make install FPGATYPE=CL025   # or CL016
-sudo systemctl enable --now corvus-radioberry
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFPGATYPE=CL025   # or CL016
+cmake --build build -j
+ctest --test-dir build
+sudo cmake --install build
+sudo systemctl enable --now radioberry
 rbprobe         # verify host, overlay, driver, gateware, PA board
 ```
 
-`make install` places `radioberry.ko` under `/lib/modules/$(uname -r)/`,
+`cmake --install` places `radioberry.ko` under `/lib/modules/$(uname -r)/`,
 the device tree overlay under `/boot/firmware/overlays/`, the gateware under
-`/lib/firmware/radioberry.rbf`, the daemon under `/usr/local/bin/`, and the
-systemd unit. A reboot is required the first time the overlay is installed.
+`/lib/firmware/radioberry.rbf`, `radioberryd` and the tools under
+`/usr/local/bin/`, the udev rule, the `radioberry` system user and group,
+the default `/etc/radioberry/config.yaml`, and the systemd unit. The daemon
+never runs as root. A reboot is required the first time the overlay is
+installed.
 
 Until the components in the status table exist, these targets are not
 available.
@@ -118,13 +126,16 @@ available.
 
 - `rbprobe` prints a report of the Pi, kernel, overlay, driver, gateware
   (type, version, configured or not), PA board (I2C scan, manual-bias
-  board when nothing answers) and daemon state. `rbprobe --json` is the
-  machine-readable form; a non-zero exit code means the radio cannot run.
-- Start and stop: `systemctl start|stop corvus-radioberry`. Logs:
-  `journalctl -u corvus-radioberry`.
+  board when nothing answers) and daemon state. `rbprobe --json` and
+  `rbprobe --yaml` give the same content in machine-readable form; a
+  non-zero exit code means the radio cannot run.
+- Start and stop: `systemctl start|stop radioberry`. Logs:
+  `journalctl -u radioberry`. Configuration: `/etc/radioberry/config.yaml`.
 - Point the SDR client at the Pi's address. Protocol 1 clients discover on
   UDP 1024; Protocol 2 clients discover on the same port and then use ports
-  1025 to 1029 and 1035. Only one client owns the radio at a time.
+  1025 to 1029 and 1035 upward. Protocol 2 advertises as many DDCs as the
+  gateware has receivers (up to four) and one DUC. Only one client owns
+  the radio at a time.
 - The PA stage is never enabled by default. It is enabled only when the
   client sets the Hermes-Lite PA-enable bit and the daemon is started with
   PA control allowed. There is no thermal or current interlock on the
@@ -135,13 +146,18 @@ available.
 ## Repository layout
 
 ```
-docs/      hardware, host and background references
+docs/      hardware, host, plan and background references
 gateware/  prebuilt bitfiles per FPGA, provenance and corresponding source
 driver/    kernel module, device tree overlay, ioctl ABI header
-daemon/    radio daemon: device layer, Protocol 1, Protocol 2, DSP, PA
-tools/     rbprobe, loader, stream dump, protocol test clients
+daemon/    radioberryd: device layer, Protocol 1, Protocol 2, DSP, PA
+tools/     rbprobe, rbload, rbcat, rbctl, p1probe, p2probe, ci-pi.sh
 TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
 ```
+
+Development happens on `develop`, one branch per TODO item squash-merged
+into it; `main` receives `develop` only at version tags. `tools/ci-pi.sh`,
+run against a Pi with the hardware attached, is the merge gate. The full
+working conventions are in `CONTRIBUTING.md`.
 
 ## Licence
 

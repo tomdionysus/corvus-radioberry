@@ -76,8 +76,14 @@ rbprobe (C++20) reads every layer above without needing the daemon.
 
 Directory per component: `driver/`, `daemon/`, `tools/`, `gateware/`.
 Language: C++20 everywhere except the kernel module and the ioctl ABI
-header, which are C. Build: one top-level Makefile driving kbuild for the
-module and CMake for everything else.
+header, which are C. Build and install: CMake throughout, with a custom
+target that invokes kbuild for the module. Dependencies only from Debian
+trixie packages: Catch2 v3 for tests, yaml-cpp for configuration and YAML
+output, nlohmann/json for JSON output, spdlog for logging, liquid-dsp for signal processing, libgpiod and
+libi2c for hardware access. Names: `radioberryd`, `radioberry.service`,
+`/etc/radioberry/config.yaml`, namespace `radioberry`. The daemon runs as
+the `radioberry` system user with device access by udev rule and the
+capabilities needed for real-time threads.
 
 ## 4. Driver design
 
@@ -202,16 +208,18 @@ raised, not the architecture changed.
   the daemon says so at start-up.
 - DSP: liquid-dsp for resampling, filtering, NCO and measurement. wdsp is
   not used.
-- Operations: systemd unit, config file, `--version`, structured logs,
-  counters exposed for `rbprobe` and tests. No network access other than
-  the protocol ports; nothing phones home.
+- Operations: systemd unit running unprivileged, YAML config file,
+  `--version`, spdlog to the journal, counters exposed for `rbprobe` and
+  tests. No network access other than the protocol ports; nothing phones
+  home.
 
 ## 6. Platform probe
 
 `rbprobe` is the first deliverable because every later step needs a
 trustworthy statement of what the machine is. It reports host, boot
 configuration, driver and firmware state, FPGA configuration and identity,
-PA board classification and daemon state, in text and JSON, and exits
+PA board classification and daemon state, as human text, JSON or YAML with
+identical content, and exits
 non-zero when the radio cannot run. On the development Pi today it must
 report: FPGA 10CL025, installed gateware image of the wrong family and
 type, no I2C devices, driver absent. Its probes sit behind an interface so
@@ -219,11 +227,12 @@ the report logic is tested against recorded fixtures.
 
 ## 7. Testing
 
-- Every component has unit tests aiming at complete coverage. The daemon
-  and tools reach it with fake device, fake sockets and fixture files. The
-  kernel module's pure logic is compiled into a userspace test binary; its
-  kernel glue is exercised by a userspace harness against `/dev/radioberry`
-  on the Pi.
+- Every component has Catch2 unit tests aiming at complete coverage,
+  measured with gcov and reported by lcov; ASan and UBSan builds run the
+  same tests. The daemon and tools reach coverage with fake device, fake
+  sockets and fixture files. The kernel module's pure logic is compiled
+  into a userspace test binary; its kernel glue is exercised by a userspace
+  harness against `/dev/radioberry` on the Pi.
 - Integration tests run a fake client against the daemon over loopback for
   both protocols, including fault injection for every fail-safe path.
 - Hardware validation is a fixed sequence on the development Pi: driver
@@ -231,14 +240,16 @@ the report logic is tested against recorded fixtures.
   transmit at zero drive into a dummy load with PA disabled; PA idle bias
   set with the trimmers while reading PA_CUR; transmit with PA enabled and
   output measured; an FT8 and corvus-protocol end-to-end pass.
-- A script builds everything on the Pi over SSH and runs the full test
-  set; it is the gate for merging.
+- `tools/ci-pi.sh` builds everything on the Pi over SSH, runs the full
+  test set, sanitizer builds, format and SPDX checks, and prints coverage;
+  it is the gate for squash-merging an item branch into `develop`. There
+  is no hosted CI.
 
 ## 8. Order of work
 
 1. `rbprobe`.
-2. Repository skeleton: Makefile, CMake, formatting, SPDX check, Pi build
-   script.
+2. Repository skeleton: CMake, formatting, SPDX check, Catch2 and coverage
+   wiring, Pi build script.
 3. Gateware bitfiles copied in with provenance; the wire formats and FIFO
    depths documented from the upstream Verilog; the correct image
    installed on the development Pi.
@@ -249,12 +260,11 @@ the report logic is tested against recorded fixtures.
    Protocol 2 with the resampler. `p1probe` and `p2probe` alongside.
 6. Hardware validation sequence, with results written into `docs/`.
 
-## 9. Decisions still open
+## 9. Decisions closed on 2026-11-08
 
-- Whether Protocol 2 transmit resampling stays in the daemon (planned) or
-  is later moved into gateware, which would reopen the fixed-gateware
-  constraint.
-- The Protocol 2 feature profile advertised at discovery beyond one DDC and
-  one DUC.
-- Whether an external ADC for PA_CUR is added so that PA current can be
-  reported through the protocols. Not in v1.
+- Protocol 2 transmit resampling lives in the daemon.
+- Protocol 2 discovery advertises the gateware's receiver count (up to
+  four DDCs), one DUC, 48 to 384 ksps, no wideband, diversity or audio.
+- No external ADC for PA_CUR in v1; PA current is not reported.
+- Tooling and conventions as listed in `TODO/ACTIVE.md` under Standing
+  decisions.

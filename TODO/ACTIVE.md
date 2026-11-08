@@ -8,25 +8,47 @@ acceptance test.
 
 - C++20 throughout; C only in the kernel module and shared ABI headers.
 - Unit tests on every component, aiming at complete coverage; kernel
-  module logic compiled into a userspace test binary.
+  module logic compiled into a userspace test binary. Catch2 v3, gcov with
+  lcov reports, ASan and UBSan test builds.
+- Dependencies from Debian trixie packages only: catch2, libyaml-cpp-dev,
+  nlohmann-json3-dev, libspdlog-dev, libliquid-dev, libgpiod-dev,
+  libi2c-dev, libsystemd-dev.
+- Build and install with CMake throughout, including a kbuild wrapper
+  target for the module; `cmake --install` places everything.
 - Gateware is copied in as prebuilt upstream bitfiles, never compiled here.
 - Development FPGA is a 10CL025 (verified 2026-11-08).
+- Names: daemon `radioberryd`, unit `radioberry.service`, config
+  `/etc/radioberry/config.yaml`, module `radioberry.ko`, C++ namespace
+  `radioberry`, tools `rbprobe`, `rbcat`, `rbctl`, `rbload`, `p1probe`,
+  `p2probe`.
+- Config files in YAML via yaml-cpp. Tool output in three forms: human
+  text (default), `--json` via nlohmann/json, `--yaml` via yaml-cpp.
+- Logging with spdlog: stderr in the foreground, journal as a service.
+- Runtime privileges: system user and group `radioberry`, udev rule for
+  `/dev/radioberry`, unit grants CAP_SYS_NICE and CAP_IPC_LOCK; never root.
+- CI is `tools/ci-pi.sh` run over SSH on the development Pi; it is the
+  merge gate. No hosted CI.
+- Workflow: one branch per TODO item, squash-merged into `develop`;
+  `develop` merged into `main` only at a version tag. No pull requests.
+- Protocol 2 transmit at 192 ksps is resampled in the daemon with
+  liquid-dsp; discovery advertises the gateware's receiver count (up to
+  four DDCs), one DUC, 48 to 384 ksps, no wideband, diversity or audio.
+- Code style: clang-format 19, Google base, 4-space indent, 100 columns;
+  `-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror`.
+- Version string from `git describe`, embedded at configure time.
 - `rbprobe` is the first deliverable.
 
 ## 0. Decisions to close
 
-- [ ] Protocol 2 transmit rate: resample 192 ksps to the gateware rate in
-      the daemon with liquid-dsp (`msresamp_crcf`), or add a 192 ksps DUC
-      path in the gateware. Recommendation: daemon resampler first.
-- [ ] Protocol 2 feature profile: which DDC count, sample rates and
-      wideband options are advertised. Minimum: one DDC at 48 to 384 ksps,
-      one DUC, no wideband, no diversity.
+- None. All pre-implementation decisions were closed on 2026-11-08 and
+  are listed under Standing decisions.
 
 ## 1. Platform probe (`tools/rbprobe`)
 
-- [ ] C++20 binary, dependencies libgpiod and libi2c only. Probes behind
-      an interface so the report logic is tested against fake sysfs,
-      device tree, GPIO and I2C contents.
+- [ ] C++20 binary, dependencies libgpiod, libi2c, yaml-cpp,
+      nlohmann/json and spdlog.
+      Probes behind an interface so the report logic is tested against
+      fake sysfs, device tree, GPIO and I2C contents.
 - [ ] Host: model, revision, serial, OS, kernel, matching headers,
       bootloader date, PMIC rails and throttle flags, Ethernet and Wi-Fi
       link state.
@@ -43,20 +65,23 @@ acceptance test.
       VA2SAJ); "manual-bias board, no telemetry" when empty.
 - [ ] Software: daemon version and service state, open UDP ports,
       liquid-dsp and piHPSDR versions.
-- [ ] Text report and `--json`; non-zero exit when the radio cannot run.
+- [ ] Human text report (default), `--json` and `--yaml` with identical
+      content; non-zero exit when the radio cannot run.
       Acceptance: run on the development Pi reports 10CL025, wrong
       installed image, no I2C devices, driver absent, and exits non-zero.
 
 ## 2. Repository and build skeleton
 
-- [ ] Top-level `Makefile` with `all`, `install`, `uninstall`, `clean`
-      and `FPGATYPE` selection; per-component makefiles under `driver/`,
-      `daemon/`, `tools/`; CMake for the daemon.
-- [ ] `.gitignore`, `.editorconfig`, clang-format configuration, SPDX
-      header check script under `tools/`.
-- [ ] CI-equivalent script that builds everything on the Pi over SSH and
-      runs the unit tests (`tools/ci-pi.sh`).
-      Acceptance: script exits 0 on a clean checkout on the Pi.
+- [ ] Top-level `CMakeLists.txt` with subdirectories `driver/`, `daemon/`,
+      `tools/`, `gateware/`; the module built through a custom target that
+      invokes kbuild; `FPGATYPE` cache variable; install rules for module,
+      overlay, firmware, binaries, udev rule, system user and unit.
+- [ ] `.editorconfig`, `.clang-format` (Google base, 4 spaces, 100
+      columns), SPDX header check and format check under `tools/`.
+- [ ] Catch2 wiring with gcov, lcov report target, ASan and UBSan presets.
+- [ ] `tools/ci-pi.sh`: builds everything on the Pi over SSH, runs unit
+      tests, sanitizer builds, format and SPDX checks, prints coverage.
+      Acceptance: exits 0 on a clean checkout on the Pi.
 
 ## 3. Kernel driver (`driver/`)
 
@@ -124,8 +149,9 @@ acceptance test.
 - [ ] Real-time setup: thread priorities, CPU affinity, socket buffer
       sizes, `SO_PRIORITY`; measured RX packet jitter over Wi-Fi and
       Ethernet recorded in `docs/platform.md`.
-- [ ] systemd unit `corvus-radioberry.service`, config file in
-      `/etc/corvus-radioberry.conf`, `--version`, structured logs.
+- [ ] systemd unit `radioberry.service` running as user `radioberry`
+      with CAP_SYS_NICE and CAP_IPC_LOCK, udev rule, config file
+      `/etc/radioberry/config.yaml`, `--version`, spdlog to the journal.
 - [ ] Unit tests (protocol encoders and decoders, resampler, device
       fake) and an integration test that runs a fake client against the
       daemon on loopback.

@@ -37,6 +37,20 @@ the CL016 image left CONF_DONE (GPIO 22) low, the CL025 image configured
 with CONF_DONE and nSTATUS (GPIO 26) both high. The loader and both images
 remain in a scratch directory on the Pi.
 
+### Known gateware images
+
+From the upstream tag of 2025-12-16 (commit 269e402). `rbprobe` identifies
+the installed image by these hashes.
+
+| Image | Family | FPGA | Size | SHA-256 |
+|---|---|---|---|---|
+| `SBC/rpi-5/releases/dev/CL025/radioberry.rbf` | rpi-5 PIO | 10CL025 | 334915 | fe6a4e8acb67fbf80aa679affc8f2e0e0abe15908938cb2aed10804b461105cd |
+| `SBC/rpi-5/releases/dev/CL016/radioberry.rbf` | rpi-5 PIO | 10CL016 | 275438 | 5f146a8c2113a888bd6b7d08d8ac9f62b796e79dd950ecd47b31b5ec1ebe9e48 |
+| `SBC/rpi-4/releases/dev/CL016/radioberry.rbf` | rpi-4 GPIO | 10CL016 | 276541 | aa5c36f42456bc5dee622a694db2b36aa31dadfbca2372e00e1cd952e7217da3 |
+
+The rpi-5 CL025 image is the correct one for the development board. The
+rpi-4 CL016 image is what is installed today.
+
 ## Operating system
 
 | Item | Value |
