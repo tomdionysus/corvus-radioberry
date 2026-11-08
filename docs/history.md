@@ -64,7 +64,8 @@ Files: `rb2-rp1-pio.c` (char device, ioctl, read, write),
 (bit-bangs the .rbf into the FPGA via request_firmware), `src/rb2-rpi5.c`
 (direct RP1 GPIO register access), `radioberry.dts` overlay.
 
-Behaviour that any replacement daemon must honour:
+Its behaviour, for reference (this project's driver replaces it with its
+own ABI, `driver/include/radioberry_ioctl.h`):
 
 - `/dev/radioberry` is exclusive (mutex_trylock on open, EBUSY otherwise).
 - One ioctl, `RADIOBERRY_IOC_COMMAND` (`_IOW('x', 1, __u8)`), carrying
@@ -198,12 +199,9 @@ driver and gateware unchanged, and swaps Protocol 1 for a narrow Protocol 2
 profile. Both daemons need the Protocol 1 daemon stopped first, since the
 device is exclusive and both bind UDP 1024.
 
-Points to keep in mind for work in this repository:
-
-- The driver ABI (63-sample reads, 4-byte TX samples, 6-byte SPI commands)
-  is defined by Radioberry-2.x, not by either daemon.
-- The driver build is pinned to a particular Pi kernel through the rp1-pio
-  symbols and the device tree overlay, which is the likely reason the older
-  Linux worked and a newer one may not.
-- radioberry-p2's 48 ksps TX decision is the main interoperability gap with
-  stock piHPSDR and other Protocol 2 hosts.
+What carries over into this project: the 6-byte SPI command (which is a
+Hermes-Lite 2 C0..C4 block plus a flag byte), the pin map, the PIO
+programs, and radioberry-p2's session and fail-safe semantics. What does
+not: the upstream driver ABI (63-sample reads), its build against a patched
+rp1-pio, and radioberry-p2's 48 ksps transmit profile, which stock piHPSDR
+cannot use.

@@ -1,15 +1,11 @@
 # PA: the amplifier board stacked on the Radioberry
 
-The Pi described in `platform.md` carries a Radioberry 2.x card and, on top
-of it, a small HF amplifier board of the "Radioberry PA HAT" family. The
-user describes it as a copy of the hish8612 Radioberry HAT PA30 design in
-the variant that has only manual bias potentiometers, bought from the
-AliExpress listing 1005008233825206. The board has not been inspected
-directly in this session. What follows is assembled from the published
-schematics of the three related designs, the seller's listing, and the
-upstream software that talks to boards of this family.
-
-Survey date: 2026-11-08.
+The development Pi (`platform.md`) carries a Radioberry 2.x card and, on
+top of it, a small HF amplifier board of the "Radioberry PA HAT" family,
+bought from AliExpress listing 1005008233825206. What follows comes from
+the published schematics of the related designs, the seller's listing,
+the upstream software that talks to boards of this family, and an I2C
+scan of the board. Status 2026-11-08.
 
 ## 1. The family, and which member is on the Pi
 

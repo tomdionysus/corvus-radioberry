@@ -46,7 +46,8 @@ SPI (section 4) and is the authority at run time.
   pattern (all zero bits except the last byte, `0xff`), so the version
   reads as 0.255. The driver must wait at least 1.7 s after CONF_DONE
   before trusting the identity word, and should poll until the major
-  version is non-zero. *Not yet measured.*
+  version is non-zero. Measured: the driver waits 1.8 s and the identity
+  is valid on its first poll.
 
 ## 3. Clocks
 
@@ -124,8 +125,9 @@ SPI (section 4) and is the authority at run time.
   200 MHz RP1 clock, five PIO cycles per nibble) one value takes 42 PIO
   cycles: at most about 2.38 million values per second. One receiver needs
   2 x rate values per second, so the upstream program carries six
-  receivers at 192 ksps (2.30 M/s) but only three at 384 ksps. *Not yet
-  measured.*
+  receivers at 192 ksps (2.30 M/s) but only three at 384 ksps. Measured on
+  the development board: 2.37 million values per second at saturation,
+  and no stream errors below it.
 
 ## 6. CN301 outputs and what keys the transmitter
 

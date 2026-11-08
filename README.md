@@ -1,10 +1,10 @@
 # corvus-radioberry
 
-A complete, self-contained software stack for the Radioberry 2.x HF
-transceiver HAT on a Raspberry Pi 5: Linux kernel driver, userspace radio
-daemon speaking OpenHPSDR Protocol 1 and Protocol 2, DSP support library,
-platform diagnostics, and control of the AURSINC PA5W V2 amplifier board,
-with the FPGA gateware built from its GPL source. Every component is built
+A self-contained software stack for the Radioberry 2.x HF transceiver HAT
+on a Raspberry Pi 5: Linux kernel driver, a radio daemon speaking
+OpenHPSDR Protocol 1 and Protocol 2 (DSP by liquid-dsp), platform
+diagnostics, and control of the AURSINC PA5W V2 amplifier board, with the
+FPGA gateware built from its GPL source. Every component is built
 from this repository against the current Raspberry Pi OS kernel (6.18 and
 newer) with no dependency on out-of-tree kernel patches.
 
@@ -19,64 +19,34 @@ complete coverage; the kernel module's pure logic is compiled into a
 userspace test binary for the same purpose. All dependencies come from
 Debian trixie packages.
 
-## Status
+## Status (2026-11-08)
 
 | Component | Directory | State |
 |---|---|---|
-| Documentation of the hardware and host | `docs/` | current |
-| Work tracking | `TODO/` | current |
-| Platform probe (`rbprobe`) | `tools/rbprobe/` | working; gateware identity via the driver waits for the driver |
-| FPGA gateware (Hermes-Lite 2 Radioberry PIO variants, 10CL025 and 10CL016) | `gateware/` | both built; CL025 verified on hardware; CL016 untested and misses AD9866 TX output timing (see `gateware/PROVENANCE.md`) |
-| Kernel driver (`radioberry.ko`, RP1 PIO plus DMA) and overlay | `driver/` | working: loads gateware, receive streaming verified; transmit path not yet exercised |
-| Radio daemon `radioberryd` (Protocol 1 and Protocol 2, PA control) | `daemon/` | planned |
-| Further tooling (loader, stream dump, protocol probes) | `tools/` | planned |
+| Platform probe `rbprobe` | `tools/rbprobe/` | working |
+| FPGA gateware, Hermes-Lite 2 Radioberry PIO variants 75.3 | `gateware/` | CL025 built and verified on hardware; CL016 built, untested, misses AD9866 TX output timing (`gateware/PROVENANCE.md`) |
+| Kernel driver `radioberry.ko`, overlay, ABI header | `driver/` | working: loads the gateware at boot, receive streaming verified; transmit path not yet exercised |
+| Radio daemon `radioberryd` (OpenHPSDR Protocol 1 and 2, PA control) | `daemon/` | not started |
+| Stream and protocol tools (`rbcat`, `rbctl`, `rbload`, `p1probe`, `p2probe`) | `tools/` | not started |
 
-`rbprobe`, the gateware, the kernel module, the overlay and the ABI
-header install today. `TODO/ACTIVE.md` is the authoritative list of
-what is being built and in which order.
+There is no daemon yet, so no SDR client can use the radio. The design of
+the whole stack is in `docs/plan-v1.md`; the open work, in order, is in
+`TODO/ACTIVE.md`.
 
 ## Target hardware and host
 
 - Raspberry Pi 5 running Raspberry Pi OS (Debian 13 trixie, 64-bit),
   kernel 6.18.60+rpt-rpi-2712 or newer. The stock in-tree `rp1-pio` driver
-  is used as-is.
-- Radioberry 2.x HAT (AD9866 front end, Intel Cyclone 10 LP), 0 to 30 MHz.
-  The development board carries a 10CL025; the 10CL016 is supported by
-  shipping its bitfile as well.
+  is used as it is.
+- Radioberry 2.x HAT (AD9866 front end, Intel Cyclone 10 LP 10CL025 or
+  10CL016), 0 to 30 MHz.
 - AURSINC "Radioberry Preamp Board V2" (PCB marked PA5W V2) stacked on the
   Radioberry: 1.5 to 3.5 W output, manual BIAS1/BIAS2 trimmers, INA199A1
   current sense on the PA_CUR header, no I2C devices.
-- Development and test host: one dedicated Pi 5 with the hardware above
-  attached, reached over SSH. Builds run on the Pi.
 
-Details: `docs/platform.md` (host), `docs/pa.md` (amplifier),
-`docs/history.md` (the upstream projects this replaces).
-
-## Protocols
-
-The daemon implements both OpenHPSDR Ethernet protocols:
-
-- Protocol 1 (Metis/Hermes USB-over-Ethernet framing, UDP port 1024,
-  1032-byte frames) in the Hermes-Lite 2 dialect, including the HL2
-  extensions for PA enable, drive and the slow-ADC status words. This is
-  what every Hermes-Lite-capable client expects today (piHPSDR, SparkSDR,
-  Quisk, SDR Console, Thetis).
-- Protocol 2 (openHPSDR Ethernet Protocol v4.x, UDP ports 1024 to 1029 and
-  1035 upward) with 24-bit I/Q, discovery, DDC/DUC configuration and
-  high-priority control. piHPSDR and Thetis speak it natively.
-
-Both run from the same driver and gateware; the daemon selects the protocol
-per client at discovery time. Protocol 2 transmit streams arrive at
-192 ksps and are resampled in the daemon to the gateware rate.
-
-## DSP library
-
-liquid-dsp (MIT) is the DSP library for everything in the daemon that is not
-done in the gateware: rate conversion between protocol and gateware sample
-rates, filtering, NCO mixing, measurement, and PureSignal support. Debian
-trixie ships 1.7.0 as `libliquid-dev`; upstream is 1.8.x. The minimum
-supported version is 1.7.0 and the Debian package is used for builds on the
-Pi. wdsp is not used.
+Details: `docs/platform.md` (development host), `docs/pa.md` (amplifier),
+`gateware/README.md` (FPGA interface), `docs/history.md` (the upstream
+projects this replaces).
 
 ## Requirements on the Pi
 
@@ -87,112 +57,105 @@ sudo apt install build-essential cmake device-tree-compiler \
     catch2 lcov clang-format-19 rsync
 ```
 
-Boot configuration in `/boot/firmware/config.txt`:
+`/boot/firmware/config.txt` needs:
 
 ```
 dtparam=i2c_arm=on
 dtoverlay=radioberry
 ```
 
-The overlay is built and installed by this repository; it enables `spi0`,
-`rp1_pio` and the `sdr,radioberry` platform device, and disables the
-spidev nodes.
+The `radioberry` overlay is built and installed by this repository. It
+enables `spi0` and `rp1_pio`, creates the `sdr,radioberry` device on
+`spi0` chip select 0 (SPI mode 3, 12.5 MHz) with the FPGA configuration
+GPIOs, and disables the spidev nodes.
 
-The gateware is the Hermes-Lite 2 `radioberry_pio_cl025` and
-`radioberry_pio_cl016` variants, version 75.3, built from the source in
-`gateware/source/` with Quartus Prime Lite on an x86-64 machine
-(`tools/build-gateware.sh`; toolchain and licence in
-`gateware/QUARTUS.md`) and committed as
-`gateware/rpi-5/<type>/radioberry.rbf`. The Pi only installs the result.
-`gateware/PROVENANCE.md` records the source commit and the hashes of the
-built images, and `gateware/README.md` the wire formats and control
-behaviour the driver and daemon rely on.
+## Gateware
+
+The FPGA runs the Hermes-Lite 2 `radioberry_pio_cl025` or
+`radioberry_pio_cl016` variant, version 75.3. The bitfiles in
+`gateware/rpi-5/<type>/radioberry.rbf` are built here from the unmodified
+source in `gateware/source/` with Quartus Prime Lite on an x86-64 machine
+(`tools/build-gateware.sh`; toolchain and licence in `gateware/QUARTUS.md`)
+and committed, so the Pi only installs them. `gateware/PROVENANCE.md`
+records the source commit, fitter seeds, hashes and timing results.
 
 ## Build and install
 
-CMake throughout, run on the Pi from the repository root:
+On the Pi, from the repository root:
 
 ```
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DFPGATYPE=CL025   # or CL016
+cmake -S . -B build -DFPGATYPE=CL025   # or CL016
 cmake --build build -j
 ctest --test-dir build
 sudo cmake --install build
-sudo systemctl enable --now radioberry
-rbprobe         # verify host, overlay, driver, gateware, PA board
+sudo reboot                            # first install of the overlay only
+rbprobe
 ```
 
-`cmake --install` places `radioberry.ko` under `/lib/modules/$(uname -r)/updates/`,
-the device tree overlay under `/boot/firmware/overlays/`, the gateware under
-`/lib/firmware/radioberry.rbf`, `radioberryd` and the tools under
-`/usr/local/bin/`, the udev rule, the `radioberry` system user and group,
-the default `/etc/radioberry/config.yaml`, and the systemd unit. The daemon
-never runs as root. A reboot is required the first time the overlay is
-installed.
+`cmake --install` places:
 
-`CMakePresets.json` provides `default`, `asan` (AddressSanitizer and
-UndefinedBehaviorSanitizer) and `coverage` presets; with the last,
-`cmake --build --preset coverage --target coverage` runs the tests and
-writes an lcov report to `build-coverage/coverage/html`. The kernel module
-is built when headers for the running kernel are installed
+| What | Where |
+|---|---|
+| kernel module | `/lib/modules/$(uname -r)/updates/radioberry.ko` (then `depmod`) |
+| overlay | `/boot/firmware/overlays/radioberry.dtbo` |
+| gateware for `FPGATYPE` | `/lib/firmware/radioberry.rbf` |
+| both gateware images | `/usr/local/share/radioberry/gateware/rpi-5/<type>/` |
+| ABI header | `/usr/local/include/radioberry_ioctl.h` |
+| `rbprobe` | `/usr/local/bin/` |
+
+The module is built when headers for the running kernel are installed
 (`-DKERNEL_RELEASE=` picks another kernel, `-DRADIOBERRY_BUILD_MODULE=OFF`
-skips it). Every gateware image goes to
-`/usr/local/share/radioberry/gateware/rpi-5/<type>/`; the one for
-`FPGATYPE` (default `CL025`) is also installed as
-`/lib/firmware/radioberry.rbf`.
+skips it). `CMakePresets.json` has `default`, `asan` (AddressSanitizer and
+UndefinedBehaviorSanitizer) and `coverage` presets;
+`cmake --build --preset coverage --target coverage` writes an lcov report
+to `build-coverage/coverage/html`.
 
-Until the components in the status table exist, only the `cmake`,
-`ctest` and `cmake --install` steps work; there is no daemon or service
-to enable yet.
+## Using it
 
-## Using the radio
-
-- `rbprobe` prints a report of the Pi, kernel, overlay, driver, gateware
-  (type, version, configured or not), PA board (I2C scan, manual-bias
-  board when nothing answers) and daemon state. `rbprobe --json` and
-  `rbprobe --yaml` give the same content in machine-readable form. Exit
-  status 0 means the radio can run, 1 that it cannot (each blocker is
-  listed under `findings`), 2 a usage error. Run it as root to see device
-  holders and the I2C bus.
+- `rbprobe` reports the Pi, kernel, overlay, driver, installed gateware,
+  FPGA type and gateware identity, PA board (I2C scan) and daemon state.
+  `--json` and `--yaml` give the same content. Exit status 0 means the
+  radio can run, 1 that it cannot (each blocker is listed under
+  `findings`), 2 a usage error. Run it as root to see device holders and
+  the I2C bus.
 - `rbprobe --identify` finds out which FPGA the board carries by loading
   each known rpi-5 gateware image in turn until one configures the chip.
   It reprograms the FPGA, so it refuses to run while the driver is loaded.
   It looks for `.rbf` files in `/usr/local/share/radioberry/gateware`,
   `/usr/share/radioberry/gateware` and `/lib/firmware`; `--gateware-dir`
   replaces that list.
-- Start and stop: `systemctl start|stop radioberry`. Logs:
-  `journalctl -u radioberry`. Configuration: `/etc/radioberry/config.yaml`.
-- Point the SDR client at the Pi's address. Protocol 1 clients discover on
-  UDP 1024; Protocol 2 clients discover on the same port and then use ports
-  1025 to 1029 and 1035 upward. Protocol 2 advertises as many DDCs as the
-  gateware has receivers (up to four) and one DUC. Only one client owns
-  the radio at a time.
-- The PA stage is never enabled by default. It is enabled only when the
-  client sets the Hermes-Lite PA-enable bit and the daemon is started with
-  PA control allowed. There is no thermal or current interlock on the
-  PA5W V2; the daemon enforces a drive ceiling and a transmit watchdog, and
-  the operator sets idle bias with the trimmers while watching PA_CUR
-  (2 V per ampere). First transmissions go into a dummy load.
+- The driver loads the gateware when it binds, at boot, and publishes the
+  gateware identity in `/sys/bus/spi/devices/spi0.0/` (`gateware_version`,
+  `fpga_type`, `receivers`, `transmitters`). Module parameters:
+  `load_gateware` (default 1), `rx_clkdiv` (2), `tx_clkdiv` (8),
+  `rx_ring_kib` (512), `tx_ring_kib` (64).
+- `/dev/radioberry` is the interface for the daemon and tools: exclusive
+  open, whole RX frames from `read()`, TX samples to `write()`, gateware
+  commands, identity and statistics by ioctl. `driver/include/radioberry_ioctl.h`
+  documents it. Closing the device sends the gateware a command that
+  clears run, PTT, the TX permission bit, PA enable and drive.
+- Receive capacity over the PIO bus is about 2.37 million values per
+  second: up to six receivers at 192 ksps or three at 384 ksps.
 
 ## Repository layout
 
 ```
-docs/      hardware, host, plan and background references
+docs/      design (plan-v1.md), development host, amplifier, upstream survey
 gateware/  gateware source, built bitfiles per FPGA, provenance, toolchain
-driver/    kernel module, device tree overlay, ioctl ABI header
-daemon/    radioberryd: device layer, Protocol 1, Protocol 2, DSP, PA
-tools/     rbprobe, rbload, rbcat, rbctl, p1probe, p2probe, ci-pi.sh
+driver/    kernel module, device tree overlay, ABI header, logic tests
+daemon/    radioberryd (not started)
+tools/     rbprobe, shared library, CI and check scripts, gateware build
 TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
 ```
 
 Development happens on `develop`, one branch per TODO item squash-merged
-into it; `main` receives `develop` only at version tags. `tools/ci-pi.sh`,
-run against a Pi with the hardware attached, is the merge gate: on the Pi
-it runs the format check (`tools/check-format.sh`, clang-format 19), the
-SPDX check (`tools/check-spdx.sh`), the release, sanitizer and coverage
-builds with their tests, and prints the coverage summary. From a
-workstation, `tools/ci-pi.sh --remote [user@]host` copies the working tree
-to the Pi and runs it there. The full
-working conventions are in `CONTRIBUTING.md`.
+into it; `main` receives `develop` only at version tags.
+`tools/ci-pi.sh` is the merge gate: on the Pi it runs the format check
+(`tools/check-format.sh`, clang-format 19), the SPDX check
+(`tools/check-spdx.sh`), the release, sanitizer and coverage builds with
+their tests, and prints the coverage summary; from a workstation,
+`tools/ci-pi.sh --remote [user@]host` copies the working tree to the Pi
+and runs it there. Working conventions are in `CONTRIBUTING.md`.
 
 ## Licence
 

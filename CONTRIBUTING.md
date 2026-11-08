@@ -1,9 +1,11 @@
 # Working conventions
 
 How work is done in this repository. Read this, `README.md`,
-`docs/plan-v1.md` and `TODO/ACTIVE.md` before starting anything; between
-them they contain every decision already made. Do not reopen a decision
-listed under Standing decisions in `TODO/ACTIVE.md` without saying so.
+`TODO/ACTIVE.md` (where things stand, standing decisions, open work),
+`docs/plan-v1.md` (design) and `gateware/README.md` (what the FPGA does)
+before starting anything; between them they contain every decision already
+made. Do not reopen a decision listed under Standing decisions in
+`TODO/ACTIVE.md` without saying so.
 
 ## Starting a piece of work
 
@@ -12,8 +14,11 @@ listed under Standing decisions in `TODO/ACTIVE.md` without saying so.
 2. Branch from `develop`: `git checkout -b item/<section>-<short-slug>`,
    for example `item/1-rbprobe`.
 3. Build and test on the development Pi, not on the workstation. The Pi
-   is reached over SSH; its address and access details are not in this
-   repository.
+   is reached over SSH as root; its address and access details are kept
+   outside this repository. `tools/ci-pi.sh --remote [user@]host` builds
+   and tests the working tree there; for hardware tests, copy what you
+   need to the Pi and run it there. `docs/platform.md` describes the
+   machine and what is installed on it.
 
 ## Finishing a piece of work
 
@@ -52,6 +57,16 @@ listed under Standing decisions in `TODO/ACTIVE.md` without saying so.
   hostnames, serials or any other identifier of the development hardware
   or its network. Describe hosts generically.
 
+## Gateware
+
+- Never edit the gateware source. `tools/build-gateware.sh` rebuilds the
+  bitfiles on an x86-64 machine with Quartus Prime Lite
+  (`gateware/QUARTUS.md`); installing Quartus requires the person running
+  it to accept the Quartus licence agreement, so ask before doing it.
+- Commit rebuilt bitfiles together with the `PROVENANCE.md` table the
+  script updates, and add new hashes to the `rbprobe` catalogue
+  (`tools/common/src/gateware_catalog.cpp`).
+
 ## Commits
 
 - One logical change per squash commit on `develop`. Subject line in the
@@ -73,6 +88,11 @@ listed under Standing decisions in `TODO/ACTIVE.md` without saying so.
 
 ## Safety
 
+- No transmit test on the development board without the owner's explicit
+  permission for that test, asked at the time. Anything that sets PTT
+  (command bit 32) or the TX permission bit (bit 42), or writes samples
+  while either is set, is a transmit test. Receive tests, and TX-path tests
+  with both bits clear, need no permission.
 - The PA stage is never enabled by default and never without a dummy load
   on the first test of any new code path that can key the transmitter.
 - Any code that can assert MOX, PA enable or drive must have a timeout or

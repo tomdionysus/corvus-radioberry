@@ -3,7 +3,8 @@
 The first release of corvus-radioberry: scope, architecture, the reasoning
 behind each design choice, and the order of work. `TODO/ACTIVE.md` carries
 the itemised work with acceptance tests; this document is the design they
-implement. Dated 2026-11-08.
+implement. Status 2026-11-08: sections 4 (driver) and 6 (probe) are built
+and describe the code as it is; section 5 (daemon) is not started.
 
 ## 1. Goal
 
@@ -39,8 +40,9 @@ These are not design choices. They come from hardware we do not change.
   27 (nCONFIG), with 22 (CONF_DONE) and 26 (nSTATUS) read back. Volatile;
   reloaded on every driver probe.
 - Host: Raspberry Pi 5, RP1 with one PIO block of four state machines
-  shared with any other PIO consumer, stock `rp1-pio` kernel API with
-  bounce-buffered or cyclic DMA.
+  shared with any other PIO consumer, stock `rp1-pio` kernel API. Kernel
+  clients get bounce-buffered DMA (at most four buffers per direction);
+  cyclic DMA is reachable only through rp1-pio's own character device.
 - PA board: manual bias, no telemetry on I2C, analogue current output
   only, no interlock. PTT, key and paddle inputs are wired to the
   Radioberry's FPGA, not to the Pi.
@@ -59,12 +61,12 @@ These are not design choices. They come from hardware we do not change.
                            |  pa policy             |
                            |  device layer          |
                            +-----------|------------+
-                                       | /dev/radioberry: read, write, ioctl, poll, mmap
+                                       | /dev/radioberry: read, write, ioctl, poll
                            +-----------|------------+
                            | radioberry.ko (C)      |
                            |  probe, gateware load  |
-                           |  rx cyclic DMA ring    |
-                           |  tx cyclic DMA ring    |
+                           |  rx DMA, frame ring    |
+                           |  tx ring, DMA          |
                            |  spi control, stats    |
                            +-----------|------------+
                                        | rp1-pio, spi0, gpiod
@@ -125,8 +127,9 @@ capabilities needed for real-time threads.
   Any failure unwinds completely and fails the probe with a specific
   error. Identity is published in sysfs. A sysfs `reload` attribute will
   repeat the gateware load.
-- One character device, exclusive open, with `read`, `write`, `ioctl`,
-  `poll` and `mmap`.
+- One character device, exclusive open, with `read`, `write`, `ioctl`
+  and `poll`. Closing it sends the gateware a safe command (run, PTT, TX
+  permission, PA enable and drive all clear).
 - Pure logic (RX word parsing and metadata resync, frame assembly, TX
   word packing, statistics) lives in headers with no kernel dependencies
   so the same code compiles into a userspace test binary.
@@ -143,11 +146,11 @@ capabilities needed for real-time threads.
 - The period callback parses words, checks the metadata nibble sequence,
   resynchronises on a miss and increments counters (resync events, dropped
   words, overruns) instead of logging.
-- Samples are appended as 24-bit I/Q into a lock-free ring shared with
-  userspace. `read()` returns any whole number of samples up to the
-  request, `poll()` wakes at a configurable watermark, and `mmap()` exposes
-  the ring for zero-copy consumers. Ring overrun sets a flag readable by
-  ioctl and `POLLERR`; data is dropped in whole frames and counted. While
+- Whole frames (24-bit big-endian I/Q per receiver) go into a ring.
+  `read()` returns as many whole frames as fit the request, blocking or
+  not, and `poll()` reports a readable frame. Ring overrun sets a flag
+  readable by ioctl and `POLLERR`; data is dropped in whole frames and
+  counted. While
   the device is closed the parser keeps sync and nothing is queued.
 - Receiver count and sample rate follow the gateware command the daemon
   issues; the driver observes the command and resizes its parsing. The
@@ -191,10 +194,10 @@ capabilities needed for real-time threads.
 | Stream fault reporting | none | counters and `POLLERR` |
 | Driver build | private kernel patch | stock kernel headers |
 
-The targets depend on rp1-pio cyclic DMA completion latency under load,
-which has not yet been measured on the Pi 5. `rbcat` measures it before the
-driver design is frozen; if the period callback proves late, the period is
-raised, not the architecture changed.
+Measured so far: the driver builds on stock headers, and receive runs at
+exact rates with no stream faults up to the PIO bus ceiling. Latency and
+TX buffering are still to be measured with `rbcat`; if DMA completion
+proves late, the period is raised, not the architecture changed.
 
 ## 5. Daemon design
 
@@ -206,7 +209,8 @@ raised, not the architecture changed.
   against a fake device. The radioberry-p2 draft already has this shape
   and its fail-safe semantics; they are carried forward.
 - Protocol 1, Hermes-Lite 2 dialect: discovery, start and stop, 1032-byte
-  frames for one to four receivers at 48 to 384 ksps, the full C0 command
+  frames for the gateware's receivers at 48 to 384 ksps within the RX
+  capacity (section 4.3), the full C0 command
   set including PA enable and drive, ADC status words reported as absent,
   TCP transport. Every client that speaks to a Hermes-Lite 2 works
   unchanged.
@@ -237,15 +241,13 @@ raised, not the architecture changed.
 
 ## 6. Platform probe
 
-`rbprobe` is the first deliverable because every later step needs a
-trustworthy statement of what the machine is. It reports host, boot
-configuration, driver and firmware state, FPGA configuration and identity,
-PA board classification and daemon state, as human text, JSON or YAML with
-identical content, and exits
-non-zero when the radio cannot run. On the development Pi today it must
-report: FPGA 10CL025, installed gateware image of the wrong family and
-type, no I2C devices, driver absent. Its probes sit behind an interface so
-the report logic is tested against recorded fixtures.
+`rbprobe` gives a trustworthy statement of what the machine is: host,
+boot configuration, driver and installed gateware, FPGA configuration and
+identity (from the driver's sysfs attributes, or by configuration with
+`--identify` when the driver is not loaded), PA board classification and
+daemon state, as human text, JSON or YAML with identical content. It exits
+non-zero when the radio cannot run. Its probes sit behind an interface so
+the report logic is tested against an in-memory machine.
 
 ## 7. Testing
 
@@ -258,10 +260,11 @@ the report logic is tested against recorded fixtures.
 - Integration tests run a fake client against the daemon over loopback for
   both protocols, including fault injection for every fail-safe path.
 - Hardware validation is a fixed sequence on the development Pi: driver
-  probe and gateware identity; receive via Protocol 1 and Protocol 2;
-  transmit at zero drive into a dummy load with PA disabled; PA idle bias
-  set with the trimmers while reading PA_CUR; transmit with PA enabled and
-  output measured; an FT8 and corvus-protocol end-to-end pass.
+  probe and gateware identity (done); receive via Protocol 1 and Protocol 2;
+  transmit at zero drive into a dummy load with PA disabled; transmit with
+  PA enabled and output measured; an FT8 and corvus-protocol end-to-end
+  pass. PA idle bias is already set on the development board. Every
+  transmit step needs the owner's go-ahead at the time.
 - `tools/ci-pi.sh` builds everything on the Pi over SSH, runs the full
   test set, sanitizer builds, format and SPDX checks, and prints coverage;
   it is the gate for squash-merging an item branch into `develop`. There
@@ -269,15 +272,13 @@ the report logic is tested against recorded fixtures.
 
 ## 8. Order of work
 
-1. `rbprobe`.
+1. `rbprobe` (done).
 2. Repository skeleton: CMake, formatting, SPDX check, Catch2 and coverage
-   wiring, Pi build script.
-3. Gateware built from source with provenance; the wire formats and FIFO
-   depths documented from the upstream Verilog; the correct image
-   installed on the development Pi.
-4. Driver: probe and gateware load, control path, RX cyclic DMA and ring,
-   TX cyclic DMA and ring, statistics, userspace test harness. `rbcat`
-   and `rbctl` alongside.
+   wiring, Pi build script (done).
+3. Gateware built from source with provenance and interface notes (done).
+4. Driver: probe and gateware load, control path, RX and TX streams,
+   statistics (done); `rbcat` and `rbctl`, the remaining driver items and
+   the userspace test harness (next).
 5. Daemon: device layer, Protocol 1, session and PA policy, then
    Protocol 2 with the resampler. `p1probe` and `p2probe` alongside.
 6. Hardware validation sequence, with results written into `docs/`.
@@ -285,8 +286,11 @@ the report logic is tested against recorded fixtures.
 ## 9. Decisions closed on 2026-11-08
 
 - Protocol 2 transmit resampling lives in the daemon.
-- Protocol 2 discovery advertises the gateware's receiver count (up to
-  four DDCs), one DUC, 48 to 384 ksps, no wideband, diversity or audio.
+- Protocol 2 discovery advertises the gateware's receiver count (four
+  DDCs on the CL016, six on the CL025), one DUC, 48 to 384 ksps, no
+  wideband, diversity or audio.
+- The gateware is built here from the unmodified Hermes-Lite 2 source;
+  CL016 ships with its documented timing violation.
 - No external ADC for PA_CUR in v1; PA current is not reported.
 - Tooling and conventions as listed in `TODO/ACTIVE.md` under Standing
   decisions.

@@ -1,9 +1,8 @@
 # Platform: the development Raspberry Pi 5
 
 This note describes the machine corvus-radioberry is developed and tested
-on, as found over SSH on 2026-11-08 and updated the same day. Everything
-here was read from the live system. Host-specific identifiers (addresses,
-names, serials) are deliberately omitted.
+on. Status 2026-11-08, read from the live system. Host-specific
+identifiers (addresses, names, serials) are deliberately omitted.
 
 ## Access
 
@@ -27,14 +26,11 @@ names, serials) are deliberately omitted.
 | HAT EEPROM | none detected (no `/proc/device-tree/hat`), as expected for the Radioberry |
 
 The Radioberry 2.x card and the PA board are stacked on the 40-pin header.
-See `pa.md` for the amplifier. The device tree overlay has created the
-Radioberry's SPI control device, so the overlay side is live.
+See `pa.md` for the amplifier.
 
-**The FPGA is an Intel Cyclone 10 LP 10CL025.** Established on 2026-11-08
-by bit-banging the upstream Pi 5 gateware loader (`loadgateware3.c`,
-libgpiod 2) with both upstream rpi-5 GPIO-mode images: the CL016 image
-left CONF_DONE (GPIO 22) low, the CL025 image configured with CONF_DONE
-and nSTATUS (GPIO 26) both high. `rbprobe --identify` repeats the test.
+**The FPGA is an Intel Cyclone 10 LP 10CL025**: CL016 images leave
+CONF_DONE (GPIO 22) low, CL025 images configure it, and the driver reads
+FPGA type 10CL025 from the gateware.
 
 ### Known gateware images
 
@@ -62,8 +58,8 @@ CL025 PIO build (2026-11-08).
 | Kernel | 6.18.60+rpt-rpi-2712, built 2026-11-03 |
 | Also installed | 6.18.50+rpt-rpi-2712 (older image kernel) |
 | Headers | linux-headers for both kernels, plus the rpi-2712 and rpi-v8 metapackages |
-| Toolchain | gcc 14.2, g++ 14.2, device-tree-compiler; cmake 3.31 available from apt, not yet installed |
-| Libraries | libfftw3-dev, libgtk-3-dev, libgpiod-dev 2.2.1, i2c-tools 4.4; libliquid-dev 1.7.0 available from apt, not yet installed |
+| Toolchain | gcc 14.2, cmake 3.31, device-tree-compiler, clang-format 19, lcov 2.0, rsync |
+| Libraries | everything in the README requirements (catch2 3.7.1, libyaml-cpp-dev 0.8, nlohmann-json3-dev 3.11, libspdlog-dev 1.15, libliquid-dev 1.7.0, libgpiod-dev 2.2.1, libi2c-dev), plus libfftw3-dev and libgtk-3-dev for piHPSDR |
 
 The system was cloned from SD to the NVMe with a script; comments it
 appended to `config.txt` record the partition identifiers.
@@ -120,48 +116,34 @@ The upstream init script, its `radioberry.service`, overlay and archive
 are kept in the root account's home directory, out of the system paths.
 No radioberry daemon or service is installed yet.
 
-## Kernel facts that decide whether the upstream driver can build
+## Kernel facts the driver depends on
 
-- `rp1_pio` is an in-tree module in this kernel
-  (`drivers/misc/rp1-pio.ko.xz`, author Phil Elwell) and is loaded. It
-  created `pio0` with 38 ops and 2 interrupts.
-- The kernel API header is
-  `/usr/src/linux-headers-6.18.60+rpt-common-rpi/include/linux/pio_rp1.h`
-  (reached through the `build` symlink), with the ioctl argument structs in
-  `include/uapi/misc/rp1_pio_if.h`. `RP1_PIO_ORIGIN_ANY` and the
-  `PIO_DIR_FROM_SM` / `PIO_DIR_TO_SM` enums the driver uses are present.
-- The installed headers' `Module.symvers` exports 51 `rp1_pio_*` symbols.
-  `rp1_pio_open`, `rp1_pio_sm_claim`, `rp1_pio_sm_config_xfer`,
-  `rp1_pio_sm_xfer_data` (with the same eight-argument signature the driver
-  calls), `rp1_pio_sm_drain_tx`, `rp1_pio_gpio_set_function` and
-  `rp1_pio_gpio_set_pulls` are all there. The `KBUILD_EXTRA_SYMBOLS` line in
-  the upstream Makefile is therefore unnecessary and must be removed, since
-  its target does not exist.
-- **`rp1_pio_sm_buffer_virt` is not exported by this kernel and is not
-  declared in its headers.** The upstream rpi-5 driver calls it in both the
-  RX and TX stream code to write straight into the PIO DMA buffers. That
-  function came from a patched rp1-pio tree (the one the upstream Makefile
-  refers to). This is the concrete reason the upstream module cannot be
-  built against the stock 6.18 kernel as-is, and the likely reason it
-  worked on an older Linux. A port must either copy through the `data`
-  argument of `rp1_pio_sm_xfer_data` or carry the rp1-pio patch.
-- Stock behaviour, read from `drivers/misc/rp1-pio.c` on the rpi-6.18.y
-  branch: `rp1_pio_sm_config_xfer` allocates up to four coherent bounce
-  buffers of `buf_size` bytes (multiple of 4, non-cyclic count at most 4).
-  `rp1_pio_sm_xfer_data` with `dma_addr` 0 uses those buffers and, for
-  FROM_SM, runs a kernel `memcpy` into the caller's `data` buffer before
-  invoking the callback from the dmaengine completion. The upstream driver's
-  24576-byte RX and 16384-byte TX transfers with two buffers fit inside
-  those limits, so replacing the two `buffer_virt` uses with a kernel buffer
-  passed as `data` is the minimal change.
+- `rp1_pio` is an in-tree module (`drivers/misc/rp1-pio.ko.xz`), loaded at
+  boot, instance `pio0`. Its kernel API is
+  `include/linux/pio_rp1.h` with argument structs in
+  `include/uapi/misc/rp1_pio_if.h` in the kernel headers.
+- It exports 51 `rp1_pio_*` symbols, but not `rp1_pio_sm_buffer_virt`,
+  which the upstream driver needed from a patched rp1-pio.
+- Read from `drivers/misc/rp1-pio.c` on the rpi-6.18.y branch:
+  `rp1_pio_sm_config_xfer()` allocates up to four coherent bounce buffers
+  per state machine and direction; `rp1_pio_sm_xfer_data()` with
+  `dma_addr` 0 never blocks, returns `-EBUSY` when all buffers are in
+  flight, allocates with `GFP_KERNEL` (so it must be called from process
+  context), copies FROM_SM data into the caller's buffer and then calls
+  the caller's callback from the DMA completion (softirq). Cyclic DMA
+  exists only through the character device's ioctls.
+- `rp1_pio_add_program()` takes programs written for offset 0; the RP1
+  firmware relocates jump targets to the load offset.
+- `rp1_pio_close()` disables and unclaims the client's state machines and
+  frees their DMA.
 
 ## Devices and buses seen
 
 - GPIO chips: `gpiochip0` (RP1, 54 lines), `gpiochip10` to `13` (BCM2712
   internal). `/dev/gpiochip4` is a symlink to `gpiochip0`.
-- GPIO 4, 5, 6, 12, 18 to 27 are all unclaimed inputs with no alt function.
-  These are the pins the Radioberry driver takes over for the RX and TX
-  PIO streams and for FPGA configuration.
+- With the driver bound, GPIO 4, 5, 6, 12, 18 to 21 and 25 belong to the
+  RP1 PIO (stream pins) and GPIO 13, 22, 24, 26, 27 are held by the driver
+  (FPGA configuration).
 - No `/dev/spidev*` (disabled by the overlay). `/dev/i2c-1` present since
   2026-11-08, with nothing on the bus.
 - PCIe: NVMe on one bus, RP1 south bridge on the other.
@@ -171,13 +153,15 @@ No radioberry daemon or service is installed yet.
 ## Working practice on this machine
 
 - All builds run on the Pi itself over SSH; there is no cross toolchain.
-- The only git checkout on the box is the wdsp one used to build piHPSDR.
-  New source trees go under the root or the ordinary user's home.
+  The gateware is built elsewhere (x86-64, `gateware/QUARTUS.md`).
 - `tools/ci-pi.sh --remote` keeps its copy of the tree in the root
-  account's home directory on the Pi. A blobless clone of the Hermes-Lite 2
-  repository, used to locate the gateware source, is also kept there.
-- No radioberry service runs, so nothing needs stopping before driver
-  work. Once a driver loads, `/dev/radioberry` is exclusive, so only one
-  daemon may open it.
+  account's home directory and builds there; `cmake --install` from that
+  copy is how the installed files above got there.
+- Reference clones (Hermes-Lite 2 and the Raspberry Pi kernel's
+  `drivers/misc`, both blobless or sparse) are kept in the root account's
+  home directory for reading upstream sources.
+- `/dev/radioberry` is exclusive. The module can be reloaded with
+  `rmmod radioberry; modprobe radioberry` (add `load_gateware=0` to keep
+  the FPGA as it is).
 - Reboots and config changes are fine at any time; the desktop session is
   not in use for anything that must survive them.
