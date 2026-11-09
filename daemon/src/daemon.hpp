@@ -48,7 +48,7 @@ class Daemon {
 public:
     // Reads the gateware identity and binds the sockets; throws
     // std::system_error when either fails.
-    Daemon(Device& device, DaemonOptions options);
+    Daemon(Device& device, const DaemonOptions& options);
     ~Daemon();
     Daemon(const Daemon&) = delete;
     Daemon& operator=(const Daemon&) = delete;

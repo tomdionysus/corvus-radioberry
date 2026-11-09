@@ -45,6 +45,7 @@ int main(int argc, char** argv) {
     }
     // Under systemd stderr is the journal: log to it directly, with each
     // message's priority and the journal's own timestamps.
+    // NOLINTNEXTLINE(concurrency-mt-unsafe): runs before any thread starts
     if (std::getenv("JOURNAL_STREAM") != nullptr) {
         spdlog::set_default_logger(std::make_shared<spdlog::logger>(
             "radioberryd", std::make_shared<spdlog::sinks::systemd_sink_mt>("radioberryd")));

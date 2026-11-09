@@ -51,7 +51,7 @@ bool breaks_transmit(FaultKind kind) {
 
 }  // namespace
 
-Daemon::Daemon(Device& device, DaemonOptions options)
+Daemon::Daemon(Device& device, const DaemonOptions& options)
     : identity_(identify(device, options.mac)),
       session_([this] { service_.control().safe(); }, options.client_timeout),
       service_(

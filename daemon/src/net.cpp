@@ -137,8 +137,9 @@ void Network::accept_tcp() {
     }
     const std::lock_guard lock(tcp_mutex_);
     if (tcp_ >= 0) {
-        spdlog::warn("TCP connection from {} refused: one is already open",
-                     inet_ntoa(from.sin_addr));
+        char address[INET_ADDRSTRLEN] = "?";
+        ::inet_ntop(AF_INET, &from.sin_addr, address, sizeof address);
+        spdlog::warn("TCP connection from {} refused: one is already open", address);
         ::close(fd);
         return;
     }

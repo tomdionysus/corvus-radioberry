@@ -75,7 +75,10 @@ P2Receiver::P2Receiver(const std::string& host, std::uint16_t base_port) : base_
 
 P2Receiver::~P2Receiver() {
     if (started_) {
-        stop();
+        try {
+            stop();
+        } catch (...) {  // NOLINT(bugprone-empty-catch): the socket closes regardless
+        }
     }
     ::close(fd_);
 }

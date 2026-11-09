@@ -132,6 +132,9 @@ With `--mox` the probe holds MOX through the measurement:
 This keys the transmitter if the radio allows it (`radioberryd` with
 `allow_tx`), at drive 0.
 
+A radio that reports itself busy is asked again for about a second, in
+case its last client has only just stopped.
+
 Exit status: 0 every check passed (a discovery reply, the radio not busy
 with another client, the packet rate within the tolerance, no sequence
 breaks), 1 a check failed or the radio did not answer, 2 a usage error.

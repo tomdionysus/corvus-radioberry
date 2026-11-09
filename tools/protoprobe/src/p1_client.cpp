@@ -4,6 +4,8 @@
 // (EF FE 04), 1032-byte host packets carrying two C0..C4 command blocks
 // and 126 TX samples, 1032-byte radio packets carrying two status blocks
 // and the receivers' I/Q.
+#include <algorithm>
+#include <chrono>
 #include <stdexcept>
 #include <vector>
 
@@ -46,7 +48,7 @@ public:
         if (started_) {
             try {
                 stop();
-            } catch (...) {
+            } catch (...) {  // NOLINT(bugprone-empty-catch): a destructor must not throw
             }
         }
     }
@@ -114,7 +116,15 @@ public:
     void set_mox(bool mox) override { mox_ = mox; }
 
     bool poll(std::chrono::milliseconds timeout) override {
-        while (auto d = transport_.receive(timeout)) {
+        // Bounded as a whole: stray datagrams must not keep it waiting.
+        const auto deadline = std::chrono::steady_clock::now() + timeout;
+        for (;;) {
+            const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
+                deadline - std::chrono::steady_clock::now());
+            auto d = transport_.receive(std::max(left, std::chrono::milliseconds(0)));
+            if (!d) {
+                return false;
+            }
             const auto& p = d->bytes;
             if (d->offset != 0 || p.size() != kPacketBytes || p[0] != 0xef || p[1] != 0xfe ||
                 p[2] != 0x01 || p[3] != 0x06) {
@@ -131,7 +141,6 @@ public:
             }
             return true;
         }
-        return false;
     }
 
     void stop() override {
@@ -164,7 +173,8 @@ private:
             for (std::size_t s = 0; s < samples_per_half_; ++s) {
                 const std::size_t sample = at + 8 + s * sample_bytes;
                 for (unsigned n = 0; n < config_.receivers; ++n) {
-                    counts_.levels[n].add(s24(p, sample + 6 * n), s24(p, sample + 6 * n + 3));
+                    counts_.levels[n].add(s24(p, sample + std::size_t{6} * n),
+                                          s24(p, sample + std::size_t{6} * n + 3));
                 }
             }
         }

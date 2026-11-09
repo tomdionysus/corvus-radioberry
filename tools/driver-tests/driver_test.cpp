@@ -34,7 +34,7 @@ using Clock = std::chrono::steady_clock;
 using namespace std::chrono_literals;
 
 std::string device_path() {
-    const char* env = std::getenv("RADIOBERRY_DEVICE");
+    const char* env = std::getenv("RADIOBERRY_DEVICE");  // NOLINT(concurrency-mt-unsafe)
     return env != nullptr ? env : "/dev/radioberry";
 }
 
@@ -146,7 +146,7 @@ TEST_CASE("reads return whole frames for every receiver count", "[read]") {
         const radioberry_info i = info(fd.get());
         CHECK(i.active_receivers == n);
         CHECK(i.rx_rate_code == 0);
-        const std::size_t frame = 6u * n;
+        const std::size_t frame = std::size_t{6} * n;
         drain_for(fd.get(), frame, 50ms);
 
         const radioberry_stats before = stats(fd.get());
@@ -176,7 +176,7 @@ TEST_CASE("non-blocking reads drain to EAGAIN", "[read]") {
     Fd fd(O_NONBLOCK);
     REQUIRE(fd.get() >= 0);
     configure(fd.get(), 0, 1);
-    std::vector<std::uint8_t> buf(6 * 4096);
+    std::vector<std::uint8_t> buf(std::size_t{6} * 4096);
     bool again = false;
     for (int i = 0; i < 100000 && !again; ++i) {
         const ssize_t got = ::read(fd.get(), buf.data(), buf.size());
@@ -211,7 +211,7 @@ TEST_CASE("poll reports frames, TX space and RX overrun", "[poll]") {
     CHECK((p.revents & POLLERR) != 0);
 
     // Drain, then the statistics call reports and clears the overrun.
-    std::vector<std::uint8_t> buf(18 * 4096);
+    std::vector<std::uint8_t> buf(std::size_t{18} * 4096);
     while (::read(fd.get(), buf.data(), buf.size()) > 0) {
     }
     REQUIRE(errno == EAGAIN);
@@ -258,7 +258,7 @@ TEST_CASE("non-blocking writes fill the TX ring and it drains at 48 ksps", "[wri
     }
     const radioberry_stats full = stats(fd.get());
     CHECK(full.tx_ring_words > 0);
-    CHECK(written >= 32 * 1024);
+    CHECK(written >= std::size_t{32} * 1024);
     CHECK((full.flags & RADIOBERRY_STATS_PTT) == 0);
 
     // The gateware's own 4096-sample FIFO first fills at the PIO bus rate,
@@ -354,7 +354,7 @@ TEST_CASE("the daemon's device layer streams through the driver", "[service]") {
     CHECK_FALSE(s.failed);
     CHECK_FALSE(s.stalled);
     REQUIRE(s.driver.has_value());
-    CHECK((s.driver->flags & RADIOBERRY_STATS_PTT) == 0);
+    CHECK((s.driver.value_or(radioberry_stats{}).flags & RADIOBERRY_STATS_PTT) == 0);
     const std::lock_guard lock(mutex);
     for (const rd::Fault& f : faults) {
         UNSCOPED_INFO(rd::describe(f));

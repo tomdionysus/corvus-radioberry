@@ -167,7 +167,7 @@ ParseResult parse_options(Protocol protocol, std::span<const std::string> args) 
             if (!db || *db < -12 || *db > 48) {
                 return UsageError{"--lna must be -12 to 48"};
             }
-            o.stream.lna_db = *db;
+            o.stream.lna_db = db;
         } else if (arg == "--seconds" || arg == "--settle" || arg == "--tolerance") {
             const auto v = value();
             const auto x = v ? number<double>(*v) : std::nullopt;
@@ -200,9 +200,14 @@ Node probe(Protocol protocol, const Options& options, Client& client, const Cloc
         return report;
     };
 
+    // A radio that says it is busy may only be finishing with a client
+    // that has just stopped: ask again for a little over a second.
     std::optional<Radio> radio;
     const nanoseconds asked = now();
-    for (int attempt = 0; attempt < 3 && !radio; ++attempt) {
+    for (int attempt = 0; attempt < 5 && (!radio || radio->busy); ++attempt) {
+        if (radio) {
+            client.poll(milliseconds(250));
+        }
         radio = client.discover(milliseconds(500));
     }
     if (!radio) {

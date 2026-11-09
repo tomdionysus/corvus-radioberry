@@ -103,7 +103,12 @@ ParseResult parse_options(std::span<const std::string> args) {
         auto value = [&]() -> const std::string* {
             return i + 1 < args.size() ? &args[++i] : nullptr;
         };
-        auto bad = [&](const std::string& what) { return UsageError{arg + " needs " + what}; };
+        auto bad = [&](const std::string& what) {
+            std::string message = arg;
+            message += " needs ";
+            message += what;
+            return UsageError{message};
+        };
 
         if (arg == "--help" || arg == "-h") {
             return ShowHelp{};

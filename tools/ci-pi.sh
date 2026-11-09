@@ -100,6 +100,18 @@ cmake --preset default >/dev/null
 cmake --build --preset default -j "$jobs"
 ctest --preset default
 
+if command -v run-clang-tidy-19 >/dev/null; then
+    step "clang-tidy"
+    # Sources only: the tests' Catch2 macros and the vendored ft8_lib are
+    # not held to it.
+    run-clang-tidy-19 -p build -j "$jobs" -quiet \
+        '^(?!.*ft8_lib)(?!.*/tests/).*/(daemon|tools|examples|driver)/.*\.cpp$' >build/clang-tidy.log 2>&1 ||
+        { grep -E "(warning|error):" build/clang-tidy.log | sort -u; exit 1; }
+    echo "clang-tidy: ok"
+else
+    step "clang-tidy: skipped, run-clang-tidy-19 not installed"
+fi
+
 step "ASan and UBSan build and tests"
 cmake --preset asan >/dev/null
 cmake --build --preset asan -j "$jobs"

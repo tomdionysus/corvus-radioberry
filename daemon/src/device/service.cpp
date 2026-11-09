@@ -5,7 +5,8 @@
 
 namespace radioberry::daemon {
 
-DeviceService::DeviceService(Device& device, FaultSink sink, DeviceOptions options, Clock clock)
+DeviceService::DeviceService(Device& device, const FaultSink& sink, DeviceOptions options,
+                             Clock clock)
     : rx_ring_(options.rx_blocks),
       tx_ring_(options.tx_blocks),
       monitor_(sink, options.stall_after),

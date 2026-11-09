@@ -352,7 +352,10 @@ private:
                 }
                 const std::string fd_dir = "/proc/" + pid + "/fd";
                 for (const auto& fd : src_.list_dir(fd_dir)) {
-                    if (src_.read_link(fd_dir + "/" + fd).value_or("") == kDevicePath) {
+                    std::string link = fd_dir;
+                    link += '/';
+                    link += fd;
+                    if (src_.read_link(link).value_or("") == kDevicePath) {
                         Node h = Node::map();
                         h.set("pid", std::stol(pid));
                         h.set("command", file_trimmed("/proc/" + pid + "/comm"));
@@ -454,7 +457,9 @@ private:
             auto names = src_.list_dir(dir);
             std::sort(names.begin(), names.end());
             for (const auto& name : names) {
-                const std::string path = dir + "/" + name;
+                std::string path = dir;
+                path += '/';
+                path += name;
                 consider(path);
                 if (depth > 1) {
                     walk(path, depth - 1);

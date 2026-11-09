@@ -87,7 +87,7 @@ std::vector<std::string> config_args(const std::string& path) {
         }
         if (key == "realtime") {
             if (!on) {
-                out.push_back("--no-realtime");
+                out.emplace_back("--no-realtime");
             }
         } else if (on) {
             out.push_back(option);
@@ -141,7 +141,7 @@ Options parse_options(const std::vector<std::string>& command_line) {
         } else if (a == "--client-timeout-ms") {
             o.daemon.client_timeout = std::chrono::milliseconds(number(a, value(), 3'600'000));
         } else if (a == "--frequency-ppm") {
-            const std::string text = value();
+            const std::string& text = value();
             std::size_t used = 0;
             double ppm = 0;
             try {
@@ -154,7 +154,7 @@ Options parse_options(const std::vector<std::string>& command_line) {
             }
             o.daemon.frequency_ppm = ppm;
         } else if (a == "--iq-convention") {
-            const std::string text = value();
+            const std::string& text = value();
             if (text == "hl2") {
                 o.daemon.iq_convention = p1::IqConvention::Hl2;
             } else if (text == "standard") {
@@ -163,7 +163,7 @@ Options parse_options(const std::vector<std::string>& command_line) {
                 throw std::invalid_argument("--iq-convention: hl2 or standard: " + text);
             }
         } else if (a == "--p2-rx-gain") {
-            const std::string text = value();
+            const std::string& text = value();
             int db = 0;
             const auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), db);
             if (ec != std::errc{} || end != text.data() + text.size() || db < -12 || db > 48) {

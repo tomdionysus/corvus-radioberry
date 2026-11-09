@@ -130,6 +130,9 @@ std::uint64_t Session::faults() const {
 }
 
 void Session::drop_locked(const std::string& why) {
+    if (!owner_) {
+        return;
+    }
     spdlog::info("{} released the radio: {}", describe(*owner_), why);
     owner_.reset();
     mox_ = false;

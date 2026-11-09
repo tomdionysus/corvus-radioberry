@@ -28,7 +28,7 @@ std::filesystem::path find_rp1_chip() {
             if (chip.get_info().label() == "pinctrl-rp1") {
                 return entry.path();
             }
-        } catch (const std::exception&) {
+        } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch): not a usable chip
         }
     }
     throw std::runtime_error("no pinctrl-rp1 GPIO chip found");

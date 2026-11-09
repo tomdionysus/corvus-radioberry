@@ -55,7 +55,7 @@ struct DeviceSnapshot {
 // rx() and produces tx(), one thread each.
 class DeviceService {
 public:
-    DeviceService(Device& device, FaultSink sink, DeviceOptions options = {},
+    DeviceService(Device& device, const FaultSink& sink, DeviceOptions options = {},
                   Clock clock = steady_clock());
     ~DeviceService();
     DeviceService(const DeviceService&) = delete;

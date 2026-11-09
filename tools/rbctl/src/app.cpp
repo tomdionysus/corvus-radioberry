@@ -51,6 +51,7 @@ std::optional<std::uint32_t> parse_u32(const std::string& text) {
     }
     std::uint32_t value = 0;
     const char* end = digits.data() + digits.size();
+    // NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage): bounded by `end`
     const auto [ptr, ec] = std::from_chars(digits.data(), end, value, base);
     if (digits.empty() || ec != std::errc() || ptr != end) {
         return std::nullopt;

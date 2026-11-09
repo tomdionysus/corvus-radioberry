@@ -158,9 +158,9 @@ void RxPacker::begin_packet() {
 void RxPacker::add(const RxBlock& block, const std::function<Word()>& word,
                    const std::function<void(std::span<const std::uint8_t>)>& emit) {
     const std::size_t frame = rx_frame_bytes(block.receivers);
-    const std::size_t sample_bytes = 6u * receivers_ + 2u;
+    const std::size_t sample_bytes = std::size_t{6} * receivers_ + 2u;
     const std::size_t per_half = samples_per_half(receivers_);
-    const std::size_t copy = 6u * std::min(receivers_, block.receivers);
+    const std::size_t copy = std::size_t{6} * std::min(receivers_, block.receivers);
     for (std::size_t f = 0; f + frame <= block.size; f += frame) {
         std::uint8_t* out = packet_.data() + 8 + half_ * kHalfBytes + 8 + sample_ * sample_bytes;
         std::copy_n(block.bytes.begin() + static_cast<std::ptrdiff_t>(f), copy, out);

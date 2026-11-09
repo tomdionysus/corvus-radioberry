@@ -125,8 +125,12 @@ void Server::on_packet(unsigned port, std::span<const std::uint8_t> packet, cons
                 return;
             }
             break;
+        // Receiver and Transmitter Specific arrive on other sockets, read by
+        // another thread, so they can overtake the client's General: while
+        // the radio is free they claim it too, or the first configuration
+        // would be lost.
         case kRxSpecificPort:
-            if (const auto r = parse_rx_specific(packet); r && owned) {
+            if (const auto r = parse_rx_specific(packet); r && (owned || claim_locked(from, now))) {
                 session_.heard(me, now);
                 check_sequence_locked(last_rx_specific_, r->sequence);
                 rx_specific_locked(*r);
@@ -134,7 +138,7 @@ void Server::on_packet(unsigned port, std::span<const std::uint8_t> packet, cons
             }
             break;
         case kTxSpecificPort:
-            if (const auto t = parse_tx_specific(packet); t && owned) {
+            if (const auto t = parse_tx_specific(packet); t && (owned || claim_locked(from, now))) {
                 session_.heard(me, now);
                 check_sequence_locked(last_tx_specific_, t->sequence);
                 tx_specific_locked(*t);
@@ -398,8 +402,8 @@ void Server::rx_specific_locked(const RxSpecific& r) {
                          d.adc);
             warned_adc_ = true;
         }
-        wanted[n] = *code;
-        top = std::max(top.value_or(0), *code);
+        wanted[n] = code;
+        top = top ? std::max(*top, *code) : *code;
         highest = n;
     }
     if (!top) {
@@ -427,13 +431,14 @@ void Server::rx_specific_locked(const RxSpecific& r) {
     }
     for (std::size_t n = 0; n < ddcs_.size(); ++n) {
         DdcStream& s = *ddcs_[n];
-        if (!wanted[n]) {
+        const std::optional<unsigned> want_code = wanted[n];
+        if (!want_code) {
             s.enabled = false;
             continue;
         }
-        const unsigned factor = 1u << (*top - *wanted[n]);
-        if (!s.enabled || s.rate_code != *wanted[n] || s.decimator->factor() != factor) {
-            s.rate_code = *wanted[n];
+        const unsigned factor = 1u << (*top - *want_code);
+        if (!s.enabled || s.rate_code != *want_code || s.decimator->factor() != factor) {
+            s.rate_code = *want_code;
             s.decimator = std::make_unique<dsp::Decimator>(factor);
             s.fill = 0;
         }

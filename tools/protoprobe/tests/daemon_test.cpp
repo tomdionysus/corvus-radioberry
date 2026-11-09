@@ -114,9 +114,10 @@ TEST_CASE("p1probe streams from radioberryd", "[protoprobe][daemon]") {
     Running r(false);
     App app;
     const std::string port = std::to_string(r.daemon.port());
-    CHECK(app.run(Protocol::kOne, {"--port", port, "--receivers", "2", "--rate", "96", "--seconds",
-                                   "1", "--tolerance", "25", "--json"}) == kExitOk);
+    const int rc = app.run(Protocol::kOne, {"--port", port, "--receivers", "2", "--rate", "96",
+                                            "--seconds", "1", "--tolerance", "25", "--json"});
     INFO(app.out.str() << app.err.str());
+    CHECK(rc == kExitOk);
     CHECK(app.out.str().find("\"pass\": true") != std::string::npos);
     CHECK(app.out.str().find("\"sequence_breaks\": 0") != std::string::npos);
     CHECK_FALSE(r.ptt_commanded());
@@ -132,9 +133,10 @@ TEST_CASE("p1probe MOX reaches the device only with transmit allowed", "[protopr
     }
     Running allowed(true);
     App app;
-    CHECK(app.run(Protocol::kOne, {"--port", std::to_string(allowed.daemon.port()), "--mox",
-                                   "--seconds", "0.5", "--tolerance", "25"}) == kExitOk);
+    const int rc = app.run(Protocol::kOne, {"--port", std::to_string(allowed.daemon.port()),
+                                            "--mox", "--seconds", "0.5", "--tolerance", "25"});
     INFO(app.out.str() << app.err.str());
+    CHECK(rc == kExitOk);
     CHECK(allowed.ptt_commanded());
     // Drive stays 0 throughout: no 0x09 command carries any.
     const std::lock_guard lock(allowed.device.mutex);
@@ -149,16 +151,18 @@ TEST_CASE("p2probe streams from radioberryd and holds MOX", "[protoprobe][daemon
     Running r(true);
     App app;
     const std::string port = std::to_string(r.daemon.port());
-    CHECK(app.run(Protocol::kTwo, {"--port", port, "--receivers", "3", "--seconds", "1",
-                                   "--tolerance", "25", "--yaml"}) == kExitOk);
+    const int rc = app.run(Protocol::kTwo, {"--port", port, "--receivers", "3", "--seconds", "1",
+                                            "--tolerance", "25", "--yaml"});
     INFO(app.out.str() << app.err.str());
+    CHECK(rc == kExitOk);
     CHECK(app.out.str().find("sequence_breaks: 0") != std::string::npos);
     CHECK_FALSE(r.ptt_commanded());
 
     App mox;
-    CHECK(mox.run(Protocol::kTwo, {"--port", port, "--mox", "--seconds", "1", "--tolerance", "25",
-                                   "--json"}) == kExitOk);
+    const int mox_rc = mox.run(
+        Protocol::kTwo, {"--port", port, "--mox", "--seconds", "1", "--tolerance", "25", "--json"});
     INFO(mox.out.str() << mox.err.str());
+    CHECK(mox_rc == kExitOk);
     CHECK(r.ptt_commanded());
     // The TX I/Q stream ran: some TX I/Q packets were sent.
     CHECK(mox.out.str().find("\"tx_iq_packets\": 0") == std::string::npos);
@@ -170,7 +174,7 @@ TEST_CASE("p1probe sees radioberryd busy with another client", "[protoprobe][dae
     // The first client streams in the background.
     std::thread first([&] {
         App a;
-        a.run(Protocol::kOne, {"--port", port, "--seconds", "1.5", "--tolerance", "100"});
+        a.run(Protocol::kOne, {"--port", port, "--seconds", "4", "--tolerance", "100"});
     });
     std::this_thread::sleep_for(500ms);
     App second;

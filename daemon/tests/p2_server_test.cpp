@@ -182,6 +182,28 @@ TEST_CASE("one Protocol 2 client owns the radio until it stops", "[p2server]") {
     CHECK_FALSE(rig.session.claim({Protocol::P1, kA}, 6s));
 }
 
+TEST_CASE("Receiver Specific that overtakes General still configures the DDCs", "[p2server]") {
+    // The ports are read by different threads, so a client's Receiver and
+    // Transmitter Specific can arrive before its General.
+    Rig rig;
+    rig.packet(kRxSpecificPort, rx_specific_packet(0, {{0, 192}, {1, 192}, {2, 192}}));
+    CHECK(rig.session.owns({Protocol::P2, kA}));
+    rig.packet(kTxSpecificPort, tx_specific_packet(0));
+    rig.packet(kGeneralPort, general_packet(0));
+    rig.high_priority({});
+    CHECK(rig.server.running());
+    CHECK(rig.server.device_rate_code() == 2);
+    CHECK(rig.server.device_receivers() == 3);
+    rig.rx(238);
+    CHECK(rig.link.on(kDdcPort0 + 2).size() == 1);
+
+    // While another client owns it, they claim nothing.
+    rig.packet(kRxSpecificPort, rx_specific_packet(1, {{0, 48}}), kB);
+    rig.packet(kTxSpecificPort, tx_specific_packet(1), kB);
+    CHECK(rig.session.owns({Protocol::P2, kA}));
+    CHECK(rig.server.device_rate_code() == 2);
+}
+
 TEST_CASE("a silent Protocol 2 client loses the radio", "[p2server]") {
     Rig rig;
     rig.start({{0, 48}});

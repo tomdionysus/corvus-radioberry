@@ -5,6 +5,8 @@
 // Priority (+3) and TX I/Q (+5) from the client; High Priority status
 // (+1), Mic/Line (+2) and DDC n I/Q (+11 + n) from the radio. Frequencies
 // are sent as phase words.
+#include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <stdexcept>
 #include <vector>
@@ -48,7 +50,7 @@ public:
         if (started_) {
             try {
                 stop();
-            } catch (...) {
+            } catch (...) {  // NOLINT(bugprone-empty-catch): a destructor must not throw
             }
         }
     }
@@ -126,11 +128,16 @@ public:
     }
 
     bool poll(std::chrono::milliseconds timeout) override {
+        // Status and Mic/Line packets keep arriving while DDC packets may
+        // not, so the whole call is bounded by `timeout`, not each receive.
+        const auto deadline = std::chrono::steady_clock::now() + timeout;
         for (;;) {
             if (started_ && now_() - last_high_priority_ >= kHighPriorityPeriod) {
                 send_high_priority(true);
             }
-            auto d = transport_.receive(timeout);
+            const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
+                deadline - std::chrono::steady_clock::now());
+            auto d = transport_.receive(std::max(left, std::chrono::milliseconds(0)));
             if (!d) {
                 return false;
             }
