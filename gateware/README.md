@@ -9,7 +9,7 @@ source in `source/` with Quartus Prime Lite on an x86-64 machine
 timing; `QUARTUS.md` describes the toolchain.
 
 Everything below is read from that source (paths relative to
-`gateware/rtl/` in the archive) and from the upstream Pi 5 driver's PIO
+`gateware/rtl/` in the archive) and from the original Pi 5 driver's PIO
 programs. Statements marked *not yet measured* follow from the source and
 have not been checked on hardware.
 
@@ -115,15 +115,15 @@ SPI (section 4) and is the authority at run time.
   sample period for all receivers in the order I0, Q0, I1, Q1, ... and
   holds 2 x receivers values, so the index runs 0 to 2n - 1 (at most 11 on
   the CL025). Values are signed 24-bit two's complement.
-- The upstream PIO program (`rb2-rx-stream.c`) toggles the clock while
+- The original PIO program (`rb2-rx-stream.c`) toggles the clock while
   waiting, jumps on sample-ready, clocks seven nibbles (metadata and data)
   and autopushes at 28 bits, shifting left. Each 32-bit word the Pi reads
   is `index << 24 | sample`, top four bits zero.
 - The RX FIFO holds 1024 values; the gateware stops writing (drops) above
-  1012. With upstream clocking (PIO clock divider 2, so 100 MHz from the
+  1012. With original clocking (PIO clock divider 2, so 100 MHz from the
   200 MHz RP1 clock, five PIO cycles per nibble) one value takes 42 PIO
   cycles: at most about 2.38 million values per second. One receiver needs
-  2 x rate values per second, so the upstream program carries six
+  2 x rate values per second, so the original program carries six
   receivers at 192 ksps (2.30 M/s) but only three at 384 ksps. Measured on
   the development board: 2.37 million values per second at saturation,
   and no stream errors below it.
@@ -173,7 +173,7 @@ state machine in `radio.v`:
   (FPGA output, registered on the Pi's clock).
 - With ready high, the rising clock edge that finds the shifter idle starts
   a word and carries no data; the next 32 rising edges carry 32 bits, most
-  significant first. The upstream PIO program uses its ready-polling edge
+  significant first. The original PIO program uses its ready-polling edge
   as that start edge, then pulls one 32-bit word and shifts it out.
 - Word format: I in bits 31..16 and Q in bits 15..0, each signed 16-bit.
   The gateware stores four bytes per word, in order I high, I low, Q high,
@@ -191,7 +191,7 @@ state machine in `radio.v`:
   time (default 12 ms, address 0x17 bits 12..8) the radio returns to idle
   by itself. A hang time of 31 disables this and transmit then ends only
   when PTT is cleared. Software must never send 31 there.
-- Upstream PIO throughput: divider 8 (25 MHz), seven cycles per bit,
+- Original PIO throughput: divider 8 (25 MHz), seven cycles per bit,
   about 233 cycles per word: at most about 107 000 words per second, more
   than twice the 48 ksps needed. Measured on the development board with
   PTT clear: about 102 000 words per second while the FIFO fills (from

@@ -37,7 +37,7 @@ configuration).
 ## Gateware images
 
 `rbprobe` identifies images by hash. The driver needs this project's 75.3
-PIO build (`gateware/PROVENANCE.md`). The upstream Radioberry-2.x images
+PIO build (`gateware/PROVENANCE.md`). The original Radioberry-2.x images
 below are 73.3 GPIO-mode gateware (8-bit RX bus, TX over SPI chip select
 1) and do not work with it.
 
@@ -59,7 +59,7 @@ below are 73.3 GPIO-mode gateware (8-bit RX bus, TX over SPI chip select
   context), copies FROM_SM data into the caller's buffer and calls the
   caller's callback from the DMA completion (softirq). Cyclic DMA exists
   only through the character device's ioctls.
-- `rp1_pio_sm_buffer_virt`, which the upstream driver needs, is not
+- `rp1_pio_sm_buffer_virt`, which the original driver needs, is not
   exported by the stock kernel.
 - `rp1_pio_add_program()` takes programs written for offset 0; the RP1
   firmware relocates jump targets to the load offset.

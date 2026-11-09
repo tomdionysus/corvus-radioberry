@@ -17,10 +17,11 @@ Every component is built from this repository against the current
 Raspberry Pi OS kernel (6.18 and newer) with no out-of-tree kernel
 patches.
 
-The Radioberry and the upstream software this project builds on come from
-the [Radioberry project](https://github.com/pa3gsb/Radioberry-2.x). A
+The Radioberry and its original software come from the
+[Radioberry project](https://github.com/pa3gsb/Radioberry-2.x). This
+project is a separate implementation, not a fork of that software. A
 [ready-to-run Raspberry Pi 5 image](https://pa3gsb.gumroad.com/l/radioberry)
-of the upstream software is sold by the Radioberry's author; buying it
+of the original software is sold by the Radioberry's author; buying it
 supports their work.
 
 The code is C++20, with C only where the kernel or a shared ABI header

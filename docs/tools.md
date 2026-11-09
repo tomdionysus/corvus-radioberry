@@ -21,7 +21,7 @@ each known rpi-5 gateware image in turn until one configures the chip. It
 reprograms the FPGA, so it refuses to run while the driver is loaded. It
 looks for `.rbf` files in `/usr/local/share/radioberry/gateware`,
 `/usr/share/radioberry/gateware` and `/lib/firmware`; `--gateware-dir`
-replaces that list. Images are recognised by hash; the upstream GPIO-mode
+replaces that list. Images are recognised by hash; the original GPIO-mode
 images (73.3) are reported as unusable with this driver.
 
 ## rbcat
