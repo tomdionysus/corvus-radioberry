@@ -3,12 +3,18 @@
 Version 0.1.1
 
 A self-contained software stack for the Radioberry 2.x HF transceiver HAT
-on a Raspberry Pi 5: Linux kernel driver, a radio daemon speaking
-openHPSDR Protocol 1 and Protocol 2 (DSP by liquid-dsp), platform
-diagnostics, and control of the AURSINC PA5W V2 amplifier board, with the
-FPGA gateware built from its GPL source. Every component is built from
-this repository against the current Raspberry Pi OS kernel (6.18 and
-newer) with no out-of-tree kernel patches.
+on a Raspberry Pi 5:
+
+- `radioberry.ko`, the Linux kernel driver
+- `radioberryd`, a daemon speaking openHPSDR Protocol 1 and Protocol 2
+- signal processing with liquid-dsp
+- platform diagnostics
+- control of an AURSINC PA5W V2 amplifier board
+- FPGA gateware built from its GPL source
+
+Every component is built from this repository against the current
+Raspberry Pi OS kernel (6.18 and newer) with no out-of-tree kernel
+patches.
 
 The Radioberry and the upstream software this project builds on come from
 the Radioberry project (https://github.com/pa3gsb/Radioberry-2.x). A
@@ -66,16 +72,14 @@ sudo apt install build-essential cmake pkg-config device-tree-compiler \
     linux-headers-rpi-2712 libliquid-dev libgpiod-dev libi2c-dev \
     libyaml-cpp-dev nlohmann-json3-dev libspdlog-dev libsystemd-dev catch2
 
-cmake -S . -B build -DFPGATYPE=CL025
+cmake -S . -B build -DFPGATYPE=CL025   # CL016 if the Radioberry has a CL016 FPGA
 cmake --build build -j
 ctest --test-dir build
 sudo cmake --install build
 ```
 
-Note that if your radioberry has a CL016 chip, you should replace CL025 above.
-
-To enable the kernel driver, modify `/boot/firmware/config.txt` and add the following,
-then reboot (first install only):
+To enable the kernel driver, add the following to
+`/boot/firmware/config.txt`, then reboot (first install only):
 
 ```
 dtparam=i2c_arm=on
@@ -106,6 +110,8 @@ otherwise. The service starts now and at every boot.
 | `radioberry.service`, sysusers.d entry, udev rule | `/usr/local/lib/systemd/system/`, `/usr/local/lib/sysusers.d/`, `/usr/local/lib/udev/rules.d/` |
 | daemon config, if there is none | `/etc/radioberry/config.yaml` |
 
+## TX & PA
+
 **Transmit and the PA ship OFF, for safety.** The installed
 `/etc/radioberry/config.yaml` lists every option with its default and a
 one-line description; `allow_tx` and `allow_pa` are `false`, and
@@ -114,10 +120,13 @@ one-line description; `allow_tx` and `allow_pa` are `false`, and
 antenna or dummy load rated for its output first, then set
 `allow_pa: true` and restart.
 
-Build options: the module is built when headers for the running kernel
-are installed (`-DKERNEL_RELEASE=` picks another kernel,
-`-DRADIOBERRY_BUILD_MODULE=OFF` skips it).
-`-DRADIOBERRY_ABI_INCLUDE_DIR=/usr/local/include` builds the tools and
-daemon against the installed ABI header; configuration fails if its ABI
-version differs from the source tree's. `-DRADIOBERRY_BUILD_EXAMPLES=ON`
-builds `ft8rx`.
+## Build options
+
+| Option | Effect |
+|---|---|
+| `-DFPGATYPE=CL025\|CL016` | which gateware is installed as `/lib/firmware/radioberry.rbf` (default CL025) |
+| `-DKERNEL_RELEASE=` | build the module for another kernel (default: the running one, if its headers are installed) |
+| `-DRADIOBERRY_BUILD_MODULE=OFF` | skip the module |
+| `-DRADIOBERRY_ABI_INCLUDE_DIR=/usr/local/include` | build the tools and daemon against the installed ABI header; configuration fails if its ABI version differs from the source tree's |
+| `-DRADIOBERRY_BUILD_TESTS=OFF` | skip the unit tests (and the need for Catch2) |
+| `-DRADIOBERRY_BUILD_EXAMPLES=ON` | build `ft8rx` |
