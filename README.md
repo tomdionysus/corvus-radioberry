@@ -1,5 +1,7 @@
 # corvus-radioberry
 
+Version 0.1.1
+
 A self-contained software stack for the Radioberry 2.x HF transceiver HAT
 on a Raspberry Pi 5: Linux kernel driver, a radio daemon speaking
 openHPSDR Protocol 1 and Protocol 2 (DSP by liquid-dsp), platform
@@ -35,7 +37,7 @@ Documentation:
 | `docs/licensing.md` | licence and third-party works |
 | `CONTRIBUTING.md` | repository layout, CI, working conventions |
 
-## Status (v0.1.1)
+## Status
 
 | Component | Directory | Working | Notes |
 |---|---|---|---|
