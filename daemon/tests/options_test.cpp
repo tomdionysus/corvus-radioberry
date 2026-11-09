@@ -22,6 +22,7 @@ TEST_CASE("radioberryd's defaults", "[options]") {
     CHECK(o.daemon.device.tx_ring_limit_words == 4800);
     CHECK(o.daemon.frequency_ppm == 0);
     CHECK(o.daemon.iq_convention == p1::IqConvention::Hl2);
+    CHECK(o.daemon.p2_rx_gain_db == 14);
     CHECK_FALSE(o.help);
     CHECK_FALSE(o.version);
     CHECK(usage().find("--client-timeout-ms") != std::string::npos);
@@ -75,4 +76,13 @@ TEST_CASE("radioberryd's transmit options", "[options]") {
           p1::IqConvention::Standard);
     CHECK(parse_options({"--iq-convention", "hl2"}).daemon.iq_convention == p1::IqConvention::Hl2);
     CHECK_THROWS_AS(parse_options({"--iq-convention", "qi"}), std::invalid_argument);
+}
+
+TEST_CASE("radioberryd's Protocol 2 gain", "[options]") {
+    CHECK(parse_options({"--p2-rx-gain", "-5"}).daemon.p2_rx_gain_db == -5);
+    CHECK(parse_options({"--p2-rx-gain", "48"}).daemon.p2_rx_gain_db == 48);
+    CHECK_THROWS_AS(parse_options({"--p2-rx-gain", "49"}), std::invalid_argument);
+    CHECK_THROWS_AS(parse_options({"--p2-rx-gain", "-13"}), std::invalid_argument);
+    CHECK_THROWS_AS(parse_options({"--p2-rx-gain", "4.5"}), std::invalid_argument);
+    CHECK(usage().find("--p2-rx-gain") != std::string::npos);
 }

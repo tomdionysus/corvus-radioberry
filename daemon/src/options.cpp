@@ -87,6 +87,14 @@ Options parse_options(const std::vector<std::string>& args) {
             } else {
                 throw std::invalid_argument("--iq-convention: hl2 or standard: " + text);
             }
+        } else if (a == "--p2-rx-gain") {
+            const std::string text = value();
+            int db = 0;
+            const auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), db);
+            if (ec != std::errc{} || end != text.data() + text.size() || db < -12 || db > 48) {
+                throw std::invalid_argument("--p2-rx-gain: a whole number from -12 to 48: " + text);
+            }
+            o.daemon.p2_rx_gain_db = db;
         } else if (a == "--allow-tx") {
             o.daemon.tx.allow_tx = true;
         } else if (a == "--allow-pa") {
@@ -116,13 +124,16 @@ std::string usage() {
     return "usage: radioberryd [options]\n"
            "\n"
            "Serves the Radioberry to SDR clients over openHPSDR Protocol 1 (Hermes-Lite 2\n"
-           "dialect), UDP and TCP. It transmits only with --allow-tx, only for the client\n"
-           "that owns the radio, and only while that client holds MOX. It claims no PA\n"
+           "dialect, UDP and TCP) and Protocol 2 (UDP, on the Protocol 1 port and the\n"
+           "ports after it). It transmits only with --allow-tx, only for the client that\n"
+           "owns the radio, and only while that client holds MOX. It claims no PA\n"
            "interlock.\n"
            "\n"
            "  --device PATH            radioberry.ko device (default /dev/radioberry)\n"
            "  --address IPV4           address to listen on (default all)\n"
-           "  --port N                 Protocol 1 port (default 1024)\n"
+           "  --port N                 Protocol 1 port and Protocol 2 base port (default\n"
+           "                           1024; Protocol 2 also takes N+1 to N+5 and N+11 to\n"
+           "                           N+16)\n"
            "  --mac XX:XX:XX:XX:XX:XX  MAC reported by discovery (default: the interface's)\n"
            "  --client-timeout-ms N    silence that ends a client's stream (default 3000)\n"
            "  --frequency-ppm P        the radio's frequency error, positive if it tunes high;\n"
@@ -130,6 +141,8 @@ std::string usage() {
            "  --iq-convention C        hl2 (default): I/Q as the Hermes-Lite 2 sends it, for\n"
            "                           HL2 software such as piHPSDR; standard: I and Q\n"
            "                           swapped both ways, for plain complex-baseband clients\n"
+           "  --p2-rx-gain DB          Protocol 2 LNA gain, -12 to 48 dB, less the client's\n"
+           "                           step attenuation (default 14)\n"
            "  --allow-tx               let the owning client transmit (default: receive only)\n"
            "  --allow-pa               let the client enable the PA while transmitting\n"
            "  --drive-ceiling N        highest drive level sent, 0 to 255 (default 0)\n"

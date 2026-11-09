@@ -30,9 +30,9 @@ Debian trixie packages.
 | Gateware, CL016 | `gateware/` | ✗ | Built, not tested on a CL016 board; misses AD9866 TX output timing (`gateware/PROVENANCE.md`) |
 | Kernel driver `radioberry.ko`, overlay, ABI header | `driver/` | ✓ | Loads the gateware at boot; receive and transmit streams; sysfs `reload`, stall indicator, `debug` parameter |
 | Radio daemon `radioberryd`, Protocol 1 | `daemon/` | ✓ | Hermes-Lite 2 dialect, receive and transmit, UDP and TCP; transmit policy and fail-safes; frequency calibration; FT8 contacts on 40 m with piHPSDR and WSJT-X |
-| Radio daemon `radioberryd`, Protocol 2 | `daemon/` | ✗ | Not started |
+| Radio daemon `radioberryd`, Protocol 2 | `daemon/` | ✓ | Receive verified with piHPSDR (Protocol 2) and `ft8rx`; transmit tested against the fake device only, not yet on air; no wideband, diversity, PureSignal or radio-side CW keyer |
 | `radioberryd` as a systemd service | `daemon/` | ✗ | Not started; run by hand for now |
-| Example FT8 client `ft8rx` | `examples/ft8/` | ✓ | Receive only: decodes FT8, never transmits; optional build |
+| Example FT8 client `ft8rx` | `examples/ft8/` | ✓ | Receive only over Protocol 1 or 2: decodes FT8, never transmits; optional build |
 | Gateware loader `rbload` | `tools/` | ✗ | Not started |
 | Protocol test clients `p1probe`, `p2probe` | `tools/` | ✗ | Not started |
 
@@ -208,13 +208,29 @@ to `build-coverage/coverage/html`.
   for clients using plain complex baseband; the default `hl2` is what HL2
   software expects. It claims no PA interlock. `radioberryd --help` lists
   every option.
+- `radioberryd` also serves openHPSDR Protocol 2 over UDP: discovery and
+  General on port 1024, the other host packets on 1025 to 1029, DDC I/Q
+  from 1035 to 1040 (with `--port N`, N and the same offsets). It reports
+  board 6 with the gateware's version, which piHPSDR takes as a
+  Hermes-Lite 2, and the gateware's receiver count as DDCs. The gateware
+  runs every receiver at one rate, the highest any enabled DDC asks for
+  (48 to 384 ksps, within the receive capacity below); a DDC asking for
+  less is decimated in the daemon. TX I/Q arrives at 192 ksps and is
+  decimated to the gateware's 48 ksps. The silent Mic/Line packets that
+  clock the client's transmitter and the High Priority status are paced
+  by the radio's sample clock. The client's step attenuation is taken off
+  the LNA gain set by `--p2-rx-gain` (default 14 dB). The same session,
+  transmit policy and fail-safes apply as for Protocol 1; a gap in the TX
+  I/Q sequence is a stream fault. piHPSDR lists the radio once per
+  protocol; choose the Protocol 2 entry, or turn Protocol 1 off in its
+  discovery settings.
 - With piHPSDR (HL2 type): its HL2 drive model assumes the Hermes-Lite 2
   gateware, which uses the drive byte differently, so lower its per-band
   PA calibration until the output is right (about 45 to 50 on the
   development board). For WSJT-X through piHPSDR, use the Kenwood TS-2000
   rig type on piHPSDR's CAT port (TCP 19090).
 - `ft8rx` (`examples/ft8`, built with `-DRADIOBERRY_BUILD_EXAMPLES=ON`) is
-  a receive-only Protocol 1 client that decodes FT8 and prints it as
+  a receive-only Protocol 1 or 2 client that decodes FT8 and prints it as
   WSJT-X does (`docs/examples.md`).
 
 ## Repository layout
@@ -223,7 +239,7 @@ to `build-coverage/coverage/html`.
 docs/      design (plan-v1.md), RX lock-up fault report (fault-rx-lockup.md), host, amplifier, upstream survey
 gateware/  gateware source, built bitfiles per FPGA, provenance, toolchain
 driver/    kernel module, device tree overlay, ABI header, logic tests
-daemon/    radioberryd: device layer, session, transmit policy, Protocol 1
+daemon/    radioberryd: device layer, session, transmit policy, Protocols 1 and 2
 examples/  ft8rx, an example FT8 client (optional build)
 tools/     rbprobe, rbcat, rbctl, shared library, CI and check scripts, gateware build
 TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)

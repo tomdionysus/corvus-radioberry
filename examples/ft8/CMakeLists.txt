@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
-# ft8rx: an example receive-only Protocol 1 client that decodes FT8. The
-# FT8 code comes from Corvus HF (ported from kgoba/ft8_lib); the message
-# text code is ft8_lib's own (MIT, src/ft8_lib/LICENSE).
+# ft8rx: an example receive-only openHPSDR client (Protocol 1 or 2) that
+# decodes FT8. The FT8 code comes from Corvus HF (ported from
+# kgoba/ft8_lib); the message text code is ft8_lib's own (MIT,
+# src/ft8_lib/LICENSE).
 
 find_path(LIQUID_INCLUDE_DIR liquid/liquid.h REQUIRED)
 find_library(LIQUID_LIBRARY liquid REQUIRED)
@@ -23,7 +24,7 @@ add_library(ft8_core STATIC
 target_include_directories(ft8_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src ${LIQUID_INCLUDE_DIR})
 target_link_libraries(ft8_core PUBLIC ft8_lib ${LIQUID_LIBRARY})
 
-add_executable(ft8rx src/main.cpp src/p1_receiver.cpp)
+add_executable(ft8rx src/main.cpp src/p1_receiver.cpp src/p2_receiver.cpp)
 target_link_libraries(ft8rx PRIVATE ft8_core Threads::Threads)
 
 if(RADIOBERRY_BUILD_TESTS)

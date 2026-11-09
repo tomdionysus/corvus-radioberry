@@ -12,17 +12,19 @@ its date.
   `docs/fault-rx-lockup.md`), `rbprobe`, `rbcat`, `rbctl`, the driver
   harness `rbdrivertest` and the CI gate `tools/ci-pi.sh`.
 - `radioberryd`: Protocol 1 (HL2 dialect) receive and transmit over UDP
-  and TCP, one owning client, transmit only with `--allow-tx` through the
-  transmit policy and fail-safes, frequency calibration
-  (`--frequency-ppm`, +22.9 on the development board), I/Q convention
-  option. Not yet a service: started by hand.
+  and TCP, and Protocol 2 over UDP (receive verified on the radio,
+  transmit against the fake device only), one owning client, transmit
+  only with `--allow-tx` through the transmit policy and fail-safes,
+  frequency calibration (`--frequency-ppm`, +22.9 on the development
+  board), I/Q convention option. Not yet a service: started by hand.
 - On air: piHPSDR and WSJT-X through `radioberryd` received and decoded
   FT8, transmitted it (decoded by distant stations on PSK Reporter), and
   completed an FT8 contact. The transmit chain measured clean with a
   HackRF (no spurs or image above a broadband floor about 46 dB down).
 - `ft8rx` (`examples/ft8`, optional): receive-only FT8 decoder over
-  Protocol 1.
-- Next: the HL2 drive compatibility item below, then Protocol 2.
+  Protocol 1 or 2.
+- Next: real-time setup and the systemd service; the HL2 drive item and
+  Protocol 2 transmit on air wait for the owner's go-ahead to transmit.
 
 ## Standing decisions
 
@@ -94,13 +96,6 @@ Nothing open.
       output against gain code across the range, then decide whether
       `radioberryd` maps HL2 drive to Radioberry codes. Until then piHPSDR
       is calibrated by hand (its per-band PA calibration, about 45 to 50).
-- [ ] Protocol 2: discovery, General, DDC and DUC specific, High Priority
-      both ways, DDC I/Q at 48 to 384 ksps, DUC I/Q at 192 ksps resampled
-      with liquid-dsp, Mic/Line and Wideband declared absent, client
-      ownership and timeout, fail-safe on sequence gaps. `ft8rx`
-      (`examples/ft8`) gains Protocol 2, selectable at the command line.
-      Acceptance: piHPSDR in Protocol 2 mode receives, and `ft8rx`
-      decodes over Protocol 2.
 - [ ] Real-time setup: thread priorities, CPU affinity, socket buffer
       sizes, `SO_PRIORITY`; RX packet jitter over Wi-Fi measured and
       recorded in `docs/platform.md`.
@@ -140,7 +135,9 @@ Nothing open.
 Transmit items each need the owner's go-ahead at the time.
 
 - [ ] SparkSDR and Quisk receive and tune via Protocol 1.
-- [ ] Receive via Protocol 2.
+- [ ] Transmit via Protocol 2 with piHPSDR into the dummy load, then on
+      air: output and spectrum as for Protocol 1 (TX I/Q decimated from
+      192 to 48 ksps in the daemon).
 - [ ] corvus-protocol end-to-end run, logged in `docs/` (FT8 is done).
 - [ ] Two-tone linearity. A test client's two tones (700 and 1900 Hz)
       measured third-order products at -13 to -15 dBc at every drive from

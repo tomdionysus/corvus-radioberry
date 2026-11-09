@@ -52,9 +52,24 @@ Daemon::Daemon(Device& device, DaemonOptions options)
               const DeviceSnapshot s = service_.snapshot();
               return p1::GatewareStatus{s.cw_or_ptt, s.external_cw_key};
           },
-          network_) {
+          network_),
+      p2_network_(options.address, options.port, identity_.receivers,
+                  [this](const Peer& to, std::span<const std::uint8_t> bytes) {
+                      network_.send(to, bytes);
+                  }),
+      p2_server_(
+          p2::Identity{identity_.mac, identity_.version_major, identity_.receivers},
+          service_.control(), service_.tx(), session_, policy_,
+          [this] {
+              const DeviceSnapshot s = service_.snapshot();
+              return p1::GatewareStatus{s.cw_or_ptt, s.external_cw_key};
+          },
+          p2_network_) {
     server_.set_frequency_ppm(options.frequency_ppm);
     server_.set_iq_convention(options.iq_convention);
+    p2_server_.set_frequency_ppm(options.frequency_ppm);
+    p2_server_.set_iq_convention(options.iq_convention);
+    p2_server_.set_rx_gain_db(options.p2_rx_gain_db);
     iq_standard_ = options.iq_convention == p1::IqConvention::Standard;
     frequency_ppm_ = options.frequency_ppm;
 }
@@ -76,14 +91,10 @@ void Daemon::on_fault(const Fault& fault) {
 
 void Daemon::on_packet(std::span<const std::uint8_t> packet, const Peer& from,
                        std::chrono::nanoseconds now) {
-    if (is_p2_discovery(packet)) {
-        // Protocol selection: only Protocol 1 is served, so a client that
-        // tries both settles on it.
-        if (!p2_discovery_logged_) {
-            spdlog::info("Protocol 2 discovery from {} not answered: not served yet",
-                         describe(from));
-            p2_discovery_logged_ = true;
-        }
+    // Protocol 2 shares the base port for discovery and General packets;
+    // Protocol 1 packets start EF FE.
+    if (!from.tcp && (is_p2_discovery(packet) || p2::is_general(packet))) {
+        p2_server_.on_packet(p2::kGeneralPort, packet, from, now);
         return;
     }
     server_.on_packet(packet, from, now);
@@ -93,6 +104,9 @@ bool Daemon::run(const std::atomic<bool>& stop) {
     const TxPolicyOptions& tx = policy_.options();
     spdlog::info("gateware {}.{}, {} receivers; Protocol 1 on port {}", identity_.version_major,
                  identity_.version_minor, identity_.receivers, port());
+    spdlog::info("Protocol 2 on ports {} to {} and {} to {}", p2_port(p2::kGeneralPort),
+                 p2_port(p2::kTxIqPort), p2_port(p2::kDdcPort0),
+                 p2_port(p2::kDdcPort0 + identity_.receivers - 1));
     if (iq_standard_) {
         spdlog::info("I/Q in the standard convention: I and Q swapped both ways");
     }
@@ -110,17 +124,28 @@ bool Daemon::run(const std::atomic<bool>& stop) {
     if (!service_.start()) {
         return false;
     }
+    const Clock clock = steady_clock();
     std::atomic<bool> stop_rx{false};
     std::thread rx([&] {
         while (!stop_rx) {
             service_.rx().wait(stop_rx);
             while (const RxBlock* block = service_.rx().front()) {
                 server_.on_rx(*block);
+                p2_server_.on_rx(*block);
                 service_.rx().pop();
             }
         }
     });
-    const Clock clock = steady_clock();
+    std::atomic<bool> stop_p2{false};
+    std::thread p2([&] {
+        const auto p2_handler = [&](unsigned port, std::span<const std::uint8_t> packet,
+                                    const Peer& from) {
+            p2_server_.on_packet(port, packet, from, clock());
+        };
+        while (!stop_p2) {
+            p2_network_.poll(100, p2_handler);
+        }
+    });
     const auto handler = [&](std::span<const std::uint8_t> packet, const Peer& from) {
         on_packet(packet, from, clock());
     };
@@ -135,6 +160,7 @@ bool Daemon::run(const std::atomic<bool>& stop) {
         session_.tick(now);
         policy_.tick(now);
         server_.tick();
+        p2_server_.tick();
         const bool transmitting = policy_.transmitting();
         if (transmitting != was_transmitting) {
             const DeviceSnapshot s = service_.snapshot();
@@ -157,6 +183,8 @@ bool Daemon::run(const std::atomic<bool>& stop) {
         }
     }
     const bool failed = service_.failed();
+    stop_p2 = true;
+    p2.join();
     stop_rx = true;
     service_.rx().wake();
     rx.join();

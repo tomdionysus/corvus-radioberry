@@ -3,18 +3,22 @@
 Built with `-DRADIOBERRY_BUILD_EXAMPLES=ON` (the `default` and `asan`
 presets set it, so `tools/ci-pi.sh` builds and tests them). Not installed.
 
-## ft8rx: FT8 over Protocol 1 (`examples/ft8`)
+## ft8rx: FT8 over Protocol 1 or 2 (`examples/ft8`)
 
-A receive-only openHPSDR Protocol 1 client: it asks for one receiver at
-48 ksps tuned 1500 Hz above the FT8 dial frequency, decimates to 3200 sps
-with liquid-dsp, decodes each UTC 15 s slot and prints one line per message
+A receive-only openHPSDR client: it asks for one receiver at 48 ksps tuned
+1500 Hz above the FT8 dial frequency, decimates to 3200 sps with
+liquid-dsp, decodes each UTC 15 s slot and prints one line per message
 (UTC, SNR in 2500 Hz, DT, audio frequency, text), as WSJT-X does. It never
-sets MOX and sends zero TX samples. It answers every packet with a host
-packet, so it keeps the radio's session while it runs.
+sets MOX. Over Protocol 1 (the default) it sends zero TX samples and
+answers every packet with a host packet, which keeps the radio's session.
+Over Protocol 2 (`--protocol 2`) it uses DDC0, sends High Priority every
+100 ms to keep the session, and stops with run clear; Protocol 2 carries
+no LNA gain for this radio, so `--gain` is refused and `radioberryd
+--p2-rx-gain` applies.
 
 ```
-ft8rx [--host 127.0.0.1] [--port 1024] [--dial 14074000] [--gain 20]
-      [--slots N] [--iq-order qi|iq]
+ft8rx [--protocol 1|2] [--host 127.0.0.1] [--port 1024] [--dial 14074000]
+      [--gain 20] [--slots N] [--iq-order qi|iq]
 ```
 
 The clock must be on UTC to within a second. Run it on the Pi against

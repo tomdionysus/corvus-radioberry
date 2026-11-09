@@ -3,6 +3,26 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-09: Protocol 2 in `radioberryd` (`daemon/src/p2/`): discovery
+  (board 6, the gateware's version and receiver count), General, Receiver
+  and Transmitter Specific, High Priority both ways, DDC I/Q from ports
+  1035 onwards, Mic/Line silence and High Priority status paced by the
+  radio's sample clock, TX I/Q at 192 ksps decimated to 48 ksps with
+  liquid-dsp (`daemon/src/dsp/decimator.cpp`), DDCs below the gateware's
+  rate decimated likewise, step attenuation taken off the LNA gain
+  (`--p2-rx-gain`), the shared session, transmit policy and fail-safes,
+  a TX I/Q sequence gap a stream fault. Protocol 1 unchanged apart from
+  the base-port dispatch. `ft8rx --protocol 2`. Acceptance on the
+  development board, receive only: `ft8rx --protocol 2` on 40 m decoded 5
+  messages in 4 slots (13 083 packets, 0 lost), and `--protocol 1`
+  afterwards 5 in 3 slots (20 529 packets, 0 lost); piHPSDR (installed
+  build, Protocol 2 only, loopback network namespace) discovered the
+  radio as a Hermes-Lite 2, started two receivers at 48 ksps and showed
+  the 20 m spectrum, with 0 sequence errors in its log. A 35 s capture of
+  that run: DDC0 and DDC1 201.7 packets/s each (48 000 samples/s),
+  Mic/Line 750/s, status 20/s, no sequence breaks in any stream either
+  way. The same piHPSDR over Protocol 1 showed the same spectrum lines at
+  about 8 kHz spacing. Transmit tested against the fake device only.
 - 2026-11-09: `radioberryd` logs the drive actually in use: PTT on logs
   the drive at that moment, and every later change of the effective drive
   while transmitting is logged, with the client's request when the

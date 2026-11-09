@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// ft8rx: an example Protocol 1 client. It receives one channel from
-// radioberryd (or any Hermes-Lite 2 style radio), decodes FT8 in each
-// UTC 15 s slot and prints what it hears, one line per message as WSJT-X
-// does. Receive only: it never sets MOX.
+// ft8rx: an example openHPSDR client, Protocol 1 or 2. It receives one
+// channel from radioberryd (or any Hermes-Lite 2 style radio), decodes FT8
+// in each UTC 15 s slot and prints what it hears, one line per message as
+// WSJT-X does. Receive only: it never sets MOX.
 //
-//   ft8rx [--host 127.0.0.1] [--port 1024] [--dial 14074000] [--gain 20]
-//         [--slots N] [--iq-order qi|iq]
+//   ft8rx [--protocol 1|2] [--host 127.0.0.1] [--port 1024] [--dial 14074000]
+//         [--gain 20] [--slots N] [--iq-order qi|iq]
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -16,6 +16,7 @@
 #include <deque>
 #include <exception>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -25,6 +26,7 @@
 #include "ft8/decoder.h"
 #include "message_text.hpp"
 #include "p1_receiver.hpp"
+#include "p2_receiver.hpp"
 
 namespace {
 
@@ -33,10 +35,12 @@ std::atomic<bool> g_stop{false};
 void on_signal(int) { g_stop = true; }
 
 struct Options {
+    int protocol = 1;
     std::string host = "127.0.0.1";
     std::uint16_t port = 1024;
     std::uint32_t dial_hz = 14074000;
     int gain_db = 20;
+    bool gain_given = false;
     int slots = 0;  // 0: until interrupted
     // Each sample's second value taken as I: measured on the development
     // Radioberry through radioberryd, FT8 decodes this way and not the
@@ -47,13 +51,16 @@ struct Options {
 const char* const kUsage =
     "usage: ft8rx [options]\n"
     "\n"
-    "Receives one channel over openHPSDR Protocol 1 and prints the FT8 it decodes in\n"
-    "each 15 s slot. Receive only. The clock must be on UTC within a second.\n"
+    "Receives one channel over openHPSDR Protocol 1 or 2 and prints the FT8 it\n"
+    "decodes in each 15 s slot. Receive only. The clock must be on UTC within a\n"
+    "second.\n"
     "\n"
+    "  --protocol P   1 (default) or 2\n"
     "  --host IPV4    the radio (default 127.0.0.1, radioberryd on this machine)\n"
-    "  --port N       its Protocol 1 port (default 1024)\n"
+    "  --port N       its Protocol 1 port, or Protocol 2 base port (default 1024)\n"
     "  --dial HZ      the FT8 dial frequency (default 14074000)\n"
-    "  --gain DB      LNA gain, -12 to 48 (default 20)\n"
+    "  --gain DB      LNA gain, -12 to 48 (default 20); Protocol 1 only: under\n"
+    "                 Protocol 2 radioberryd's --p2-rx-gain sets it\n"
     "  --slots N      stop after N decoded slots (default: until interrupted)\n"
     "  --iq-order O   qi (default): each sample's second value is I; iq: the first\n";
 
@@ -67,7 +74,13 @@ Options parse(int argc, char** argv) {
             }
             return argv[++i];
         };
-        if (a == "--host") {
+        if (a == "--protocol") {
+            const std::string p = value();
+            if (p != "1" && p != "2") {
+                throw std::invalid_argument("--protocol is 1 or 2");
+            }
+            o.protocol = p == "1" ? 1 : 2;
+        } else if (a == "--host") {
             o.host = value();
         } else if (a == "--port") {
             o.port = static_cast<std::uint16_t>(std::stoul(value()));
@@ -75,6 +88,7 @@ Options parse(int argc, char** argv) {
             o.dial_hz = static_cast<std::uint32_t>(std::stoul(value()));
         } else if (a == "--gain") {
             o.gain_db = std::stoi(value());
+            o.gain_given = true;
         } else if (a == "--iq-order") {
             const std::string order = value();
             if (order != "qi" && order != "iq") {
@@ -86,6 +100,9 @@ Options parse(int argc, char** argv) {
         } else {
             throw std::invalid_argument(a == "-h" || a == "--help" ? "" : "unknown option " + a);
         }
+    }
+    if (o.protocol == 2 && o.gain_given) {
+        throw std::invalid_argument("--gain is Protocol 1 only");
     }
     return o;
 }
@@ -131,8 +148,14 @@ int main(int argc, char** argv) {
     sigaction(SIGTERM, &action, nullptr);
 
     try {
-        ft8::P1Receiver receiver(options.host, options.port);
-        std::optional<ft8::P1Receiver::Radio> radio;
+        std::unique_ptr<ft8::Receiver> receiver_ptr;
+        if (options.protocol == 1) {
+            receiver_ptr = std::make_unique<ft8::P1Receiver>(options.host, options.port);
+        } else {
+            receiver_ptr = std::make_unique<ft8::P2Receiver>(options.host, options.port);
+        }
+        ft8::Receiver& receiver = *receiver_ptr;
+        std::optional<ft8::Receiver::Radio> radio;
         for (int attempt = 0; attempt < 3 && !radio; ++attempt) {
             radio = receiver.discover(std::chrono::milliseconds(700));
         }
@@ -140,8 +163,9 @@ int main(int argc, char** argv) {
             std::cerr << "ft8rx: no reply to discovery from " << options.host << "\n";
             return 1;
         }
-        std::printf("radio: board %u, gateware %u.%u, %u receivers\n", radio->board,
-                    radio->version_major, radio->version_minor, radio->receivers);
+        std::printf("radio: Protocol %d, board %u, gateware %u.%u, %u receivers\n",
+                    options.protocol, radio->board, radio->version_major, radio->version_minor,
+                    radio->receivers);
         if (radio->busy) {
             std::cerr << "ft8rx: the radio is streaming to another client\n";
             return 1;
