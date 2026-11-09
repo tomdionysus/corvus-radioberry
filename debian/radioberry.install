@@ -1,0 +1,12 @@
+usr/sbin/radioberryd
+usr/bin/rbprobe
+usr/bin/rbcat
+usr/bin/rbctl
+usr/bin/rbload
+usr/bin/p1probe
+usr/bin/p2probe
+usr/lib/systemd/system/radioberry.service
+usr/lib/sysusers.d/radioberry.conf
+usr/lib/udev/rules.d/60-radioberry.rules
+usr/share/radioberry
+etc/radioberry/config.yaml

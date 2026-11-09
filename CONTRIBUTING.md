@@ -8,7 +8,8 @@ standing decision in [TODO/ACTIVE.md](TODO/ACTIVE.md) without saying so.
 ## Repository layout
 
 ```
-docs/      design, driver, driver tests, daemon, tools, platform, PA, examples, fault report, licensing
+docs/      design, driver, driver tests, daemon, tools, platform, PA, examples, fault report, kernel debug, packaging, licensing
+debian/    Debian packaging (built by tools/build-deb.sh)
 gateware/  gateware source, built bitfiles per FPGA, provenance, toolchain
 driver/    kernel module, device tree overlay, ABI header, logic tests
 daemon/    radioberryd: device layer, session, transmit policy, Protocols 1 and 2, systemd files
@@ -21,7 +22,13 @@ TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
 
 - Work happens on `develop`, one branch per TODO item
   (`item/<section>-<short-slug>`), squash-merged into it. `main` receives
-  `develop` only at version tags.
+  `develop` only at version tags, as a merge commit
+  (`git merge --no-ff develop`): Codecov files each commit under the first
+  branch it was pushed on, so a fast-forward leaves `main` without
+  coverage data.
+- Packages: `tools/build-deb.sh` on the Pi
+  ([docs/packaging.md](docs/packaging.md)). Release packages are built
+  from the tagged commit, so their version has no `+git` suffix.
 - Build and test on the Pi, not on the workstation. The Pi's address and
   access details are kept outside this repository. Besides the README's
   packages, development needs `sudo apt install clang-format-19 lcov rsync`

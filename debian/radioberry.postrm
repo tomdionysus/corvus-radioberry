@@ -1,0 +1,14 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+set -e
+
+case "$1" in
+    remove | purge)
+        if [ -L /usr/lib/firmware/radioberry.rbf ]; then
+            rm -f /usr/lib/firmware/radioberry.rbf
+        fi
+        rm -f /boot/firmware/overlays/radioberry.dtbo
+        ;;
+esac
+
+#DEBHELPER#

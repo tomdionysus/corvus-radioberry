@@ -1,0 +1,216 @@
+# Debian packages
+
+The `debian/` directory builds Debian packages for a Raspberry Pi 5 running
+Raspberry Pi OS (Debian 13 trixie, 64-bit). Tested on 2026-11-09 with
+Raspberry Pi OS trixie, kernel 6.18.60+rpt-rpi-2712: build, install,
+reinstall, remove, purge, FPGA reconfiguration, a reboot, and installation
+from a signed apt repository; after the reboot `rbprobe` exited 0 and a
+Protocol 1 receive test through `radioberryd` (two receivers, 192 ksps,
+10 s) lost no packets.
+
+## Packages
+
+| Package | Architecture | Contents |
+|---|---|---|
+| `radioberry` | arm64 | `radioberryd` and `radioberry.service`, `rbprobe`, `rbcat`, `rbctl`, `rbload`, `p1probe`, `p2probe`, sysusers.d entry, udev rule, `/etc/radioberry/config.yaml`, both gateware images, the overlay |
+| `radioberry-dkms` | all | the driver source, built by DKMS for every installed kernel |
+| `radioberry-dev` | all | `radioberry_ioctl.h` |
+| `radioberry-dbgsym` | arm64 | debug symbols for `radioberry` |
+
+`radioberry` depends on `radioberry-dkms` of the same version.
+`radioberry-dkms` recommends `linux-headers-rpi-2712 | linux-headers-rpi-v8`,
+which apt installs by default; DKMS needs the headers of each kernel it
+builds for.
+
+## Building
+
+On the Pi, from the repository root:
+
+```
+sudo apt install dpkg-dev
+sudo apt build-dep ./
+tools/build-deb.sh
+```
+
+`apt build-dep ./` installs the build dependencies listed in
+`debian/control`. [tools/build-deb.sh](../tools/build-deb.sh) writes
+`debian/changelog`, runs `dpkg-buildpackage -us -uc -b` (unsigned, binary
+only) with the unit tests, and moves the packages to `build-deb/`.
+`DEB_BUILD_OPTIONS=nocheck tools/build-deb.sh` skips the tests.
+
+The version comes from `git describe`: tag `v0.2.0` gives `0.2.0`, a build
+three commits after it `0.2.0+git3.gaff2d9d`, which sorts after `0.2.0` and
+before `0.2.1`. A build with uncommitted changes ends in `.dirty`.
+
+## Installing
+
+```
+sudo apt install ./build-deb/radioberry_*_arm64.deb \
+    ./build-deb/radioberry-dkms_*_all.deb
+```
+
+The install asks which FPGA the RadioBerry has (CL025 or CL016; the
+marking on the chip's package says which) and does the following:
+
+| What | Where |
+|---|---|
+| kernel module, built by DKMS for each installed kernel | `/lib/modules/<kernel>/updates/dkms/radioberry.ko.xz` |
+| gateware for the chosen FPGA | `/usr/lib/firmware/radioberry.rbf`, a link into `/usr/share/radioberry/gateware/rpi-5/<type>/` |
+| overlay | copied from `/usr/share/radioberry/overlays/` to `/boot/firmware/overlays/radioberry.dtbo` |
+| tools | `/usr/bin/` |
+| `radioberryd` | `/usr/sbin/` |
+| unit, sysusers.d entry, udev rule | `/usr/lib/systemd/system/`, `/usr/lib/sysusers.d/`, `/usr/lib/udev/rules.d/` |
+| daemon config (conffile) | `/etc/radioberry/config.yaml` |
+
+The install does not edit `/boot/firmware/config.txt`. If it has no
+`dtoverlay=radioberry` line the install prints a reminder; add
+
+```
+dtparam=i2c_arm=on
+dtoverlay=radioberry
+```
+
+and reboot. `radioberry.service` is enabled at install and started then if
+`/dev/radioberry` exists, otherwise at the next boot. Check with `rbprobe`.
+
+Transmit and the PA are off in the installed `config.yaml`; see the
+README's TX & PA section.
+
+To change the FPGA type later: `sudo dpkg-reconfigure radioberry`, then
+reboot (the driver loads the gateware when it binds at boot).
+
+### Upgrades and kernel updates
+
+An upgrade of `radioberry-dkms` builds the new module for every installed
+kernel; the module already loaded keeps running until the next reboot.
+`radioberry` restarts `radioberryd` after an upgrade. Reboot after an
+upgrade that changes the driver.
+
+A kernel update triggers DKMS to build the module for the new kernel,
+provided the new kernel's headers are installed (the
+`linux-headers-rpi-2712` metapackage follows the kernel).
+
+dpkg keeps a changed `/etc/radioberry/config.yaml` on upgrade and asks
+when the packaged default changed as well.
+
+### Removing
+
+`sudo apt remove radioberry radioberry-dkms` stops the service and removes
+the programs, the DKMS modules, the overlay and the firmware link. The
+module stays loaded until the next reboot. `config.yaml` and the
+`radioberry` user remain; `sudo apt purge radioberry` deletes
+`/etc/radioberry`. The `dtoverlay=radioberry` line in `config.txt` is left
+for you to remove.
+
+### Replacing a `cmake --install` installation
+
+Remove the files `cmake --install` placed before installing the packages:
+the module it put in `/lib/modules/<kernel>/updates/` would compete with
+DKMS's copy in `updates/dkms/`, and its unit in `/usr/local` would take
+precedence over the package's. From the build directory used for that
+install:
+
+```
+sudo systemctl disable --now radioberry
+xargs -d '\n' sudo rm -f < build/install_manifest.txt
+sudo depmod -a
+sudo systemctl daemon-reload
+```
+
+`install_manifest.txt` does not list `/etc/radioberry/config.yaml`, which
+stays. Install the packages with
+`sudo apt -o Dpkg::Options::=--force-confold install ...` to keep it
+without a prompt.
+
+## Running your own apt repository
+
+An apt repository is a directory of static files: the packages under
+`pool/`, and under `dists/` the package indices and a `Release` file
+signed with a GPG key. Any HTTP or HTTPS server can host it. The steps
+below use `reprepro`; `aptly` does the same job.
+
+### 1. Signing key
+
+Create the key on a machine you keep safe; it signs every update.
+
+```
+gpg --quick-gen-key "RadioBerry archive key" ed25519 sign 2y
+gpg --list-keys "RadioBerry archive key"      # note the fingerprint
+gpg --export FINGERPRINT > radioberry-archive-keyring.gpg
+```
+
+Keep the private key out of the published directory and backed up. Before
+the expiry date, extend it (`gpg --quick-set-expire FINGERPRINT 2y`) and
+publish the exported public key again; apt refuses a repository signed by
+an expired key.
+
+### 2. Repository configuration
+
+```
+sudo apt install reprepro
+mkdir -p repo/conf
+```
+
+`repo/conf/distributions`:
+
+```
+Origin: RadioBerry
+Label: RadioBerry
+Codename: trixie
+Architectures: arm64
+Components: main
+Description: RadioBerry packages for Raspberry Pi OS
+SignWith: FINGERPRINT
+```
+
+`repo/` holds reprepro's configuration and database. The published files
+go to a separate directory, `public/` below.
+
+### 3. Adding packages
+
+```
+reprepro --basedir repo --outdir public includedeb trixie build-deb/*.deb
+cp radioberry-archive-keyring.gpg public/
+```
+
+Run the same `includedeb` for each new build: reprepro keeps one version
+of each package per distribution and replaces the older one.
+`reprepro --basedir repo list trixie` shows what is in it.
+
+### 4. Hosting
+
+Copy `public/` to any static web host, for example a web server's
+document root, an object storage bucket served over HTTPS, or GitHub
+Pages from a separate repository (a file there may be at most 100 MB;
+the largest package, `radioberry-dbgsym`, is about 7 MB). Publish only
+`public/`, never `repo/` or the private key.
+
+### 5. Using the repository
+
+On each Pi, with `https://example.org/radioberry` standing for where
+`public/` is served:
+
+```
+sudo install -d -m 755 /etc/apt/keyrings
+sudo curl -fsSLo /etc/apt/keyrings/radioberry.gpg \
+    https://example.org/radioberry/radioberry-archive-keyring.gpg
+```
+
+`/etc/apt/sources.list.d/radioberry.sources`:
+
+```
+Types: deb
+URIs: https://example.org/radioberry/
+Suites: trixie
+Components: main
+Signed-By: /etc/apt/keyrings/radioberry.gpg
+```
+
+Then:
+
+```
+sudo apt update
+sudo apt install radioberry
+```
+
+Later builds arrive with `sudo apt update && sudo apt upgrade`.

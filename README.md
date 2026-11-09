@@ -77,7 +77,10 @@ Open work, in order, is in [TODO/ACTIVE.md](TODO/ACTIVE.md).
 
 ## Build and install
 
-On a Raspberry Pi 5 running Raspberry Pi OS (Debian 13 trixie, 64-bit,
+Debian packages (`radioberry`, `radioberry-dkms`, `radioberry-dev`), and
+how to serve them from your own apt repository, are described in
+[docs/packaging.md](docs/packaging.md). To build and install directly
+instead, on a Raspberry Pi 5 running Raspberry Pi OS (Debian 13 trixie, 64-bit,
 kernel 6.18 or newer), from the repository root:
 
 ```

@@ -3,6 +3,15 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-09: Debian packages `radioberry`, `radioberry-dkms` (driver
+  built by DKMS), `radioberry-dev`, built by `tools/build-deb.sh`; the FPGA
+  type is a debconf question; the overlay is copied to `/boot/firmware`
+  by the install script (dpkg cannot replace files on FAT). On the
+  development Pi: DKMS built for all five installed kernels; install,
+  reinstall, upgrade from a signed reprepro repository, remove and purge
+  passed; after a reboot `rbprobe` exited 0 and a Protocol 1 receive test
+  lost no packets. Guide to building, installing and hosting an apt
+  repository: `docs/packaging.md`.
 - 2026-11-09: v0.2.0 released. Release check on the development Pi with
   the final build installed: `ft8rx` over `radioberryd` decoded FT8 on
   40 m (15 messages in four slots on each protocol) and 20 m (84 over

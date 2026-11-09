@@ -27,13 +27,16 @@ namespace {
 
 constexpr std::uint32_t kLoopback = 0x7f000001;
 
-// A base port for this process, so parallel test runs do not collide;
-// Protocol 2 needs its offsets free too.
+// Daemon ports for this process: kSlots ranges of kStride ports in a block
+// chosen by pid, so test processes run in parallel (one per test case) do
+// not collide. Protocol 2 needs its offsets free too.
+constexpr int kStride = 20;
+constexpr int kSlots = 4;
 std::uint16_t base_port() {
-    static std::uint16_t next = static_cast<std::uint16_t>(30000 + (::getpid() % 1500) * 20);
-    const std::uint16_t port = next;
-    next = static_cast<std::uint16_t>(next + 20);
-    return port;
+    static int slot = 0;
+    REQUIRE(slot < kSlots);
+    const int block = static_cast<int>(::getpid() % 400) * kStride * kSlots;
+    return static_cast<std::uint16_t>(30000 + block + kStride * slot++);
 }
 
 // The daemon on loopback, with a thread feeding the fake device RX frames

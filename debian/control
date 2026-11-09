@@ -1,0 +1,63 @@
+Source: radioberry
+Section: hamradio
+Priority: optional
+Maintainer: tomdionysus <tomdionysus@users.noreply.github.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ dh-sequence-dkms,
+ cmake,
+ pkgconf,
+ device-tree-compiler,
+ libliquid-dev,
+ libgpiod-dev,
+ libi2c-dev,
+ libyaml-cpp-dev,
+ nlohmann-json3-dev,
+ libspdlog-dev,
+ libsystemd-dev,
+ catch2,
+Standards-Version: 4.7.0
+Homepage: https://github.com/tomdionysus/corvus-radioberry
+Vcs-Git: https://github.com/tomdionysus/corvus-radioberry.git
+Vcs-Browser: https://github.com/tomdionysus/corvus-radioberry
+Rules-Requires-Root: no
+
+Package: radioberry
+Architecture: arm64
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+ radioberry-dkms (= ${source:Version}),
+ systemd,
+ udev,
+Description: RadioBerry 2.x HF transceiver on the Raspberry Pi 5
+ radioberryd serves a RadioBerry 2.x HAT to SDR clients over openHPSDR
+ Protocol 1 (Hermes-Lite 2 dialect) and Protocol 2, as
+ radioberry.service. Transmit and the PA are off as installed; see
+ /etc/radioberry/config.yaml.
+ .
+ Also included: the RadioBerry gateware (Hermes-Lite 2 PIO variants,
+ built from source), the device tree overlay, and the tools rbprobe,
+ rbcat, rbctl, rbload, p1probe and p2probe. The kernel driver is in
+ radioberry-dkms.
+
+Package: radioberry-dkms
+Architecture: all
+Depends:
+ ${misc:Depends},
+ dkms,
+Recommends:
+ linux-headers-rpi-2712 | linux-headers-rpi-v8,
+Description: RadioBerry 2.x kernel driver (DKMS source)
+ The radioberry.ko driver for the RadioBerry 2.x on the Raspberry Pi 5:
+ loads the gateware, streams receive and transmit through the RP1 PIO,
+ and gives userspace /dev/radioberry. DKMS builds it for each installed
+ kernel and rebuilds it when the kernel is updated.
+
+Package: radioberry-dev
+Architecture: all
+Depends:
+ ${misc:Depends},
+Description: RadioBerry 2.x driver ABI header
+ radioberry_ioctl.h: the /dev/radioberry interface of the radioberry.ko
+ driver, for programs that use the device directly.
