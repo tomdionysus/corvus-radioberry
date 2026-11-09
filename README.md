@@ -78,6 +78,9 @@ ctest --test-dir build
 sudo cmake --install build
 ```
 
+To tell which FPGA the Radioberry has, read the marking on the chip's
+package: `10CL025YE144C8G` is a CL025, `10CL016YE144C8G` a CL016.
+
 To enable the kernel driver, add the following to
 `/boot/firmware/config.txt`, then reboot (first install only):
 
