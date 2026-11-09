@@ -14,7 +14,8 @@ target_link_libraries(p2probe PRIVATE protoprobe_core)
 install(TARGETS p1probe p2probe RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 if(RADIOBERRY_BUILD_TESTS)
-    add_executable(protoprobe_tests tests/probe_test.cpp tests/daemon_test.cpp
+    add_executable(protoprobe_tests tests/probe_test.cpp tests/transport_test.cpp
+        tests/daemon_test.cpp
         ${PROJECT_SOURCE_DIR}/daemon/tests/fake_device.cpp)
     target_include_directories(protoprobe_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests
         ${PROJECT_SOURCE_DIR}/daemon/tests)

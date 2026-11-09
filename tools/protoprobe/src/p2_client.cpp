@@ -127,7 +127,7 @@ public:
 
     bool poll(std::chrono::milliseconds timeout) override {
         for (;;) {
-            if (now_() - last_high_priority_ >= kHighPriorityPeriod) {
+            if (started_ && now_() - last_high_priority_ >= kHighPriorityPeriod) {
                 send_high_priority(true);
             }
             auto d = transport_.receive(timeout);

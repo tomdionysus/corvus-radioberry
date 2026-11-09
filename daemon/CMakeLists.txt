@@ -79,6 +79,7 @@ if(RADIOBERRY_BUILD_TESTS)
         tests/tx_policy_test.cpp
         tests/realtime_test.cpp
         tests/options_test.cpp
+        tests/net_test.cpp
         tests/daemon_test.cpp)
     target_link_libraries(daemon_tests PRIVATE radioberryd_core Catch2::Catch2WithMain)
     target_compile_definitions(daemon_tests PRIVATE
