@@ -24,7 +24,7 @@ supports their work.
 
 The code is C++20, with C only where the kernel or a shared ABI header
 requires it, tested with Catch2. All dependencies are Debian trixie
-packages. Licensed GPL-2.0-or-later.
+packages.
 
 Documentation:
 
@@ -130,3 +130,14 @@ antenna or dummy load rated for its output first, then set
 | `-DRADIOBERRY_ABI_INCLUDE_DIR=/usr/local/include` | build the tools and daemon against the installed ABI header; configuration fails if its ABI version differs from the source tree's |
 | `-DRADIOBERRY_BUILD_TESTS=OFF` | skip the unit tests (and the need for Catch2) |
 | `-DRADIOBERRY_BUILD_EXAMPLES=ON` | build `ft8rx` |
+
+## AI
+
+This project was developed with the use of agentic engineering,
+specifically Claude.
+
+## Licensing
+
+Licensed under the GNU General Public License, version 2 or (at your
+option) any later version; see [LICENSE](LICENSE). Third-party works and
+their licences are listed in [docs/licensing.md](docs/licensing.md).

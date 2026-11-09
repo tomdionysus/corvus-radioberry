@@ -62,7 +62,8 @@ TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
 - Every component has Catch2 tests aiming at complete coverage. Logic that
   touches hardware, files or sockets sits behind an interface so tests use
   fakes and fixtures. New code without tests is not finished.
-- No emoji anywhere. No AI or tool attribution anywhere.
+- No emoji anywhere. No AI or tool attribution in code, comments or
+  commit messages; the README's AI section is the one statement of it.
 
 ## Gateware
 
@@ -89,8 +90,8 @@ TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
 - No dates, personal names, callsigns, machine paths, addresses,
   hostnames, serials or other identifiers of the development hardware or
   its network. Describe hosts generically.
-- `README.md` holds only the overview, status and installation; everything
-  else goes in `docs/`.
+- `README.md` holds only the overview, status, installation, the AI
+  statement and the licence; everything else goes in `docs/`.
 - `TODO/ACTIVE.md` is the single list of open work; add items with an
   acceptance test. `TODO/COMPLETED.md` is append-only at the top.
 
