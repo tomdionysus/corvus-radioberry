@@ -1,8 +1,10 @@
 # Tools
 
-`rbprobe`, `rbcat` and `rbctl` (`tools/`) are installed in
-`/usr/local/bin`. `rbcat` and `rbctl` open `/dev/radioberry`, which is
-exclusive: stop `radioberry.service` first.
+`rbprobe`, `rbcat`, `rbctl`, `rbload`, `p1probe` and `p2probe` (`tools/`)
+are installed in `/usr/local/bin`. `rbcat` and `rbctl` open
+`/dev/radioberry`, which is exclusive: stop `radioberry.service` first.
+`rbload` needs the driver unloaded. `p1probe` and `p2probe` are network
+clients of `radioberryd`.
 
 ## rbprobe
 
@@ -66,3 +68,66 @@ run, PTT, the TX permission bit, PA enable and drive last only while
 
 Exit status: 0 success, 1 a device error (including EBUSY), 2 a usage
 error or refused command.
+
+## rbload
+
+`rbload [IMAGE]` loads a gateware image into the FPGA through its passive
+serial configuration lines, without the driver, and checks nSTATUS and
+CONF_DONE. IMAGE defaults to `/lib/firmware/radioberry.rbf`.
+
+- Only images `rbprobe` knows as this project's rpi-5 PIO builds are
+  loaded; `--force` loads an unknown image or another family's.
+- `--fpga CL025|CL016` refuses an image for the other FPGA, even with
+  `--force`.
+- It refuses to run while `radioberry.ko` is loaded, since the driver owns
+  the configuration lines: `sudo systemctl stop radioberry`,
+  `sudo rmmod radioberry`, then `rbload`. To keep the loaded image when
+  the driver comes back, load it with
+  `sudo modprobe radioberry load_gateware=0`.
+- `--json` and `--yaml` give the report as JSON or YAML.
+
+Exit status: 0 the FPGA configured, 1 it did not (an image for the other
+FPGA leaves CONF_DONE low) or the image cannot be read, 2 a usage error or
+a refused image.
+
+## p1probe and p2probe
+
+Minimal openHPSDR clients for checking a radio or `radioberryd`:
+`p1probe` speaks Protocol 1 (Hermes-Lite 2 dialect, UDP), `p2probe`
+Protocol 2. Each discovers the radio, streams from it after a settling
+time, and reports the radio's identity, the packet rate against the rate
+the configuration implies, sequence breaks and lost packets, and RMS and
+peak level per receiver.
+
+| Option | Meaning |
+|---|---|
+| `HOST` | radio address (default 127.0.0.1) |
+| `--port N` | radio port, Protocol 2's base port (default 1024) |
+| `--discover-only` | discovery only, no stream |
+| `--rate 48\|96\|192\|384` | sample rate, ksps (default 48) |
+| `--receivers N` | receivers to stream (default 1; up to 7 for Protocol 1, 8 for Protocol 2) |
+| `--freq HZ` | receive and transmit frequency (default 7074000) |
+| `--lna DB` | `p1probe` only: LNA gain, -12 to 48 (default: not sent) |
+| `--seconds S` | measurement time (default 2) |
+| `--settle S` | time streamed before measuring (default 0.2) |
+| `--tolerance PCT` | largest packet rate error that passes (default 2) |
+| `--mox` | zero-drive transmit during the measurement (below) |
+| `--json`, `--yaml` | report format |
+
+Drive is always 0 and PA enable is never sent. Without `--mox` neither
+probe sets MOX. `p1probe` sends zero TX samples in its host packets
+throughout, paced by the radio's receive clock. `p2probe` sends High
+Priority every 100 ms and no TX I/Q.
+
+With `--mox` the probe holds MOX through the measurement:
+
+- `p1probe` sets C0 bit 0 in its host packets.
+- `p2probe` sets the High Priority MOX bit and sends zero TX I/Q at
+  192 ksps, clocked by the radio's Mic/Line packets.
+
+This keys the transmitter if the radio allows it (`radioberryd` with
+`allow_tx`), at drive 0.
+
+Exit status: 0 every check passed (a discovery reply, the radio not busy
+with another client, the packet rate within the tolerance, no sequence
+breaks), 1 a check failed or the radio did not answer, 2 a usage error.

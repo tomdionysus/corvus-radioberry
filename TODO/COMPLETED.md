@@ -3,6 +3,23 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-09: `rbload` (`tools/rbload/`): loads a gateware image through
+  the passive serial lines with the driver unloaded, refusing unknown
+  images and other families unless `--force`, and an image for the other
+  FPGA always. On the development Pi: refused with the driver loaded
+  (exit 2); CL025 image configured (exit 0, 4.7 s); CL016 image CONF_DONE
+  low (exit 1); upstream GPIO-mode image refused (exit 2); the driver then
+  loaded with `load_gateware=0` read gateware 75.3 and `rbcat` streamed
+  at 48000.9 frames per second.
+- 2026-11-09: `p1probe` and `p2probe` (`tools/protoprobe/`): discovery,
+  receive measurement (rate, sequence, levels) and zero-drive MOX over
+  Protocol 1 and 2. Unit tests against a scripted radio; end-to-end tests
+  against `radioberryd` with the fake device (MOX reaches the device only
+  with transmit allowed; a busy radio is reported). Against the live
+  daemon, receive only: P1 two receivers at 192 ksps and three at
+  384 ksps, P2 six DDCs at 48 ksps and three at 192 ksps, each at the
+  expected rate with no sequence breaks. `radioberryd` used 0.56 s of CPU
+  in 10.6 s while serving three receivers at 384 ksps.
 - 2026-11-09: Documentation restructured. README holds only the overview,
   status and installation (with the `apt install` line); usage moved to
   `docs/driver.md`, `docs/daemon.md` and `docs/tools.md`, licensing to

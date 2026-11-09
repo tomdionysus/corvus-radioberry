@@ -35,6 +35,8 @@ if(RADIOBERRY_COVERAGE)
         "*/linux_device.cpp"
         "*/rbcat/src/main.cpp"
         "*/rbctl/src/main.cpp"
+        "*/rbload/src/main.cpp"
+        "*/protoprobe/src/*_main.cpp"
         "*/daemon/src/main.cpp"
         "*/driver-tests/*"
         CACHE STRING "lcov patterns excluded from the coverage report")

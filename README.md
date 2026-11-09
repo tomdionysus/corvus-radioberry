@@ -35,7 +35,7 @@ Documentation:
 | [docs/design.md](docs/design.md) | architecture of the driver, daemon and probe |
 | [docs/driver.md](docs/driver.md) | kernel driver: device interface, sysfs, module parameters |
 | [docs/daemon.md](docs/daemon.md) | `radioberryd`: options, service, Protocols 1 and 2, client notes |
-| [docs/tools.md](docs/tools.md) | `rbprobe`, `rbcat`, `rbctl` |
+| [docs/tools.md](docs/tools.md) | `rbprobe`, `rbcat`, `rbctl`, `rbload`, `p1probe`, `p2probe` |
 | [docs/examples.md](docs/examples.md) | `ft8rx`, sample order, frequency calibration |
 | [docs/fault-rx-lockup.md](docs/fault-rx-lockup.md) | the gateware's receive lock-up and the driver's workaround |
 | [gateware/README.md](gateware/README.md) | the gateware: interface the driver depends on |
@@ -57,8 +57,8 @@ Documentation:
 | `radioberryd`, Protocol 2 | `daemon/` | ✓ | Receive and transmit; FT8 contacts with piHPSDR and WSJT-X; no wideband, diversity, PureSignal or radio-side CW keyer |
 | `radioberry.service` | `daemon/` | ✓ | Unprivileged, options in `/etc/radioberry/config.yaml`, logs to the journal |
 | Example FT8 client `ft8rx` | `examples/ft8/` | ✓ | Receive only, Protocol 1 or 2; optional build |
-| Gateware loader `rbload` | `tools/` | ✗ | Not started |
-| Protocol test clients `p1probe`, `p2probe` | `tools/` | ✗ | Not started |
+| Gateware loader `rbload` | `tools/` | ✓ | Loads the FPGA without the driver; checks the image family and CONF_DONE |
+| Protocol test clients `p1probe`, `p2probe` | `tools/` | ✓ | Discovery, receive and zero-drive transmit checks over Protocol 1 and 2 |
 
 Open work, in order, is in `TODO/ACTIVE.md`.
 
@@ -105,7 +105,7 @@ otherwise. The service starts now and at every boot.
 | gateware for `FPGATYPE` | `/lib/firmware/radioberry.rbf` |
 | both gateware images | `/usr/local/share/radioberry/gateware/rpi-5/<type>/` |
 | ABI header | `/usr/local/include/radioberry_ioctl.h` |
-| `rbprobe`, `rbcat`, `rbctl` | `/usr/local/bin/` |
+| `rbprobe`, `rbcat`, `rbctl`, `rbload`, `p1probe`, `p2probe` | `/usr/local/bin/` |
 | `radioberryd` | `/usr/local/sbin/` |
 | `radioberry.service`, sysusers.d entry, udev rule | `/usr/local/lib/systemd/system/`, `/usr/local/lib/sysusers.d/`, `/usr/local/lib/udev/rules.d/` |
 | daemon config, if there is none | `/etc/radioberry/config.yaml` |

@@ -24,8 +24,9 @@ its date.
   HackRF (no spurs or image above a broadband floor about 46 dB down).
 - `ft8rx` (`examples/ft8`, optional): receive-only FT8 decoder over
   Protocol 1 or 2.
-- Next: the integration test and the protocol tools; the HL2 drive item and the Protocol 2 output checks
-  wait for the owner's go-ahead to transmit.
+- `rbload`, `p1probe` and `p2probe` are done.
+- Next: the integration test's fault injection; the HL2 drive item and
+  the Protocol 2 output checks wait for the owner's go-ahead to transmit.
 
 ## Standing decisions
 
@@ -99,14 +100,13 @@ Nothing open.
       is calibrated by hand (its per-band PA calibration, about 45 to 50).
 - [ ] Integration test: a fake client against the daemon on loopback for
       both protocols, with fault injection for every fail-safe path.
+      `tools/protoprobe/tests/daemon_test.cpp` already runs `p1probe` and
+      `p2probe` against the daemon and the fake device (streams, MOX
+      allowed and refused, a busy radio); the fault injection is open.
 
 ## 4. Protocol tools (`tools/`)
 
-- [ ] `p1probe` and `p2probe`: minimal protocol clients for discovery,
-      receive and zero-drive transmit, used by the integration tests.
-- [ ] `rbload`: standalone gateware loader (libgpiod 2, reusing
-      `tools/common`) with CONF_DONE and nSTATUS verification and image
-      family check, for use with the driver unloaded.
+Nothing open.
 
 ## 5. Gateware
 

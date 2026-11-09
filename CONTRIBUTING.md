@@ -12,7 +12,7 @@ gateware/  gateware source, built bitfiles per FPGA, provenance, toolchain
 driver/    kernel module, device tree overlay, ABI header, logic tests
 daemon/    radioberryd: device layer, session, transmit policy, Protocols 1 and 2, systemd files
 examples/  ft8rx, an example FT8 client (optional build)
-tools/     rbprobe, rbcat, rbctl, shared library, driver tests, CI and check scripts, gateware build
+tools/     rbprobe, rbcat, rbctl, rbload, p1probe, p2probe, shared library, driver tests, CI and check scripts, gateware build
 TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
 ```
 
