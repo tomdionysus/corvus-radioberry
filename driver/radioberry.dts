@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- * Radioberry 2.x on the Raspberry Pi 5. Installed as radioberry.dtbo and
+ * RadioBerry 2.x on the Raspberry Pi 5. Installed as radioberry.dtbo and
  * enabled with "dtoverlay=radioberry" in config.txt.
  *
  * The control interface is spi0 chip select 0 in SPI mode 3. The FPGA's

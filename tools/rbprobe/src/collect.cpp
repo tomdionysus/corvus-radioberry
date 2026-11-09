@@ -255,7 +255,7 @@ private:
         Node n = Node::map();
 
         // This project's overlay puts an "sdr,radioberry" device on spi0
-        // chip select 0. The original Radioberry software's overlay instead
+        // chip select 0. The original RadioBerry software's overlay instead
         // creates a root node "radioberry" and an spi0.0 device
         // "radioberry_ctrl_spi".
         const std::string spi_dir = "/sys/bus/spi/devices/spi0.0";
@@ -271,7 +271,7 @@ private:
         n.set("overlay", std::move(overlay));
         if (original) {
             add(Severity::kBlocker, "boot.overlay",
-                "the original Radioberry software's overlay is installed; install this "
+                "the original RadioBerry software's overlay is installed; install this "
                 "project's "
                 "radioberry.dtbo and reboot");
         } else if (!ours) {
@@ -310,7 +310,7 @@ private:
                 spidev.push(d);
                 if (d == "spidev0.0") {
                     add(Severity::kBlocker, "boot.spidev",
-                        "spidev0.0 exists and conflicts with the Radioberry control SPI");
+                        "spidev0.0 exists and conflicts with the RadioBerry control SPI");
                 }
             }
         }
@@ -629,7 +629,7 @@ private:
 
         std::string board;
         if (adc && bias) {
-            board = "Radioberry 5 W preamp: digital bias and telemetry";
+            board = "RadioBerry 5 W preamp: digital bias and telemetry";
         } else if (adc) {
             board = "PA with current and temperature telemetry, manual bias";
         } else if (bias) {
@@ -674,7 +674,7 @@ private:
         }
         if (src_.exists("/etc/init.d/radioberryd")) {
             add(Severity::kWarning, "software.legacy",
-                "the original Radioberry init script /etc/init.d/radioberryd is installed");
+                "the original RadioBerry init script /etc/init.d/radioberryd is installed");
         }
 
         n.set("udp_ports", udp_ports());

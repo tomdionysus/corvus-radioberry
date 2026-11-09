@@ -2,7 +2,7 @@
 
 `rbdrivertest` ([tools/driver-tests/](../tools/driver-tests/)) tests
 `radioberry.ko` through `/dev/radioberry` on a Raspberry Pi 5 with the
-Radioberry attached. The unit tests cover the driver's pure logic in
+RadioBerry attached. The unit tests cover the driver's pure logic in
 userspace ([driver/tests/](../driver/tests/)); this harness covers the
 kernel glue: the character device, the ioctls, the DMA streams and the
 gateware.

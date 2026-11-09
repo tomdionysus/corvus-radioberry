@@ -2,7 +2,7 @@
 
 The gateware is compiled with Quartus Prime Lite Edition, the free edition
 of Altera's FPGA toolchain (some documentation still carries Intel's
-name). Lite supports the Cyclone 10 LP devices on the Radioberry and needs no licence
+name). Lite supports the Cyclone 10 LP devices on the RadioBerry and needs no licence
 file or licence server. What it does need is acceptance of the Quartus
 Prime end-user licence agreement, which each person building the gateware
 gives themselves when downloading and installing. This repository does not

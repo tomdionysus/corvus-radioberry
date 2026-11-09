@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
 // Tests of radioberry.ko through /dev/radioberry on the Raspberry Pi with
-// the Radioberry attached. Receive only: no command sets PTT or the TX
+// the RadioBerry attached. Receive only: no command sets PTT or the TX
 // permission bit, and the TX samples written are zero.
 //
 //   rbdrivertest [Catch2 options]

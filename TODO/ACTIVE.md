@@ -40,11 +40,11 @@ item is removed from here and recorded at the top of
   libi2c-dev, libsystemd-dev.
 - Build and install with CMake throughout, including the kbuild wrapper for
   the module; `cmake --install` places everything.
-- Gateware: the Hermes-Lite 2 Radioberry PIO variants (75.3), built
+- Gateware: the Hermes-Lite 2 RadioBerry PIO variants (75.3), built
   unmodified from `gateware/source/` with Quartus Prime Lite 23.1std.1 on
   an x86-64 machine by
   [tools/build-gateware.sh](../tools/build-gateware.sh); the bitfiles are
-  committed and the Pi only installs them. The original Radioberry
+  committed and the Pi only installs them. The original RadioBerry
   software's free rpi-5 images are older GPIO-mode gateware and are not
   used. CL016 ships with a documented AD9866 TX output timing violation
   ([gateware/PROVENANCE.md](../gateware/PROVENANCE.md)).
@@ -100,12 +100,12 @@ Nothing open.
 ## 3. Daemon (`daemon/`)
 
 - [ ] HL2 drive compatibility: the HL2 gateware takes 0x09's top four
-      bits as AD9866 TX gain codes 0 to 15, the Radioberry build maps the
+      bits as AD9866 TX gain codes 0 to 15, the RadioBerry build maps the
       whole byte to codes 0 to 39 (`ad9866ctrl.v`), and the PA hat is not
       the HL2's, so HL2 software sends far too little drive (piHPSDR:
       drive 46 for 80% at its default calibration, about 0.4 W). Measure
       output against gain code across the range, then decide whether
-      `radioberryd` maps HL2 drive to Radioberry codes. Until then piHPSDR
+      `radioberryd` maps HL2 drive to RadioBerry codes. Until then piHPSDR
       is calibrated by hand (its per-band PA calibration, about 45 to 50).
 - [ ] Integration test: a fake client against the daemon on loopback for
       both protocols, with fault injection for every fail-safe path.

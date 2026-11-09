@@ -7,7 +7,7 @@
 Version 0.1.1
 
 A self-contained software stack for the
-[Radioberry 2.x HF transceiver HAT](https://github.com/pa3gsb/Radioberry-2.x/wiki)
+[RadioBerry 2.x HF transceiver HAT](https://github.com/pa3gsb/Radioberry-2.x/wiki)
 on a Raspberry Pi 5:
 
 - `radioberry.ko`, the Linux kernel driver
@@ -21,17 +21,17 @@ Every component is built from this repository against the current
 Raspberry Pi OS kernel (6.18 and newer) with no out-of-tree kernel
 patches. In particular, no patched `rp1-pio` is needed: the driver uses
 only what the stock kernel's `rp1-pio` driver exports. The original
-Radioberry driver depends on a symbol only a private `rp1-pio` patch
+RadioBerry driver depends on a symbol only a private `rp1-pio` patch
 provides, and
 [kernel updates break it](https://m0aws.co.uk/?p=3670). After a kernel
 update, rebuild and reinstall this one (Build and install, below).
 
-The Radioberry and its original software come from the
-[Radioberry project](https://github.com/pa3gsb/Radioberry-2.x). A
+The RadioBerry and its original software come from the
+[RadioBerry project](https://github.com/pa3gsb/Radioberry-2.x). A
 [ready-to-run Raspberry Pi 5 image](https://pa3gsb.gumroad.com/l/radioberry)
-of the original software is sold by the Radioberry's author; buying it
+of the original software is sold by the RadioBerry's author; buying it
 supports their work. Please consider buying it even if you don't use it:
-the Radioberry hardware is a work of art.
+the RadioBerry hardware is a work of art.
 
 The code is C++20, with C only where the kernel or a shared ABI header
 requires it, tested with Catch2. All dependencies are Debian trixie
@@ -63,7 +63,7 @@ Documentation:
 | Platform probe `rbprobe` | `tools/rbprobe/` | ✓ | Host, boot, driver, gateware, FPGA, PA board and daemon state; text, JSON or YAML |
 | Stream tool `rbcat` | `tools/rbcat/` | ✓ | Receive streams and measurements without the daemon |
 | Command tool `rbctl` | `tools/rbctl/` | ✓ | Single gateware commands; anything that can transmit needs `--allow-tx` |
-| Gateware, CL025 (HL2 Radioberry PIO variant 75.3) | `gateware/` | ✓ | Built from source, verified on hardware; its receive lock-up is worked around by the driver |
+| Gateware, CL025 (HL2 RadioBerry PIO variant 75.3) | `gateware/` | ✓ | Built from source, verified on hardware; its receive lock-up is worked around by the driver |
 | Gateware, CL016 | `gateware/` | ✗ | Built, not tested on a CL016 board; misses AD9866 TX output timing |
 | Kernel driver `radioberry.ko`, overlay, ABI header | `driver/` | ✓ | Loads the gateware at boot; receive and transmit streams |
 | `radioberryd`, Protocol 1 | `daemon/` | ✓ | Hermes-Lite 2 dialect, receive and transmit, UDP and TCP; FT8 contacts with piHPSDR and WSJT-X |
@@ -85,13 +85,13 @@ sudo apt install build-essential cmake pkg-config device-tree-compiler \
     linux-headers-rpi-2712 libliquid-dev libgpiod-dev libi2c-dev \
     libyaml-cpp-dev nlohmann-json3-dev libspdlog-dev libsystemd-dev catch2
 
-cmake -S . -B build -DFPGATYPE=CL025   # CL016 if the Radioberry has a CL016 FPGA
+cmake -S . -B build -DFPGATYPE=CL025   # CL016 if the RadioBerry has a CL016 FPGA
 cmake --build build -j
 ctest --test-dir build
 sudo cmake --install build
 ```
 
-To tell which FPGA the Radioberry has, read the marking on the chip's
+To tell which FPGA the RadioBerry has, read the marking on the chip's
 package: `10CL025YE144C8G` is a CL025, `10CL016YE144C8G` a CL016.
 
 To enable the kernel driver, add the following to
@@ -149,7 +149,7 @@ antenna or dummy load rated for its output first, then set
 
 ## Roadmap / Ongoing work
 
-- If someone out there could test this with a CL016 based Radioberry, that
+- If someone out there could test this with a CL016 based RadioBerry, that
   would be great. The CL016 build has a timing issue on the AD9866 TX data
   outputs that moves with the FPGA fitter seed, and no seed tried so far
   meets it ([gateware/PROVENANCE.md](gateware/PROVENANCE.md)). I'd also
@@ -159,7 +159,7 @@ antenna or dummy load rated for its output first, then set
   stream can lock up at a receiver-count change
   ([docs/fault-rx-lockup.md](docs/fault-rx-lockup.md)). I've worked around
   this in the driver, but the real fix belongs in the gateware itself.
-- The AURSINC Radioberry Preamp Board I'm using is an inexpensive copy with
+- The AURSINC RadioBerry Preamp Board I'm using is an inexpensive copy with
   manual bias set on a pot. The
   [original design](https://groups.google.com/g/radioberry/c/WQc_afuvViI)
   has an MCP4662 digital potentiometer for the bias and a MAX11613 ADC for

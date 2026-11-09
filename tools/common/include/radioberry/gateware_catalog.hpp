@@ -25,7 +25,7 @@ struct KnownImage {
 };
 
 // Every gateware image this project recognises by hash: its own builds and
-// the original Radioberry software's images.
+// the original RadioBerry software's images.
 std::span<const KnownImage> known_images();
 
 std::optional<KnownImage> find_known_image(std::string_view sha256);

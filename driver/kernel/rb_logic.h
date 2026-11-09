@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
- * Pure logic of the Radioberry driver: command inspection, the RX word
+ * Pure logic of the RadioBerry driver: command inspection, the RX word
  * parser with metadata resynchronisation and frame assembly, a byte ring,
  * and TX packing. No kernel dependencies, so the same code is compiled
  * into the userspace unit tests (driver/tests).

@@ -200,7 +200,7 @@ Options parse_options(const std::vector<std::string>& command_line) {
 std::string usage() {
     return "usage: radioberryd [options]\n"
            "\n"
-           "Serves the Radioberry to SDR clients over openHPSDR Protocol 1 (Hermes-Lite 2\n"
+           "Serves the RadioBerry to SDR clients over openHPSDR Protocol 1 (Hermes-Lite 2\n"
            "dialect, UDP and TCP) and Protocol 2 (UDP, on the Protocol 1 port and the\n"
            "ports after it). It transmits only with --allow-tx, only for the client that\n"
            "owns the radio, and only while that client holds MOX. It claims no PA\n"

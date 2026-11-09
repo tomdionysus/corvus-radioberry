@@ -14,7 +14,7 @@ namespace radioberry::load {
 const char* const kUsage =
     "usage: rbload [options] [IMAGE]\n"
     "\n"
-    "Loads a gateware image into the Radioberry's FPGA through its passive\n"
+    "Loads a gateware image into the RadioBerry's FPGA through its passive\n"
     "serial configuration lines, without the kernel driver, and checks that\n"
     "nSTATUS and CONF_DONE report success. IMAGE defaults to\n"
     "/lib/firmware/radioberry.rbf. Only images rbprobe knows as this\n"

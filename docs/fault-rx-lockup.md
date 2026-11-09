@@ -2,7 +2,7 @@
 
 ## Summary
 
-With the Hermes-Lite 2 Radioberry PIO gateware (75.3,
+With the Hermes-Lite 2 RadioBerry PIO gateware (75.3,
 `radioberry_pio_cl025`, built from unmodified source) the FPGA can stop
 delivering receive samples at a receiver-count change and never resume.
 Only reloading the gateware recovers it. The trigger is the asynchronous

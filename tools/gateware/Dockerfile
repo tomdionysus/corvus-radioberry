@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
-# Quartus Prime Lite 23.1std.1 for building the Radioberry gateware.
+# Quartus Prime Lite 23.1std.1 for building the RadioBerry gateware.
 # Built by tools/build-gateware.sh with a directory holding only the Quartus
 # installer and the Cyclone 10 LP device file as the build context. The
 # licence agreement is accepted only when ACCEPT_QUARTUS_EULA=1 is passed,

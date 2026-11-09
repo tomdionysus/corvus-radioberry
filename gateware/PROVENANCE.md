@@ -20,11 +20,11 @@ git archive --format=tar --prefix=Hermes-Lite2-3e467fd/ 3e467fd \
     gateware/variants/radioberry_pio_cl016 README.md | xz -9e
 ```
 
-This is the newest change to the Radioberry PIO gateware: it sets
+This is the newest change to the RadioBerry PIO gateware: it sets
 `VERSION_MAJOR` 75 and `VERSION_MINOR` 3 in
 `gateware/rtl/radioberry/pi-pio/radioberry_core.v`. Later commits in that
 repository touch only the Hermes-Lite 2 Ethernet code, which the
-Radioberry variants do not use.
+RadioBerry variants do not use.
 
 ## Bitfiles
 
@@ -74,8 +74,8 @@ committed).
 
 The Hermes-Lite 2 RTL is GPL-2.0-or-later by its file headers; the
 openHPSDR DSP cores under `gateware/rtl/radio_openhpsdr1/` are
-LGPL-2.0-or-later; the Radioberry-specific RTL under
-`gateware/rtl/radioberry/` is from the Radioberry project. The bitfiles
+LGPL-2.0-or-later; the RadioBerry-specific RTL under
+`gateware/rtl/radioberry/` is from the RadioBerry project. The bitfiles
 also contain Quartus generated IP (PLL and FIFO megafunctions), covered by
 the Quartus licence described in [gateware/QUARTUS.md](QUARTUS.md). See
 [docs/licensing.md](../docs/licensing.md).

@@ -17,8 +17,8 @@ that work's licence header and copyright line beneath the SPDX line.
 
 | Work | Licence | Use here | Reference |
 |---|---|---|---|
-| Radioberry 2.x driver, daemon, overlays, gateware loader | Unlicense (public domain), stated in each source file | ABI, pin map and behaviour reference | https://github.com/pa3gsb/Radioberry-2.x |
-| Hermes-Lite 2 gateware, Radioberry PIO variants | GPL-2.0-or-later (file headers) | Source in `gateware/source/`, unmodified; built here, bitfiles in `gateware/rpi-5/` | https://github.com/softerhardware/Hermes-Lite2 |
+| RadioBerry 2.x driver, daemon, overlays, gateware loader | Unlicense (public domain), stated in each source file | ABI, pin map and behaviour reference | https://github.com/pa3gsb/Radioberry-2.x |
+| Hermes-Lite 2 gateware, RadioBerry PIO variants | GPL-2.0-or-later (file headers) | Source in `gateware/source/`, unmodified; built here, bitfiles in `gateware/rpi-5/` | https://github.com/softerhardware/Hermes-Lite2 |
 | openHPSDR DSP cores used by Hermes-Lite 2 (CIC, FIR, CORDIC, receiver) | LGPL-2.0-or-later (file headers) | Contained in the bitfiles | https://github.com/softerhardware/Hermes-Lite2/tree/master/gateware/rtl/radio_openhpsdr1 |
 | Hermes-Lite 2 protocol description | project wiki | Protocol 1 dialect, PA and bias commands | https://github.com/softerhardware/Hermes-Lite2/wiki/Protocol |
 | openHPSDR Ethernet Protocol v4.x and Protocol 1 firmware sources | GPL-2.0 | Protocol 2 reference | https://github.com/TAPR/OpenHPSDR-Firmware |
@@ -28,5 +28,5 @@ that work's licence header and copyright line beneath the SPDX line.
 | piHPSDR | GPL-2.0 | Reference client; not linked | https://github.com/dl1ycf/pihpsdr |
 | Quartus Prime Lite Edition and its generated IP (PLL, FIFO) | Quartus Prime licence agreement, accepted by whoever builds | Gateware toolchain ([gateware/QUARTUS.md](../gateware/QUARTUS.md)); not redistributed; its IP is inside the bitfiles | https://www.altera.com/downloads |
 
-"Hermes", "Hermes-Lite", "openHPSDR" and "Radioberry" are the names of
+"Hermes", "Hermes-Lite", "openHPSDR" and "RadioBerry" are the names of
 their respective projects.

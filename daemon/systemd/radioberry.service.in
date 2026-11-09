@@ -6,7 +6,7 @@
 # goes (the driver unloaded) and restarts after a failure.
 
 [Unit]
-Description=Radioberry radio daemon (openHPSDR Protocol 1 and 2)
+Description=RadioBerry radio daemon (openHPSDR Protocol 1 and 2)
 BindsTo=dev-radioberry.device
 After=dev-radioberry.device network.target
 

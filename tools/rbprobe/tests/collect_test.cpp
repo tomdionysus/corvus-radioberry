@@ -397,7 +397,7 @@ TEST_CASE("PA classification by I2C address", "[collect]") {
         return str(collect(pi, test_options()), "pa.board");
     };
     CHECK(board({{0x34, false}, {0x2c, false}}) ==
-          "Radioberry 5 W preamp: digital bias and telemetry");
+          "RadioBerry 5 W preamp: digital bias and telemetry");
     CHECK(board({{0x34, false}}) == "PA with current and temperature telemetry, manual bias");
     CHECK(board({{0x2c, false}}) == "PA with digital bias, no telemetry");
 

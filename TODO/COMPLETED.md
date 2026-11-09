@@ -112,7 +112,7 @@ result, and where it lives.
   `daemon/tests/tx_policy_test.cpp` against captured log output
   (`daemon/src/tx_policy.cpp`).
 - 2026-11-09: First complete FT8 contact through `radioberryd`, operated
-  by the owner on 40 m: piHPSDR and WSJT-X on the Pi, the Radioberry
+  by the owner on 40 m: piHPSDR and WSJT-X on the Pi, the RadioBerry
   driving an external 25 W amplifier (the owner's calibration), with a
   station about 2 000 km away. The daemon logged every transmission of
   the exchange on its FT8 slot, 13.9 s each, 47 900 to 48 200 samples
@@ -135,7 +135,7 @@ result, and where it lives.
   7.074321 MHz. piHPSDR's own transmit chain is the right way round for
   this stream (a TUNE carrier measured 984 Hz above the dial, image
   -77 dBc). piHPSDR's HL2 drive needs its per-band PA calibration
-  lowered (about 45 to 50) on this Radioberry; see the HL2 drive item.
+  lowered (about 45 to 50) on this RadioBerry; see the HL2 drive item.
 - 2026-11-08: Hardware validation, transmit into a 50 ohm dummy load with
   the PA enabled, output measured by the owner on an inline meter (50 W
   scale), on the owner's go-ahead for each step: a 1 kHz tone at half of
@@ -415,7 +415,7 @@ result, and where it lives.
   installed. The stock 6.18 `rp1-pio` lacks only `rp1_pio_sm_buffer_virt`
   of what the upstream driver uses.
 - 2026-11-08: Amplifier board identified and documented in `docs/pa.md`:
-  AURSINC Radioberry Preamp Board V2 (PA5W V2), manual bias (already set),
+  AURSINC RadioBerry Preamp Board V2 (PA5W V2), manual bias (already set),
   INA199A1 current sense, no I2C devices.
 - 2026-11-08: Upstream projects Radioberry-2.x and radioberry-p2 surveyed in
   `docs/history.md`. Repository created with GPL-2.0-or-later.

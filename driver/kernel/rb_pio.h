@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
- * PIO programs and state machine register words for the Radioberry RX and
+ * PIO programs and state machine register words for the RadioBerry RX and
  * TX streams. Pure data and arithmetic, shared with the unit tests.
  *
  * The two programs are derived from the original Radioberry-2.x Pi 5

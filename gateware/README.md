@@ -1,6 +1,6 @@
 # Gateware
 
-The FPGA runs the Hermes-Lite 2 gateware in its Radioberry PIO variants,
+The FPGA runs the Hermes-Lite 2 gateware in its RadioBerry PIO variants,
 `radioberry_pio_cl025` and `radioberry_pio_cl016`, version 75.3. The
 bitfiles in `rpi-5/<type>/radioberry.rbf` are built from the unmodified
 source in `source/` with Quartus Prime Lite on an x86-64 machine

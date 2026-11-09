@@ -43,7 +43,7 @@ struct Options {
     bool gain_given = false;
     int slots = 0;  // 0: until interrupted
     // Each sample's second value taken as I: measured on the development
-    // Radioberry through radioberryd, FT8 decodes this way and not the
+    // RadioBerry through radioberryd, FT8 decodes this way and not the
     // other (docs/examples.md).
     bool q_first = true;
 };

@@ -5,10 +5,10 @@
 - Raspberry Pi 5 running Raspberry Pi OS (Debian 13 trixie, 64-bit),
   kernel 6.18.60+rpt-rpi-2712 or newer. The stock in-tree `rp1-pio` driver
   is used as it is.
-- Radioberry 2.x HAT: AD9866 front end, Intel Cyclone 10 LP 10CL025 or
+- RadioBerry 2.x HAT: AD9866 front end, Intel Cyclone 10 LP 10CL025 or
   10CL016, 0 to 30 MHz.
-- AURSINC "Radioberry Preamp Board V2" (PCB marked PA5W V2) stacked on the
-  Radioberry: 1.5 to 3.5 W output, manual bias, no I2C devices
+- AURSINC "RadioBerry Preamp Board V2" (PCB marked PA5W V2) stacked on the
+  RadioBerry: 1.5 to 3.5 W output, manual bias, no I2C devices
   ([docs/pa.md](pa.md)).
 
 ## The development Pi
@@ -22,7 +22,7 @@
 | Network | Wi-Fi only |
 | Also installed | piHPSDR and wdsp, built from source, for client tests |
 
-The Radioberry's sample clock runs about 31 to 33 ppm fast against the
+The RadioBerry's sample clock runs about 31 to 33 ppm fast against the
 Pi's clock: `rbcat` measures 48001.5 to 48001.6 RX frames per second at
 48 ksps.
 

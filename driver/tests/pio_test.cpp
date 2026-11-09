@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
 // PIO register words built from pin numbers must match the constants the
-// original Radioberry Pi 5 driver used, which are known to work with this
+// original RadioBerry Pi 5 driver used, which are known to work with this
 // gateware.
 #include <catch2/catch_test_macros.hpp>
 

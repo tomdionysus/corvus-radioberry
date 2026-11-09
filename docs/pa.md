@@ -1,12 +1,12 @@
 # PA: the amplifier board
 
-The supported amplifier is the AURSINC "Radioberry Preamp Board V2" (PCB
+The supported amplifier is the AURSINC "RadioBerry Preamp Board V2" (PCB
 marked "PA5W V2" and "RB_PA5W"), a two-layer board mounted on the
-Radioberry. It connects through a header on the Radioberry itself, not
+RadioBerry. It connects through a header on the RadioBerry itself, not
 the Raspberry Pi's 40-pin header. It is a Hermes-Lite 2 style push-pull
 PA stage, manually biased, current-sensed by an INA199A1, and keyed by
-the Radioberry's CN301 lines. The seller supports it only with the
-Radioberry Juice USB board; its use on a Raspberry Pi is verified by this
+the RadioBerry's CN301 lines. The seller supports it only with the
+RadioBerry Juice USB board; its use on a Raspberry Pi is verified by this
 project only.
 
 ## The board
@@ -19,7 +19,7 @@ project only.
   shunt, 2 V per 1 A. Expect at least 2 V (1 A) when transmitting; drive
   present, TX LED on and current low means a failed FET.
 - Drive needed: at least 7 V peak-to-peak into the board from the
-  Radioberry.
+  RadioBerry.
 - No I2C devices: `i2cdetect -y 1` finds nothing with the board stacked
   (no MAX11613 ADC, no MCP4662 bias pot). There is no temperature or
   current telemetry.
@@ -28,7 +28,7 @@ project only.
 
 | Marking | Meaning |
 |---|---|
-| RB_RX, RB_TX (SMA, left edge) | cabled to the Radioberry RX in and TX out |
+| RB_RX, RB_TX (SMA, left edge) | cabled to the RadioBerry RX in and TX out |
 | ANT (SMA, right edge) | antenna, 1.5 to 3.5 W out |
 | BAT (2-pin, right edge) | DC in |
 | BIAS1, BIAS2 | bias trimmers |
@@ -38,7 +38,7 @@ project only.
 | T1, L1 to L5, Q2/Q3 area | push-pull output stage and output transformer |
 | U8, U12, RLY1 | driver op-amp, current sense amplifier, T/R relay |
 
-## Radioberry CN301
+## RadioBerry CN301
 
 CN301 pins are direct FPGA pins: 1 5V, 2 3V3, 3 ptt_out / exttr (FPGA
 144), 4 inttr (143), 5 keyer dash (142), 6 keyer dot (141), 7 preamp bias
@@ -77,5 +77,5 @@ development board's bias is set.
 
 - AURSINC product page: https://www.aursinc.com/products/aursinc-radioberry-preamp-board-v2-output-1-5w-3w-for-hf-power-ampfier-10w-100w-pa-for-raspberry-pi-4-4b
 - Test notes for the board: https://jumbo5566.github.io/pro/rb/2024/04/17/rb016_025.html
-- Radioberry CN301 pinout: https://github.com/pa3gsb/Radioberry-2.x/wiki/Radioberry-In-Output
+- RadioBerry CN301 pinout: https://github.com/pa3gsb/Radioberry-2.x/wiki/Radioberry-In-Output
 - Hermes-Lite 2 protocol (PA enable, bias, ADC fields): https://github.com/softerhardware/Hermes-Lite2/wiki/Protocol

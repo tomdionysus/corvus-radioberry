@@ -18,7 +18,7 @@ endif()
 option(RADIOBERRY_BUILD_TESTS "Build the unit tests" ON)
 option(RADIOBERRY_BUILD_EXAMPLES "Build the example clients (examples/)" OFF)
 
-set(FPGATYPE "CL025" CACHE STRING "FPGA on the Radioberry: CL016 or CL025")
+set(FPGATYPE "CL025" CACHE STRING "FPGA on the RadioBerry: CL016 or CL025")
 set_property(CACHE FPGATYPE PROPERTY STRINGS CL016 CL025)
 if(NOT FPGATYPE MATCHES "^(CL016|CL025)$")
     message(FATAL_ERROR "FPGATYPE must be CL016 or CL025, not '${FPGATYPE}'")

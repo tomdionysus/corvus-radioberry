@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- * Radioberry 2.x on the Raspberry Pi 5.
+ * RadioBerry 2.x on the Raspberry Pi 5.
  *
  * Binds to the "sdr,radioberry" device on spi0 created by the radioberry
  * overlay. On probe it loads the gateware through passive serial, reads
@@ -16,7 +16,7 @@
  * and a FIFO-priority kernel thread refills them, so the state machines
  * never wait for a restart.
  *
- * The PIO programs and the overall design follow the original Radioberry
+ * The PIO programs and the overall design follow the original RadioBerry
  * Pi 5 driver, released into the public domain under the Unlicense.
  */
 
@@ -1349,7 +1349,7 @@ static struct spi_driver rb_driver = {
 };
 module_spi_driver(rb_driver);
 
-MODULE_DESCRIPTION("Radioberry 2.x SDR on the Raspberry Pi 5 (RP1 PIO)");
+MODULE_DESCRIPTION("RadioBerry 2.x SDR on the Raspberry Pi 5 (RP1 PIO)");
 MODULE_LICENSE("GPL");
 MODULE_VERSION(RB_DRIVER_VERSION_STRING);
 MODULE_SOFTDEP("pre: rp1_pio");
