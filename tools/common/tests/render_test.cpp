@@ -42,8 +42,8 @@ Node sample() {
     return root;
 }
 
-// Converts parsed JSON or YAML back into a Node-equivalent JSON value so
-// the two outputs can be compared.
+// Converts parsed YAML into the equivalent JSON value so the two outputs
+// can be compared.
 nlohmann::ordered_json from_yaml(const YAML::Node& y) {
     if (y.IsNull()) {
         return nullptr;

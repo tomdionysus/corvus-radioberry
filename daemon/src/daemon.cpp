@@ -23,6 +23,13 @@ p1::Identity identify(Device& device, const std::optional<std::array<std::uint8_
     return id;
 }
 
+// The device options with the hook that sets each device thread's
+// scheduling.
+DeviceOptions with_thread_hook(DeviceOptions options, std::function<void(const char*)> hook) {
+    options.on_thread_start = std::move(hook);
+    return options;
+}
+
 // Faults that break the transmit stream: the session drops MOX on them.
 // A driver TX underrun is not one: the driver's ring runs empty for moments
 // whenever the gateware fills its own 85 ms FIFO at PIO speed (on PTT, at
@@ -31,13 +38,6 @@ p1::Identity identify(Device& device, const std::optional<std::array<std::uint8_
 // Real starvation ends transmission through the gateware's own PTT
 // hang-time watchdog, the TX watchdog, the client timeout and the other
 // faults here.
-// The device options with the hook that sets each device thread's
-// scheduling.
-DeviceOptions with_thread_hook(DeviceOptions options, std::function<void(const char*)> hook) {
-    options.on_thread_start = std::move(hook);
-    return options;
-}
-
 bool breaks_transmit(FaultKind kind) {
     switch (kind) {
         case FaultKind::TxInvalidBlock:

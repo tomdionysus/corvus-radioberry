@@ -1,8 +1,9 @@
 # Contributing
 
-Read this, `README.md`, `TODO/ACTIVE.md` (open work and standing
-decisions), `docs/design.md` and `gateware/README.md` before starting.
-Do not reopen a standing decision in `TODO/ACTIVE.md` without saying so.
+Read this, [README.md](README.md), [TODO/ACTIVE.md](TODO/ACTIVE.md) (open
+work and standing decisions), [docs/design.md](docs/design.md) and
+[gateware/README.md](gateware/README.md) before starting. Do not reopen a
+standing decision in [TODO/ACTIVE.md](TODO/ACTIVE.md) without saying so.
 
 ## Repository layout
 
@@ -25,28 +26,31 @@ TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
   access details are kept outside this repository. Besides the README's
   packages, development needs `sudo apt install clang-format-19 lcov rsync`
   (format check, coverage report, `ci-pi.sh --remote`).
-- `tools/ci-pi.sh` is the merge gate. On the Pi it runs the format check
-  (`tools/check-format.sh`, clang-format 19), the SPDX check
-  (`tools/check-spdx.sh`), the release, sanitizer and coverage builds with
-  their tests, the driver hardware tests (skipped while another program
-  holds `/dev/radioberry`), and the coverage summary; when the ABI header
-  is installed it also builds the tools against it and checks that no
-  userspace compile sees `driver/include`. From a workstation,
-  `tools/ci-pi.sh --remote [user@]host` copies the working tree to the Pi
-  and runs it there (it needs the main checkout, not a git worktree).
+- [tools/ci-pi.sh](tools/ci-pi.sh) is the merge gate. On the Pi it runs
+  the format check ([tools/check-format.sh](tools/check-format.sh),
+  clang-format 19), the SPDX check
+  ([tools/check-spdx.sh](tools/check-spdx.sh)), the release, sanitizer
+  and coverage builds with their tests, the driver hardware tests (skipped
+  while another program holds `/dev/radioberry`), and the coverage
+  summary; when the ABI header is installed it also builds the tools
+  against it and checks that no userspace compile sees `driver/include`.
+  From a workstation, `tools/ci-pi.sh --remote [user@]host` copies the
+  working tree to the Pi and runs it there (it needs the main checkout,
+  not a git worktree).
 - `tools/check-format.sh --fix` applies clang-format 19, which the
   workstation may not have; run it on the Pi and copy the result back.
-- `CMakePresets.json` has `default`, `asan` (AddressSanitizer and
-  UndefinedBehaviorSanitizer) and `coverage` presets;
-  `cmake --build --preset coverage --target coverage` writes an lcov
-  report to `build-coverage/coverage/html`.
+- [CMakePresets.json](CMakePresets.json) has `default`, `asan`
+  (AddressSanitizer and UndefinedBehaviorSanitizer) and `coverage`
+  presets; `cmake --build --preset coverage --target coverage` writes an
+  lcov report to `build-coverage/coverage/html`.
 
 ## Finishing a piece of work
 
-1. The item's acceptance test in `TODO/ACTIVE.md` passes on the Pi.
-2. `tools/ci-pi.sh` passes.
-3. Tick the item, move its text to the top of `TODO/COMPLETED.md`, and
-   update the docs it affects.
+1. The item's acceptance test in [TODO/ACTIVE.md](TODO/ACTIVE.md) passes
+   on the Pi.
+2. [tools/ci-pi.sh](tools/ci-pi.sh) passes.
+3. Tick the item, move its text to the top of
+   [TODO/COMPLETED.md](TODO/COMPLETED.md), and update the docs it affects.
 4. Squash-merge into `develop` and delete the item branch.
 
 ## Code
@@ -55,10 +59,11 @@ TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
   which are C. GNU extensions off. Warnings are errors.
 - Every source file starts with `// SPDX-License-Identifier: GPL-2.0-or-later`
   (`/* ... */` in C and headers shared with the kernel). Code taken from
-  an upstream work keeps its copyright and licence header beneath it.
-- `.clang-format` is authoritative.
+  a third-party work keeps its copyright and licence header beneath it.
+- [.clang-format](.clang-format) is authoritative.
 - Dependencies come only from Debian trixie packages. Adding one means
-  adding it to the README's `apt install` line and `docs/licensing.md`.
+  adding it to the README's `apt install` line and
+  [docs/licensing.md](docs/licensing.md).
 - Every component has Catch2 tests aiming at complete coverage. Logic that
   touches hardware, files or sockets sits behind an interface so tests use
   fakes and fixtures. New code without tests is not finished.
@@ -67,13 +72,16 @@ TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
 
 ## Gateware
 
-- Never edit the gateware source. `tools/build-gateware.sh` rebuilds the
+- Never edit the gateware source.
+  [tools/build-gateware.sh](tools/build-gateware.sh) rebuilds the
   bitfiles on an x86-64 machine with Quartus Prime Lite
-  (`gateware/QUARTUS.md`); installing Quartus requires the person running
-  it to accept the Quartus licence agreement, so ask before doing it.
-- Commit rebuilt bitfiles together with the `PROVENANCE.md` table the
-  script updates, and add new hashes to the `rbprobe` catalogue
-  (`tools/common/src/gateware_catalog.cpp`).
+  ([gateware/QUARTUS.md](gateware/QUARTUS.md)); installing Quartus
+  requires the person running it to accept the Quartus licence agreement,
+  so ask before doing it.
+- Commit rebuilt bitfiles together with the
+  [gateware/PROVENANCE.md](gateware/PROVENANCE.md) table the script
+  updates, and add new hashes to the `rbprobe` catalogue
+  ([tools/common/src/gateware_catalog.cpp](tools/common/src/gateware_catalog.cpp)).
 
 ## Commits
 
@@ -90,21 +98,25 @@ TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
 - No dates, personal names, callsigns, machine paths, addresses,
   hostnames, serials or other identifiers of the development hardware or
   its network. Describe hosts generically.
-- `README.md` holds only the overview, status, installation, the AI
-  statement and the licence; everything else goes in `docs/`.
-- `TODO/ACTIVE.md` is the single list of open work; add items with an
-  acceptance test. `TODO/COMPLETED.md` is append-only at the top.
+- [README.md](README.md) holds only the overview, status, installation,
+  build options, roadmap, the AI statement and the licence;
+  everything else goes in `docs/`.
+- Name other files in the repository with relative Markdown links.
+- [TODO/ACTIVE.md](TODO/ACTIVE.md) is the single list of open work; add
+  items with an acceptance test. [TODO/COMPLETED.md](TODO/COMPLETED.md) is
+  append-only at the top.
 
 ## Safety
 
-- No transmit test on the development board without the owner's explicit
-  permission for that test, asked at the time. Anything that sets PTT
-  (command bit 32) or the TX permission bit (bit 42), or writes samples
-  while either is set, is a transmit test. Receive tests, and TX-path tests
-  with both bits clear, need no permission.
+- No transmit test on the development board without the board owner's
+  explicit permission for that test, asked at the time. Anything that
+  sets PTT (command bit 32) or the TX permission bit (bit 42), or writes
+  samples while either is set, is a transmit test. Receive tests, and
+  TX-path tests with both bits clear, need no permission.
 - The PA stage is never enabled by default and never without a dummy load
   on the first test of any new code path that can key the transmitter.
 - Any code that can assert MOX, PA enable or drive must have a timeout or
   watchdog and a test that proves the fail-safe path clears it.
 - Reboots and configuration changes on the development Pi are allowed at
-  any time; record anything persistent in `docs/platform.md`.
+  any time; record anything persistent in
+  [docs/platform.md](docs/platform.md).

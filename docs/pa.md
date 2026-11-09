@@ -1,12 +1,13 @@
 # PA: the amplifier board
 
 The supported amplifier is the AURSINC "Radioberry Preamp Board V2" (PCB
-marked "PA5W V2" and "RB_PA5W"), a two-layer HAT stacked on the
-Radioberry. It is a Hermes-Lite 2 style push-pull PA stage, manually
-biased, current-sensed by an INA199A1, and keyed by the Radioberry's CN301
-lines. The seller supports it only with the Radioberry Juice USB board;
-with the Pi it sits on the same 40-pin bus and CN301 signals, and is
-verified by this project only.
+marked "PA5W V2" and "RB_PA5W"), a two-layer board mounted on the
+Radioberry. It connects through a header on the Radioberry itself, not
+the Raspberry Pi's 40-pin header. It is a Hermes-Lite 2 style push-pull
+PA stage, manually biased, current-sensed by an INA199A1, and keyed by
+the Radioberry's CN301 lines. The seller supports it only with the
+Radioberry Juice USB board; its use on a Raspberry Pi is verified by this
+project only.
 
 ## The board
 
@@ -43,7 +44,8 @@ CN301 pins are direct FPGA pins: 1 5V, 2 3V3, 3 ptt_out / exttr (FPGA
 144), 4 inttr (143), 5 keyer dash (142), 6 keyer dot (141), 7 preamp bias
 (137), 8 envpa (136), 9 and 10 unused (135, 133), 13 PTT in (121), 14 key
 in (120), 15/16 FPGA SDA/SCL (119/115), 17/18 SDA/SCL from the Pi header,
-19/20 GND. What drives each output is in `gateware/README.md` section 6.
+19/20 GND. What drives each output is in
+[gateware/README.md](../gateware/README.md) section 6.
 
 The board's PTT, key and paddle inputs go to the FPGA's CN301 pins, not to
 the Pi, so they work whatever software runs.
@@ -73,7 +75,7 @@ development board's bias is set.
 
 ## References
 
-- AURSINC listing: https://www.aliexpress.com/item/1005008233825206.html
+- AURSINC product page: https://www.aursinc.com/products/aursinc-radioberry-preamp-board-v2-output-1-5w-3w-for-hf-power-ampfier-10w-100w-pa-for-raspberry-pi-4-4b
 - Test notes for the board: https://jumbo5566.github.io/pro/rb/2024/04/17/rb016_025.html
 - Radioberry CN301 pinout: https://github.com/pa3gsb/Radioberry-2.x/wiki/Radioberry-In-Output
 - Hermes-Lite 2 protocol (PA enable, bias, ADC fields): https://github.com/softerhardware/Hermes-Lite2/wiki/Protocol

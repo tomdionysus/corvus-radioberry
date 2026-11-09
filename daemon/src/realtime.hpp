@@ -11,8 +11,8 @@ namespace radioberry::daemon {
 inline constexpr int kDevicePriority = 20;
 inline constexpr int kNetworkPriority = 10;
 
-// Names the calling thread (at most 15 characters). The main thread is
-// left alone: its name is the process's.
+// Names the calling thread (at most 15 characters). The daemon does not
+// call it on the main thread, whose name is the process's.
 void name_thread(const char* name);
 
 // Puts the calling thread, called `name` in the message, under SCHED_FIFO

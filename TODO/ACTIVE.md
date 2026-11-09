@@ -2,31 +2,32 @@
 
 Open work only, ordered by dependency: take the first unchecked item whose
 dependencies are done. Each item names its acceptance test. A finished
-item is removed from here and recorded at the top of `COMPLETED.md` with
-its date.
+item is removed from here and recorded at the top of
+[TODO/COMPLETED.md](COMPLETED.md) with its date.
 
-## Where things stand (2026-11-09, v0.1.0)
+## Where things stand
 
 - Working on the development Pi: the CL025 gateware (75.3, built from
   source), the driver (0.4.0; the PIO gateware's RX lock-up worked around,
-  `docs/fault-rx-lockup.md`), `rbprobe`, `rbcat`, `rbctl`, the driver
-  harness `rbdrivertest` and the CI gate `tools/ci-pi.sh`.
+  [docs/fault-rx-lockup.md](../docs/fault-rx-lockup.md)), `rbprobe`,
+  `rbcat`, `rbctl`, `rbload`, `p1probe`, `p2probe`, the driver harness
+  `rbdrivertest` and the CI gate [tools/ci-pi.sh](../tools/ci-pi.sh).
 - `radioberryd`: Protocol 1 (HL2 dialect) receive and transmit over UDP
-  and TCP, and Protocol 2 over UDP (FT8 contact on 40 m through piHPSDR
-  in Protocol 2), one owning client, transmit
-  only with `--allow-tx` through the transmit policy and fail-safes,
-  frequency calibration (`--frequency-ppm`, +22.9 on the development
-  board), I/Q convention option, real-time threads; runs as
+  and TCP, and Protocol 2 receive and transmit over UDP, one owning
+  client, transmit only with `--allow-tx` through the transmit policy and
+  fail-safes, frequency calibration (`--frequency-ppm`, +22.9 on the
+  development board), I/Q convention option, real-time threads; runs as
   `radioberry.service`.
 - On air: piHPSDR and WSJT-X through `radioberryd` received and decoded
   FT8, transmitted it (decoded by distant stations on PSK Reporter), and
-  completed an FT8 contact. The transmit chain measured clean with a
-  HackRF (no spurs or image above a broadband floor about 46 dB down).
+  completed FT8 contacts over Protocol 1 and Protocol 2. The transmit
+  chain measured clean with a HackRF (no spurs or image above a broadband
+  floor about 46 dB down).
 - `ft8rx` (`examples/ft8`, optional): receive-only FT8 decoder over
   Protocol 1 or 2.
-- `rbload`, `p1probe` and `p2probe` are done.
 - Next: the integration test's fault injection; the HL2 drive item and
-  the Protocol 2 output checks wait for the owner's go-ahead to transmit.
+  the Protocol 2 output checks wait for the board owner's go-ahead to
+  transmit.
 
 ## Standing decisions
 
@@ -41,22 +42,26 @@ its date.
   the module; `cmake --install` places everything.
 - Gateware: the Hermes-Lite 2 Radioberry PIO variants (75.3), built
   unmodified from `gateware/source/` with Quartus Prime Lite 23.1std.1 on
-  an x86-64 machine by `tools/build-gateware.sh`; the bitfiles are
-  committed and the Pi only installs them. Upstream's free rpi-5 images are
-  older GPIO-mode gateware and are not used. CL016 ships with a documented
-  AD9866 TX output timing violation (`gateware/PROVENANCE.md`).
+  an x86-64 machine by
+  [tools/build-gateware.sh](../tools/build-gateware.sh); the bitfiles are
+  committed and the Pi only installs them. The original Radioberry
+  software's free rpi-5 images are older GPIO-mode gateware and are not
+  used. CL016 ships with a documented AD9866 TX output timing violation
+  ([gateware/PROVENANCE.md](../gateware/PROVENANCE.md)).
 - Development FPGA is a 10CL025. The driver supports CL016 and CL025.
-- The PIO gateware's RX lock-up (`docs/fault-rx-lockup.md`) is resolved
-  by the driver's RX clock hold (`rx_clock_hold_us`, default 200), which
+- The PIO gateware's RX lock-up
+  ([docs/fault-rx-lockup.md](../docs/fault-rx-lockup.md)) is resolved by
+  the driver's RX clock hold (`rx_clock_hold_us`, default 200), which
   measured 0 lock-ups in 4500 receiver-count changes against 17 in 1800
   without it. This is accepted as the fix. It is not reinvestigated and
   the gateware item in section 5 is not started unless the stall
-  indicator fires with the hold on: sysfs `rx_stalled` = 1, `rx_stalls`
-  > 0, or "RX stream stalled" in the kernel log. If that happens, record
-  the circumstances in the fault document's section 8 and reopen from
-  there; otherwise, a stream that stops is a new fault, not this one.
-- No transmit test on the development board without the owner's explicit
-  permission for that specific test. Transmit code is proved first against
+  indicator fires with the hold on: sysfs `rx_stalled` reads 1,
+  `rx_stalls` is above 0, or "RX stream stalled" is in the kernel log. If
+  that happens, record the circumstances in the fault document's
+  Measurements section and reopen from there; otherwise, a stream that
+  stops is a new fault, not this one.
+- No transmit test on the development board without the board owner's
+  explicit permission for that specific test. Transmit code is proved first against
   fakes. Writing samples to the TX path with PTT and the TX permission bit
   clear is not transmitting.
 - Names: daemon `radioberryd`, unit `radioberry.service`, config
@@ -68,7 +73,7 @@ its date.
 - Logging with spdlog: stderr in the foreground, journal as a service.
 - Runtime privileges: system user and group `radioberry`, udev rule for
   `/dev/radioberry`, unit grants CAP_SYS_NICE and CAP_IPC_LOCK; never root.
-- CI is `tools/ci-pi.sh` on the development Pi (directly or with
+- CI is [tools/ci-pi.sh](../tools/ci-pi.sh) on the development Pi (directly or with
   `--remote`); it is the merge gate. No hosted CI.
 - Workflow: one branch per TODO item, squash-merged into `develop`;
   `develop` merged into `main` only at a version tag. No pull requests.
@@ -100,7 +105,8 @@ Nothing open.
       is calibrated by hand (its per-band PA calibration, about 45 to 50).
 - [ ] Integration test: a fake client against the daemon on loopback for
       both protocols, with fault injection for every fail-safe path.
-      `tools/protoprobe/tests/daemon_test.cpp` already runs `p1probe` and
+      [tools/protoprobe/tests/daemon_test.cpp](../tools/protoprobe/tests/daemon_test.cpp)
+      already runs `p1probe` and
       `p2probe` against the daemon and the fake device (streams, MOX
       allowed and refused, a busy radio); the fault injection is open.
 
@@ -111,9 +117,10 @@ Nothing open.
 ## 5. Gateware
 
 - [ ] Fix the RX lock-up at source. Not taken in order: only on the
-      owner's explicit instruction, since it reopens "built unmodified"
-      (`docs/fault-rx-lockup.md`, section 9). The changes: synchronise the
-      RX FIFO clear on both sides with the real `dcfifo` parameters, give
+      project owner's explicit instruction, since it reopens "built
+      unmodified" ([docs/fault-rx-lockup.md](../docs/fault-rx-lockup.md),
+      "Fixing it in the gateware"). The changes: synchronise the RX FIFO
+      clear on both sides with the real `dcfifo` parameters, give
       `rx_pi_pio` a reset or safe-state recovery, remove its inferred
       latches, constrain the Pi RX clock at 20 MHz; version the image so
       `rbprobe` tells it apart. Acceptance: with `rx_clock_hold_us=0`,
@@ -125,7 +132,7 @@ Nothing open.
 
 ## 6. Hardware validation on the development Pi
 
-Transmit items each need the owner's go-ahead at the time.
+Transmit items each need the board owner's go-ahead at the time.
 
 - [ ] SparkSDR and Quisk receive and tune via Protocol 1.
 - [ ] Protocol 2 transmit output: power into the dummy load against
@@ -146,10 +153,10 @@ Transmit items each need the owner's go-ahead at the time.
 
 - [ ] Wi-Fi background scans: while associated, the development Pi scans
       every 33.7 s for 3.65 s, which stalls UDP to a Wi-Fi client for about
-      130 ms at a time (`docs/platform.md`); longer than the 85 ms TX FIFO,
+      130 ms at a time ([docs/platform.md](../docs/platform.md)); longer than the 85 ms TX FIFO,
       so a Protocol 2 client transmitting over Wi-Fi would run it dry.
       Stop the scans (for example by locking the connection to the access
       point's BSSID, in the netplan configuration so it survives reboots),
-      with a rollback in place since Wi-Fi is the Pi's only link; owner's
-      decision. Acceptance: RX packet lateness to a Wi-Fi client under
+      with a rollback in place since Wi-Fi is the Pi's only link; the
+      board owner's decision. Acceptance: RX packet lateness to a Wi-Fi client under
       10 ms at p99.9 over 60 s.

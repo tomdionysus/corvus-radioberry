@@ -15,11 +15,15 @@ on a Raspberry Pi 5:
 
 Every component is built from this repository against the current
 Raspberry Pi OS kernel (6.18 and newer) with no out-of-tree kernel
-patches.
+patches. In particular, no patched `rp1-pio` is needed: the driver uses
+only what the stock kernel's `rp1-pio` driver exports. The original
+Radioberry driver depends on a symbol only a private `rp1-pio` patch
+provides, and
+[kernel updates break it](https://m0aws.co.uk/?p=3670). After a kernel
+update, rebuild and reinstall this one (Build and install, below).
 
 The Radioberry and its original software come from the
-[Radioberry project](https://github.com/pa3gsb/Radioberry-2.x). This
-project is a separate implementation, not a fork of that software. A
+[Radioberry project](https://github.com/pa3gsb/Radioberry-2.x). A
 [ready-to-run Raspberry Pi 5 image](https://pa3gsb.gumroad.com/l/radioberry)
 of the original software is sold by the Radioberry's author; buying it
 supports their work.
@@ -59,10 +63,10 @@ Documentation:
 | `radioberryd`, Protocol 2 | `daemon/` | ✓ | Receive and transmit; FT8 contacts with piHPSDR and WSJT-X; no wideband, diversity, PureSignal or radio-side CW keyer |
 | `radioberry.service` | `daemon/` | ✓ | Unprivileged, options in `/etc/radioberry/config.yaml`, logs to the journal |
 | Example FT8 client `ft8rx` | `examples/ft8/` | ✓ | Receive only, Protocol 1 or 2; optional build |
-| Gateware loader `rbload` | `tools/` | ✓ | Loads the FPGA without the driver; checks the image family and CONF_DONE |
-| Protocol test clients `p1probe`, `p2probe` | `tools/` | ✓ | Discovery, receive and zero-drive transmit checks over Protocol 1 and 2 |
+| Gateware loader `rbload` | `tools/rbload/` | ✓ | Loads the FPGA without the driver; checks the image family and CONF_DONE |
+| Protocol test clients `p1probe`, `p2probe` | `tools/protoprobe/` | ✓ | Discovery, receive and zero-drive transmit checks over Protocol 1 and 2 |
 
-Open work, in order, is in `TODO/ACTIVE.md`.
+Open work, in order, is in [TODO/ACTIVE.md](TODO/ACTIVE.md).
 
 ## Build and install
 

@@ -1,7 +1,7 @@
 # Licensing
 
 This repository is licensed under the GNU General Public License, version
-2 or (at your option) any later version; see `LICENSE`. Every source file
+2 or (at your option) any later version; see [LICENSE](../LICENSE). Every source file
 carries an SPDX header:
 
 ```
@@ -10,7 +10,7 @@ carries an SPDX header:
 
 GPL-2.0-or-later is required by the kernel module, which links against
 `EXPORT_SYMBOL_GPL` symbols of the Raspberry Pi `rp1-pio` driver, and is
-compatible with every work below. Code taken from an upstream work keeps
+compatible with every work below. Code taken from a third-party work keeps
 that work's licence header and copyright line beneath the SPDX line.
 
 ## Third-party works
@@ -27,7 +27,7 @@ that work's licence header and copyright line beneath the SPDX line.
 | ft8_lib | MIT | Message text code vendored in `examples/ft8/src/ft8_lib/` with its licence; the decoder in `examples/ft8/src/ft8/` is a port of it | https://github.com/kgoba/ft8_lib |
 | Corvus HF FT8 decoder | GPL-2.0-or-later here (also Apache-2.0 in Corvus HF) | `examples/ft8/src/ft8/` | Corvus HF |
 | piHPSDR | GPL-2.0 | Reference client; not linked | https://github.com/dl1ycf/pihpsdr |
-| Quartus Prime Lite Edition and its generated IP (PLL, FIFO) | Quartus Prime licence agreement, accepted by whoever builds | Gateware toolchain (`gateware/QUARTUS.md`); not redistributed; its IP is inside the bitfiles | https://www.altera.com/downloads |
+| Quartus Prime Lite Edition and its generated IP (PLL, FIFO) | Quartus Prime licence agreement, accepted by whoever builds | Gateware toolchain ([gateware/QUARTUS.md](../gateware/QUARTUS.md)); not redistributed; its IP is inside the bitfiles | https://www.altera.com/downloads |
 
 "Hermes", "Hermes-Lite", "openHPSDR" and "Radioberry" are the names of
 their respective projects.

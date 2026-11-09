@@ -13,9 +13,12 @@ It logs to the journal (`journalctl -u radioberry`), stops when the
 driver goes, and restarts after a failure. A udev rule gives
 `/dev/radioberry` to the `radioberry` group.
 
-The config file's keys are the long options with `_` for `-`, each listed
-with its default and a description. An option given on the command line
-overrides the file. The daemon reads it at start:
+The config file's keys are the long options with `_` for `-`
+(`realtime: false` stands for `--no-realtime`), each with a description.
+The installed file
+([daemon/systemd/config.yaml](../daemon/systemd/config.yaml)) lists
+`radioberryd`'s defaults, except `drive_ceiling`, which it sets to 150.
+An option given on the command line overrides the file. The daemon reads it at start:
 `sudo systemctl restart radioberry` after a change.
 
 Stop the service before running anything else that opens
@@ -44,7 +47,7 @@ real-time scheduling or locked memory.
 | `--log-level LEVEL` | `info` | trace, debug, info, warn or error |
 
 `--frequency-ppm` is measured per board against known signals
-(`examples.md`).
+([docs/examples.md](examples.md)).
 
 ## Sessions and transmit
 
@@ -54,8 +57,11 @@ real-time scheduling or locked memory.
 - With it, the owning client transmits while it holds MOX. Drive is
   capped at `--drive-ceiling`, PA enable is passed on only with
   `--allow-pa`, and `--tx-watchdog-s` ends any transmission held longer.
-- Any stream fault while transmitting drops MOX until the client releases
-  it.
+- These faults drop MOX, which stays dropped until the client releases
+  it: an invalid TX block, a full RX queue, a device error, a full TX
+  queue, a gap in the host sequence (Protocol 1 host packets, Protocol 2
+  TX I/Q), and the TX watchdog. TX underruns, RX resyncs, overruns and
+  stalls are logged and do not drop MOX.
 - No PA interlock is claimed.
 
 ## Protocol 2
@@ -66,7 +72,7 @@ real-time scheduling or locked memory.
   takes as a Hermes-Lite 2, and the gateware's receiver count as DDCs.
 - The gateware runs every receiver at one rate, the highest any enabled
   DDC asks for (48 to 384 ksps, within the receive capacity in
-  `driver.md`); a DDC asking for less is decimated in the daemon.
+  [docs/driver.md](driver.md)); a DDC asking for less is decimated in the daemon.
 - TX I/Q arrives at 192 ksps and is decimated to the gateware's 48 ksps.
 - The silent Mic/Line packets that clock the client's transmitter and the
   High Priority status are paced by the radio's sample clock.
@@ -79,7 +85,7 @@ real-time scheduling or locked memory.
 The two device threads run at SCHED_FIFO 20 and the network threads at
 SCHED_FIFO 10, below the driver's kernel thread (SCHED_FIFO 50), and
 memory is locked. UDP sockets carry DSCP EF and SO_PRIORITY 6.
-Measurements are in `platform.md`.
+Measurements are in [docs/platform.md](platform.md).
 
 ## Clients
 
@@ -90,4 +96,5 @@ Measurements are in `platform.md`.
   output is right (about 45 to 50 on the development board).
 - WSJT-X through piHPSDR: Kenwood TS-2000 rig type on piHPSDR's CAT port
   (TCP 19090).
-- `ft8rx` is a receive-only example client (`examples.md`).
+- `ft8rx` is a receive-only example client
+  ([docs/examples.md](examples.md)).

@@ -34,7 +34,7 @@ const char* const kUsage =
     "  --tx-zeros           also write zero TX samples at 48 ksps, keeping\n"
     "                       about 50 ms queued in the driver; PTT and the\n"
     "                       TX permission bit stay clear, so nothing is\n"
-    "                       transmitted"
+    "                       transmitted\n"
     "  --device PATH        default /dev/radioberry\n"
     "  --json               JSON report\n"
     "  --yaml               YAML report\n"

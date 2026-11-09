@@ -4,13 +4,14 @@ The FPGA runs the Hermes-Lite 2 gateware in its Radioberry PIO variants,
 `radioberry_pio_cl025` and `radioberry_pio_cl016`, version 75.3. The
 bitfiles in `rpi-5/<type>/radioberry.rbf` are built from the unmodified
 source in `source/` with Quartus Prime Lite on an x86-64 machine
-(`tools/build-gateware.sh`) and committed, so the Pi only installs them.
-`PROVENANCE.md` records the source commit, fitter seeds, hashes and
-timing; `QUARTUS.md` describes the toolchain.
+([tools/build-gateware.sh](../tools/build-gateware.sh)) and committed, so
+the Pi only installs them. [gateware/PROVENANCE.md](PROVENANCE.md) records
+the source commit, fitter seeds, hashes and timing;
+[gateware/QUARTUS.md](QUARTUS.md) describes the toolchain.
 
 Everything below is read from that source (paths relative to
-`gateware/rtl/` in the archive) and from the original Pi 5 driver's PIO
-programs. Statements marked *not yet measured* follow from the source and
+`gateware/rtl/` in the archive; `variants/` is beside it) and from the
+original Pi 5 driver's PIO programs. Statements marked *not yet measured* follow from the source and
 have not been checked on hardware.
 
 Only the PIO variants work with this project's driver. The older
@@ -38,7 +39,7 @@ SPI (section 4) and is the authority at run time.
 - Passive serial on GPIO 13 (DATA), 24 (DCLK), 27 (nCONFIG), read back on
   22 (CONF_DONE) and 26 (nSTATUS). Bytes least significant bit first. A
   bitstream for the other device leaves CONF_DONE low (measured on the
-  development board, see `docs/platform.md`).
+  development board, see [docs/platform.md](../docs/platform.md)).
 - After configuration `radioberry/reset_handler.v` holds the design in
   reset for 2^24 - 16 cycles of the 10 MHz internal clock, about 1.68 s.
   During reset the SPI slave is held in reset and answers with its reset
@@ -89,7 +90,7 @@ SPI (section 4) and is the authority at run time.
   | 1, 2 | 0 |
   | 3 | bits 7..6 transmitters, 5..2 receivers, 1..0 FPGA type (1 = CL016, 2 = CL025) |
   | 4 | gateware major version (75) |
-  | 5 | gateware minor version (2) |
+  | 5 | gateware minor version (3) |
 
 - Command address 0x00, data bits 6..3, is the number of receivers minus
   one. Changing it clears the RX FIFO and restarts the receivers. The rest
@@ -131,7 +132,7 @@ SPI (section 4) and is the authority at run time.
   read side and the `rx_pi_pio` state machine run on the Pi's clock. If
   the Pi's clock is running while the clear is asserted and released, the
   read-out can lock up for good until the gateware is reloaded
-  (`docs/fault-rx-lockup.md`). The driver therefore holds its RX clock
+  ([docs/fault-rx-lockup.md](../docs/fault-rx-lockup.md)). The driver therefore holds its RX clock
   still across every receiver-count command.
 
 ## 6. CN301 outputs and what keys the transmitter

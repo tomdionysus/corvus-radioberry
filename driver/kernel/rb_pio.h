@@ -3,11 +3,11 @@
  * PIO programs and state machine register words for the Radioberry RX and
  * TX streams. Pure data and arithmetic, shared with the unit tests.
  *
- * The two programs are the ones in the upstream Radioberry-2.x Pi 5 driver
- * (SBC/rpi-5/device_driver/pio-mode/driver/src/rb2-rx-stream.c and
- * rb2-tx-stream.c, Johan Maas PA3GSB, released into the public domain under
- * the Unlicense). Their handshakes are described in gateware/README.md
- * sections 5 and 7.
+ * The two programs are derived from the original Radioberry-2.x Pi 5
+ * driver's rb2-rx-stream.c and rb2-tx-stream.c
+ * (SBC/rpi-5/device_driver/pio-mode/driver/src/), released into the public
+ * domain under the Unlicense. Their handshakes are described in
+ * gateware/README.md sections 5 and 7.
  */
 #ifndef RB_PIO_H
 #define RB_PIO_H
@@ -107,8 +107,8 @@ static const struct rb_pio_program rb_tx_program = {
 
 /*
  * Programs are handed to rp1_pio_add_program() as written for offset 0;
- * the RP1 firmware relocates jump targets to the load offset (the upstream
- * TX program, loaded second, depends on this). Only the wrap addresses in
+ * the RP1 firmware relocates jump targets to the load offset (the TX
+ * program, loaded second, depends on this). Only the wrap addresses in
  * EXECCTRL are computed here from the returned offset.
  */
 
@@ -119,7 +119,7 @@ struct rb_sm_config {
 	u32 pinctrl;
 };
 
-/* Upstream clocking: 200 MHz / 2 for RX, / 8 for TX. */
+/* The original driver's clocking: 200 MHz / 2 for RX, / 8 for TX. */
 #define RB_RX_CLKDIV_DEFAULT 2
 #define RB_TX_CLKDIV_DEFAULT 8
 

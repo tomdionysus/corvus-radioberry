@@ -255,22 +255,24 @@ private:
         Node n = Node::map();
 
         // This project's overlay puts an "sdr,radioberry" device on spi0
-        // chip select 0. The upstream overlay instead creates a root node
-        // "radioberry" and an spi0.0 device "radioberry_ctrl_spi".
+        // chip select 0. The original Radioberry software's overlay instead
+        // creates a root node "radioberry" and an spi0.0 device
+        // "radioberry_ctrl_spi".
         const std::string spi_dir = "/sys/bus/spi/devices/spi0.0";
         const auto compatible = src_.read_file(spi_dir + "/of_node/compatible");
         const bool ours = compatible && compatible->find("sdr,radioberry") != std::string::npos;
         const auto modalias = file_trimmed(spi_dir + "/modalias");
-        const bool upstream = src_.exists("/proc/device-tree/radioberry") ||
+        const bool original = src_.exists("/proc/device-tree/radioberry") ||
                               modalias.value_or("") == "spi:radioberry_ctrl_spi";
 
         Node overlay = Node::map();
         overlay.set("active", ours);
-        overlay.set("upstream", upstream);
+        overlay.set("original", original);
         n.set("overlay", std::move(overlay));
-        if (upstream) {
+        if (original) {
             add(Severity::kBlocker, "boot.overlay",
-                "the upstream Radioberry overlay is installed; install this project's "
+                "the original Radioberry software's overlay is installed; install this "
+                "project's "
                 "radioberry.dtbo and reboot");
         } else if (!ours) {
             add(Severity::kBlocker, "boot.overlay",
@@ -399,15 +401,14 @@ private:
         if (!installed_) {
             n.set("family", Node());
             n.set("fpga", Node());
-            n.set("upstream", Node());
+            n.set("source", Node());
             add(Severity::kWarning, "firmware.unknown",
-                "the installed gateware image is not a known upstream image");
+                "the installed gateware image is not one rbprobe knows");
             return n;
         }
         n.set("family", std::string(to_string(installed_->family)));
         n.set("fpga", std::string(to_string(installed_->fpga)));
-        n.set("upstream",
-              std::string(installed_->upstream_ref) + " " + std::string(installed_->upstream_path));
+        n.set("source", std::string(installed_->source) + " " + std::string(installed_->path));
         if (installed_->family != GatewareFamily::kRpi5Pio) {
             add(Severity::kBlocker, "firmware.family",
                 "the installed gateware is the " + std::string(to_string(installed_->family)) +
@@ -623,7 +624,7 @@ private:
 
         std::string board;
         if (adc && bias) {
-            board = "pa3gsb 5 W preamp: digital bias and telemetry";
+            board = "Radioberry 5 W preamp: digital bias and telemetry";
         } else if (adc) {
             board = "PA with current and temperature telemetry, manual bias";
         } else if (bias) {
@@ -647,7 +648,7 @@ private:
         Node daemon = Node::map();
         Node path;
         Node version;
-        // `cmake --install` puts it in sbin; bin is where it was once.
+        // `cmake --install` puts it in sbin; the bin directories are checked too.
         for (const char* candidate : {"/usr/local/sbin/radioberryd", "/usr/sbin/radioberryd",
                                       "/usr/local/bin/radioberryd", "/usr/bin/radioberryd"}) {
             if (src_.exists(candidate)) {
@@ -668,7 +669,7 @@ private:
         }
         if (src_.exists("/etc/init.d/radioberryd")) {
             add(Severity::kWarning, "software.legacy",
-                "the upstream init script /etc/init.d/radioberryd is installed");
+                "the original Radioberry init script /etc/init.d/radioberryd is installed");
         }
 
         n.set("udp_ports", udp_ports());

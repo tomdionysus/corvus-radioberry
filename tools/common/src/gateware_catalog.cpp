@@ -9,8 +9,8 @@ namespace {
 constexpr std::string_view kTag = "Radioberry-2.x radioberry@rpi5 (269e402), gateware 73.3";
 constexpr std::string_view kBuild = "this repository, Hermes-Lite2 3e467fd, gateware 75.3";
 
-// This project's PIO builds (gateware/PROVENANCE.md), then the upstream
-// Radioberry-2.x images. Ordered so that the image for the development
+// This project's PIO builds (gateware/PROVENANCE.md), then the original
+// Radioberry software's images. Ordered so that the image for the development
 // board's FPGA comes first; identification by configuration tries them in
 // this order.
 constexpr std::array<KnownImage, 5> kImages = {{

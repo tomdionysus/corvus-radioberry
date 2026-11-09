@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
-# radioberryd (section 3 of TODO/ACTIVE.md).
+# radioberryd, its service files and its tests.
 
 # Device layer over /dev/radioberry: command registers, RX and TX pumps,
 # statistics and faults.

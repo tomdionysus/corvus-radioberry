@@ -8,7 +8,8 @@
 - Radioberry 2.x HAT: AD9866 front end, Intel Cyclone 10 LP 10CL025 or
   10CL016, 0 to 30 MHz.
 - AURSINC "Radioberry Preamp Board V2" (PCB marked PA5W V2) stacked on the
-  Radioberry: 1.5 to 3.5 W output, manual bias, no I2C devices (`pa.md`).
+  Radioberry: 1.5 to 3.5 W output, manual bias, no I2C devices
+  ([docs/pa.md](pa.md)).
 
 ## The development Pi
 
@@ -37,7 +38,7 @@ configuration).
 ## Gateware images
 
 `rbprobe` identifies images by hash. The driver needs this project's 75.3
-PIO build (`gateware/PROVENANCE.md`). The original Radioberry-2.x images
+PIO build ([gateware/PROVENANCE.md](../gateware/PROVENANCE.md)). The original Radioberry-2.x images
 below are 73.3 GPIO-mode gateware (8-bit RX bus, TX over SPI chip select
 1) and do not work with it.
 

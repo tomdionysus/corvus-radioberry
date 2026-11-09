@@ -2,7 +2,7 @@
 
 ## Source
 
-`source/Hermes-Lite2-3e467fd-radioberry-pio.tar.xz` (167992 bytes, SHA-256
+[source/Hermes-Lite2-3e467fd-radioberry-pio.tar.xz](source/Hermes-Lite2-3e467fd-radioberry-pio.tar.xz) (167992 bytes, SHA-256
 a4d5dd1585447ace697385e53966092c0a09a6501867709f38877c50dc1e91fe) is
 `git archive` of the Hermes-Lite 2 repository
 (https://github.com/softerhardware/Hermes-Lite2) at commit
@@ -28,14 +28,14 @@ Radioberry variants do not use.
 
 ## Bitfiles
 
-`tools/build-gateware.sh` compiles both variants from the archive,
+[tools/build-gateware.sh](../tools/build-gateware.sh) compiles both variants from the archive,
 unmodified, with Quartus Prime Lite 23.1std.1 (the version the upstream
 project files were last saved with, `LAST_QUARTUS_VERSION` in each
 `radioberry.qsf`) and the fitter seed below, then checks timing against
 the upstream constraints, and writes:
 
-| File | FPGA | Size | SHA-256 |
-|---|---|---|---|
+| File | FPGA | Seed | Size | SHA-256 |
+|---|---|---|---|---|
 | `rpi-5/CL025/radioberry.rbf` | Cyclone 10 LP 10CL025YE144C8G | 4 | 372888 | a25f30f4bc9ba3c3f7fbe3406f4a4a27da99be7e90c5272d1b6c05ee0acecedc |
 | `rpi-5/CL016/radioberry.rbf` | Cyclone 10 LP 10CL016YE144C8G | 5 | 274527 | fc975a3671496db6e45456f7cc0f1008df67f033b4fd17e80bc89cdfbfef4d20 |
 
@@ -77,4 +77,5 @@ openHPSDR DSP cores under `gateware/rtl/radio_openhpsdr1/` are
 LGPL-2.0-or-later; the Radioberry-specific RTL under
 `gateware/rtl/radioberry/` is from the Radioberry project. The bitfiles
 also contain Quartus generated IP (PLL and FIFO megafunctions), covered by
-the Quartus licence described in `QUARTUS.md`. See `docs/licensing.md`.
+the Quartus licence described in [gateware/QUARTUS.md](QUARTUS.md). See
+[docs/licensing.md](../docs/licensing.md).

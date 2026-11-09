@@ -16,7 +16,7 @@ clock it drives into the FPGA, from just before a receiver-count command
 until 200 us after it: 0 lock-ups in 4500 changes, against 17 in 1800
 without, at no measurable cost to the stream. A stall detector reports the
 condition should it occur anyway. The gateware defect itself is open
-(`TODO/ACTIVE.md`).
+([TODO/ACTIVE.md](../TODO/ACTIVE.md)).
 
 ## Symptoms
 
@@ -73,6 +73,7 @@ to 32 C unless stated; shipped CL025 image (fitter seed 4) unless stated.
 | Configuration | Lock-ups / runs |
 |---|---|
 | harness, no hold | 7 / 35, 6 / 150 (`debug=2`), 1 / 50, 8 / 150 |
+| harness, no hold, alongside the seed sweep | 17 / 300 (1800 changes) |
 | SoC 42 to 49 C, no hold | 7 / 150 |
 | 100 us minimum gap between SPI commands, hot | 2 / 50 |
 | fitter seeds 1, 2, 3, 5, 7, no hold | 3, 6, 0, 1, 2 / 150 each |
@@ -103,7 +104,8 @@ edge for both.
 
 ## The workaround
 
-`driver/kernel/radioberry.c`, the command ioctl. When a general command
+[driver/kernel/radioberry.c](../driver/kernel/radioberry.c), the command
+ioctl. When a general command
 carries a receiver count different from the current one, the driver:
 
 1. stops its RX PIO state machine, so GPIO 6 stands still;
@@ -140,7 +142,7 @@ in flight, and "RX stream resumed" if words return. Sysfs `rx_stalled`
 
 Fixing it means editing the gateware source, which the project builds
 unmodified; that needs a separate decision, a versioned image and a
-`gateware/PROVENANCE.md` entry. In order of directness:
+[gateware/PROVENANCE.md](../gateware/PROVENANCE.md) entry. In order of directness:
 
 1. Synchronise the FIFO clear: replace `wrsync_aclr_synch("ON")` in
    `usiq_fifo` with `read_aclr_synch("ON")` and `write_aclr_synch("ON")`.
@@ -160,8 +162,9 @@ runs per image.
 - Run the harness test in `tools/driver-tests/` in a loop with
   `rx_clock_hold_us=0`, checking `rx_stalled` after each run and writing 1
   to `reload` when it is set. 150 runs take about seven minutes.
-- Seed sweep: compile each seed separately with `tools/build-gateware.sh`
-  and keep each `build/` directory; `radioberry.map.rpt` holds the state
+- Seed sweep: compile each seed separately with
+  [tools/build-gateware.sh](../tools/build-gateware.sh) and keep each
+  `build/` directory; `radioberry.map.rpt` holds the state
   machine encoding and `radioberry.sta.rpt` the recovery and removal
   summaries.
 - To measure another image, copy it to `/lib/firmware/radioberry.rbf`,

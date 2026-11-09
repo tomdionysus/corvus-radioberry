@@ -56,7 +56,7 @@ Node image_node(const Options& options, std::size_t bytes, const std::string& sh
     if (known) {
         n.set("family", std::string(to_string(known->family)));
         n.set("fpga", std::string(to_string(known->fpga)));
-        n.set("source", std::string(known->upstream_ref));
+        n.set("source", std::string(known->source));
     } else {
         n.set("family", Node());
         n.set("fpga", Node());

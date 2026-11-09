@@ -2,15 +2,18 @@
 
 `radioberry.ko` (`driver/`) binds to the overlay's `sdr,radioberry`
 device, loads the gateware, and gives userspace one device,
-`/dev/radioberry`. The design is in `design.md`; the gateware interface it
-drives is in `gateware/README.md`.
+`/dev/radioberry`. The design is in [docs/design.md](design.md); the
+gateware interface it drives is in
+[gateware/README.md](../gateware/README.md).
 
 ## Overlay
 
-`dtoverlay=radioberry` (built and installed by this repository) enables
-`spi0` and `rp1_pio`, creates the `sdr,radioberry` device on `spi0` chip
-select 0 (SPI mode 3, 12.5 MHz) with the five FPGA configuration GPIOs,
-and disables the spidev nodes.
+`dtoverlay=radioberry` ([driver/radioberry.dts](../driver/radioberry.dts),
+built and installed by this repository) enables `spi0` and `rp1_pio`,
+creates the `sdr,radioberry` device on `spi0` chip select 0 (SPI mode 3,
+12.5 MHz) with the five FPGA configuration GPIOs, and disables the spidev
+nodes. `dtoverlay=radioberry,spi_speed=<Hz>` sets another SPI clock; the
+gateware's timing constraints allow up to 15.625 MHz.
 
 ## `/dev/radioberry`
 
@@ -20,7 +23,8 @@ and disables the spidev nodes.
   `POLLERR`.
 - `write()` takes 16-bit I/Q TX samples.
 - ioctls send gateware commands and read the identity and statistics.
-  `driver/include/radioberry_ioctl.h` documents the ABI.
+  [driver/include/radioberry_ioctl.h](../driver/include/radioberry_ioctl.h)
+  documents the ABI.
 - Closing the device sends the gateware a command that clears run, PTT,
   the TX permission bit, PA enable and drive.
 
@@ -41,7 +45,7 @@ reload fails, opening the device gives ENODEV until a reload succeeds.
 ## Receive lock-up workaround
 
 The PIO gateware can lock up its receive stream at a receiver-count
-change (`fault-rx-lockup.md`). The driver holds its RX clock still from
+change ([docs/fault-rx-lockup.md](fault-rx-lockup.md)). The driver holds its RX clock still from
 just before a receiver-count command until `rx_clock_hold_us` after it.
 Should the stream stop anyway, the driver logs "RX stream stalled" after
 200 ms without RX words while run is set, sysfs `rx_stalled` reads 1 and
@@ -54,8 +58,8 @@ Should the stream stop anyway, the driver logs "RX stream stalled" after
 | `load_gateware` | 1 | load the gateware at bind; 0 keeps the FPGA as it is |
 | `rx_clkdiv` | 2 | RX PIO clock divider |
 | `tx_clkdiv` | 8 | TX PIO clock divider |
-| `rx_ring_kib` | 512 | RX ring size |
-| `tx_ring_kib` | 64 | TX ring size |
+| `rx_ring_kib` | 512 | RX ring size, KiB, rounded up to a power of two |
+| `tx_ring_kib` | 64 | TX ring size, KiB, rounded up to a power of two |
 | `rx_clock_hold_us` | 200 | RX clock hold across a receiver-count change; 0 disables it |
 | `debug` | 0 | 1: rate-limited diagnostics (each command with its reply, RX resyncs and dropped words per DMA period, RX overruns, TX underruns); 2: every command and receiver-count change without rate limiting |
 

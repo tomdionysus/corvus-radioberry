@@ -160,7 +160,7 @@ TEST_CASE("p2probe streams from radioberryd and holds MOX", "[protoprobe][daemon
                                    "--json"}) == kExitOk);
     INFO(mox.out.str() << mox.err.str());
     CHECK(r.ptt_commanded());
-    // The TX I/Q stream ran without a sequence fault.
+    // The TX I/Q stream ran: some TX I/Q packets were sent.
     CHECK(mox.out.str().find("\"tx_iq_packets\": 0") == std::string::npos);
 }
 

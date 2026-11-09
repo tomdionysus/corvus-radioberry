@@ -8,7 +8,7 @@
 find_path(LIQUID_INCLUDE_DIR liquid/liquid.h REQUIRED)
 find_library(LIQUID_LIBRARY liquid REQUIRED)
 
-# ft8_lib's C, kept as upstream wrote it: not held to this project's warnings.
+# ft8_lib's C, kept as its authors wrote it: not held to this project's warnings.
 add_library(ft8_lib STATIC src/ft8_lib/message.c src/ft8_lib/text.c)
 target_include_directories(ft8_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_options(ft8_lib PRIVATE -w)

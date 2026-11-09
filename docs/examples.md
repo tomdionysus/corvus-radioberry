@@ -25,9 +25,10 @@ ft8rx [--protocol 1|2] [--host 127.0.0.1] [--port 1024] [--dial 14074000]
 The clock must be on UTC to within a second. Run it on the Pi against
 `radioberryd`, or from any machine with `--host`.
 
-The decoder is Corvus HF's C++ port of ft8_lib (`src/ft8/`,
-GPL-2.0-or-later here); the message text code is ft8_lib's own C
-(`src/ft8_lib/`, MIT). `ft8_tests` checks the decimator's passband and
+The decoder is Corvus HF's C++ port of ft8_lib
+([examples/ft8/src/ft8/](../examples/ft8/src/ft8/), GPL-2.0-or-later
+here); the message text code is ft8_lib's own C
+([examples/ft8/src/ft8_lib/](../examples/ft8/src/ft8_lib/), MIT). `ft8_tests` checks the decimator's passband and
 stopband and decodes messages synthesised at 48 ksps in noise through the
 same chain.
 

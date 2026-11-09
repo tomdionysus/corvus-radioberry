@@ -86,7 +86,7 @@ TEST_CASE("discovery is answered to the sender", "[server]") {
     CHECK(rig.link.sent[0].bytes[19] == 6);
     CHECK(rig.link.closed.empty());
 
-    // Over TCP the connection is closed after the reply, as upstream does.
+    // Over TCP the connection is closed after the reply.
     rig.packet(discovery_packet(1032), kTcp);
     REQUIRE(rig.link.closed.size() == 1);
     CHECK(rig.link.closed[0] == kTcp);

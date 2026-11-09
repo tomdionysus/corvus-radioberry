@@ -110,7 +110,7 @@ TEST_CASE("development Pi: host section", "[collect]") {
 TEST_CASE("development Pi: boot, firmware and software", "[collect]") {
     FakeSource pi = development_pi();
     const Report r = collect(pi, test_options());
-    CHECK(flag(r, "boot.overlay.upstream"));
+    CHECK(flag(r, "boot.overlay.original"));
     CHECK_FALSE(flag(r, "boot.overlay.active"));
     CHECK(has(r, "boot.overlay", Severity::kBlocker));
     CHECK(str(r, "boot.spi0_0.modalias") == "spi:radioberry_ctrl_spi");
@@ -121,7 +121,7 @@ TEST_CASE("development Pi: boot, firmware and software", "[collect]") {
 
     CHECK(flag(r, "firmware.known"));
     CHECK(r.root.at("firmware.size")->as_int() == static_cast<long>(kRpi4Image.size()));
-    CHECK(str(r, "firmware.upstream").find("rpi-4") != std::string::npos);
+    CHECK(str(r, "firmware.source").find("rpi-4") != std::string::npos);
 
     CHECK(r.root.at("software.daemon.path")->is_null());
     CHECK(str(r, "software.daemon.service_enabled") == "disabled");
@@ -315,7 +315,7 @@ TEST_CASE("boot problems are blockers", "[collect]") {
     pi.files["/dev/spidev10.0"] = "";
     const Report r = collect(pi, test_options());
     CHECK(has(r, "boot.overlay", Severity::kBlocker));
-    CHECK_FALSE(flag(r, "boot.overlay.upstream"));
+    CHECK_FALSE(flag(r, "boot.overlay.original"));
     CHECK(has(r, "boot.rp1_pio", Severity::kBlocker));
     CHECK(has(r, "boot.i2c", Severity::kWarning));
     CHECK(has(r, "boot.spidev", Severity::kBlocker));
@@ -396,7 +396,8 @@ TEST_CASE("PA classification by I2C address", "[collect]") {
         pi.i2c = std::move(devices);
         return str(collect(pi, test_options()), "pa.board");
     };
-    CHECK(board({{0x34, false}, {0x2c, false}}) == "pa3gsb 5 W preamp: digital bias and telemetry");
+    CHECK(board({{0x34, false}, {0x2c, false}}) ==
+          "Radioberry 5 W preamp: digital bias and telemetry");
     CHECK(board({{0x34, false}}) == "PA with current and temperature telemetry, manual bias");
     CHECK(board({{0x2c, false}}) == "PA with digital bias, no telemetry");
 

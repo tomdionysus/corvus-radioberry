@@ -43,14 +43,14 @@ These come from hardware and gateware this project does not change.
   sample-ready on GPIO 25), the TX wire format (1-bit serial on GPIO 5,
   clock GPIO 4, ready GPIO 12), the six-byte SPI command on `spi0` CE0,
   the Hermes-Lite command set, the FIFO depths, and the CN301 control
-  lines to the PA. Details: `gateware/README.md`.
+  lines to the PA. Details: [gateware/README.md](../gateware/README.md).
 - FPGA configuration: passive serial over GPIO 13, 24 and 27, with 22 and
   26 read back. Volatile; reloaded on every driver probe.
 - Host: the RP1 has one PIO block of four state machines. Kernel clients
   of the stock `rp1-pio` get bounce-buffered DMA, at most four buffers per
   direction; cyclic DMA is only reachable through its character device.
 - PA board: manual bias, nothing on I2C, no interlock. PTT, key and paddle
-  inputs go to the FPGA, not to the Pi (`pa.md`).
+  inputs go to the FPGA, not to the Pi ([docs/pa.md](pa.md)).
 - Protocol 1 clients expect 48, 96, 192 or 384 ksps receive; Protocol 2
   clients send transmit I/Q at 192 ksps. The gateware takes 48 ksps.
 
@@ -79,7 +79,7 @@ These come from hardware and gateware this project does not change.
 - Control: one versioned ioctl carries the six command bytes out and the
   six reply bytes in, serialised by a mutex. Identity and statistics are
   separate read-only ioctls. A receiver-count change is sent with the RX
-  clock held still (`fault-rx-lockup.md`).
+  clock held still ([docs/fault-rx-lockup.md](fault-rx-lockup.md)).
 - Pure logic (word parsing, resync, frame assembly, TX packing,
   statistics) lives in headers with no kernel dependencies and is compiled
   into a userspace test binary.
@@ -91,7 +91,8 @@ These come from hardware and gateware this project does not change.
   `rb-tx-device`) move data between the driver and rings; a sender thread
   hands RX blocks to both protocol servers; the main thread serves
   Protocol 1 and runs the session and policy timers; a separate thread
-  serves the Protocol 2 sockets. Real-time priorities are in `daemon.md`.
+  serves the Protocol 2 sockets. Real-time priorities are in
+  [docs/daemon.md](daemon.md).
 - Protocol code sets command registers; the RX device thread sends them
   between its reads, so it always knows the frame layout it reads, and
   stamps PTT, run and the TX permission bit onto each from one transmit
@@ -111,7 +112,8 @@ These come from hardware and gateware this project does not change.
   every PA state change logged. No interlock is claimed. The gateware's
   levers are the TX permission bit and the PTT bit in every command, and
   its own PTT hang-time watchdog, which is never disabled. A CW key on the
-  jack drives the DAC regardless of software (`gateware/README.md`).
+  jack drives the DAC regardless of software
+  ([gateware/README.md](../gateware/README.md)).
 
 ## Platform probe
 
@@ -128,5 +130,7 @@ is tested against an in-memory machine.
   (gcov and lcov); ASan and UBSan builds run the same tests.
 - The kernel module's glue is exercised by a userspace harness against
   `/dev/radioberry` on the Pi (`tools/driver-tests/`).
-- `tools/ci-pi.sh` is the merge gate (`CONTRIBUTING.md`).
-- Every transmit test on hardware needs the owner's go-ahead at the time.
+- [tools/ci-pi.sh](../tools/ci-pi.sh) is the merge gate
+  ([CONTRIBUTING.md](../CONTRIBUTING.md)).
+- Every transmit test on hardware needs the board owner's go-ahead at the
+  time.

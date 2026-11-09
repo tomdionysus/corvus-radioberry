@@ -16,8 +16,8 @@
  * and a FIFO-priority kernel thread refills them, so the state machines
  * never wait for a restart.
  *
- * The PIO programs and the overall design follow the upstream Radioberry
- * Pi 5 driver by Johan Maas, PA3GSB (public domain, Unlicense).
+ * The PIO programs and the overall design follow the original Radioberry
+ * Pi 5 driver, released into the public domain under the Unlicense.
  */
 
 #include <linux/delay.h>
@@ -201,6 +201,19 @@ static int rb_command_safe(struct rb_dev *rb, u8 *rx)
 	ret = rb_command_locked(rb, tx, rx);
 	mutex_unlock(&rb->cmd_lock);
 	return ret;
+}
+
+/* The FPGA the gateware reports, by name. */
+static const char *rb_fpga_name(u8 fpga_type)
+{
+	switch (fpga_type) {
+	case RADIOBERRY_FPGA_CL025:
+		return "10CL025";
+	case RADIOBERRY_FPGA_CL016:
+		return "10CL016";
+	default:
+		return "unknown";
+	}
 }
 
 /* Polls the identity word until the gateware has left its reset. */
@@ -748,7 +761,7 @@ static int rb_reload(struct rb_dev *rb)
 	if (ret)
 		return ret;
 	dev_info(rb->dev, "reloaded: gateware %u.%u, FPGA %s, %u receivers, %u transmitter(s)\n",
-		 rb->id.major, rb->id.minor, rb->id.fpga_type == 2 ? "10CL025" : "10CL016",
+		 rb->id.major, rb->id.minor, rb_fpga_name(rb->id.fpga_type),
 		 rb->id.receivers, rb->id.transmitters);
 	rb_reset_stream_state(rb);
 	ret = rb_streams_up(rb);
@@ -995,10 +1008,11 @@ static long rb_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		mutex_lock(&rb->cmd_lock);
 		/*
 		 * RX lock-up workaround (see rx_clock_hold_us above and
-		 * docs/fault-rx-lockup.md, section 7): a receiver-count change clears
-		 * the gateware's RX FIFO, whose read side runs on the clock this
-		 * driver's RX state machine drives. With the state machine stopped
-		 * that clock is still while the clear is asserted and released.
+		 * docs/fault-rx-lockup.md, "The workaround"): a receiver-count
+		 * change clears the gateware's RX FIFO, whose read side runs on the
+		 * clock this driver's RX state machine drives. With the state
+		 * machine stopped that clock is still while the clear is asserted
+		 * and released.
 		 */
 		if (hold && rb->pio && rb_cmd_general(c.tx, &receivers, &rate_code) &&
 		    receivers != READ_ONCE(rb->receivers)) {
@@ -1089,9 +1103,7 @@ static ssize_t fpga_type_show(struct device *dev, struct device_attribute *attr,
 {
 	struct rb_dev *rb = dev_get_drvdata(dev);
 
-	return sysfs_emit(buf, "%s\n", rb->id.fpga_type == RADIOBERRY_FPGA_CL025 ? "10CL025" :
-				       rb->id.fpga_type == RADIOBERRY_FPGA_CL016 ? "10CL016" :
-										  "unknown");
+	return sysfs_emit(buf, "%s\n", rb_fpga_name(rb->id.fpga_type));
 }
 static DEVICE_ATTR_RO(fpga_type);
 
@@ -1272,7 +1284,7 @@ static int rb_probe(struct spi_device *spi)
 	if (ret)
 		goto err_free;
 	dev_info(rb->dev, "gateware %u.%u, FPGA %s, %u receivers, %u transmitter(s)\n",
-		 rb->id.major, rb->id.minor, rb->id.fpga_type == 2 ? "10CL025" : "10CL016",
+		 rb->id.major, rb->id.minor, rb_fpga_name(rb->id.fpga_type),
 		 rb->id.receivers, rb->id.transmitters);
 
 	rb_reset_stream_state(rb);

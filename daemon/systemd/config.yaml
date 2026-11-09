@@ -11,7 +11,8 @@ device: /dev/radioberry
 # IPv4 address to listen on; 0.0.0.0 is every interface.
 address: 0.0.0.0
 
-# UDP and TCP port for Protocol 1, and Protocol 2's base port (it also uses the next 5 and +11 to +16).
+# UDP and TCP port for Protocol 1, and Protocol 2's base port (Protocol 2 also
+# uses port + 1 to port + 5 and port + 11 to port + 16).
 port: 1024
 
 # MAC address reported by discovery; left out, it is the network interface's.
@@ -20,10 +21,12 @@ port: 1024
 # Milliseconds of silence from a client before it loses the radio.
 client_timeout_ms: 3000
 
-# The radio's frequency error in ppm, positive if it tunes high; every RX and TX frequency is corrected.
+# The radio's frequency error in ppm, positive if it tunes high; every RX and
+# TX frequency is corrected.
 frequency_ppm: 0
 
-# I/Q order: hl2 for Hermes-Lite 2 software such as piHPSDR, standard for plain complex-baseband clients.
+# I/Q order: hl2 for Hermes-Lite 2 software such as piHPSDR, standard for
+# plain complex-baseband clients.
 iq_convention: hl2
 
 # Protocol 2 LNA gain in dB, -12 to 48, less the client's step attenuation.

@@ -27,8 +27,8 @@ class Link {
 public:
     virtual ~Link() = default;
     virtual void send(const Peer& to, std::span<const std::uint8_t> bytes) = 0;
-    // Ends a TCP connection (after a discovery reply or a stop); nothing
-    // for UDP.
+    // Ends a TCP connection (after a discovery reply, a stop or a lost
+    // session); nothing for UDP.
     virtual void close(const Peer& peer) = 0;
 };
 

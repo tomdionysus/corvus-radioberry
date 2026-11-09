@@ -30,16 +30,18 @@ Receives from `/dev/radioberry` without the daemon.
 
 | Option | Meaning |
 |---|---|
-| `--rate 48\|96\|192\|384` | sample rate, ksps |
-| `--receivers N` | receiver count |
-| `--freq HZ[,HZ...]` | receiver frequencies |
-| `--lna DB` | LNA gain, -12 to 48 dB |
+| `--rate 48\|96\|192\|384` | sample rate, ksps (default 48) |
+| `--receivers N` | receiver count, 1 to 12 (default 1) |
+| `--freq HZ[,HZ...]` | receiver frequencies; one value sets all (default 14074000) |
+| `--lna DB` | LNA gain, -12 to 48 dB (default 20) |
 | `--seconds S` | stream for S seconds (default: until SIGINT or SIGTERM) |
 | `--settle S` | settling time before measuring (default 0.5 s) |
-| `--interval S` | progress line every S seconds |
+| `--interval S` | progress line on stderr every S seconds |
+| `--output none` | discard the frames (default) |
 | `--output iq24` | frames to stdout as read (24-bit big-endian I and Q per receiver); the report goes to stderr |
 | `--output iq16` | the top 16 bits of each value as little-endian int16 |
 | `--tx-zeros` | also write zero TX samples, about 50 ms queued, and report TX word rate, underruns and the lowest queue level |
+| `--device PATH` | device (default `/dev/radioberry`) |
 | `--json`, `--yaml` | report format |
 
 It reports frame rate, RMS and peak level per receiver, and the driver's
@@ -58,6 +60,8 @@ or a device error, 2 a usage error.
 32-bit C1..C4 data, decimal or 0x hex; run set unless `--no-run`) and
 prints the command bytes, the gateware's reply, and the driver's info and
 statistics. With no arguments it prints only the info and statistics.
+`--device PATH` opens another device; `--json` and `--yaml` set the report
+format.
 
 A command that can key the transmitter or arm the PA (`--ptt`,
 `--tx-permit`, `--cwx`, or address 0x09 with drive, VNA or PA enable) is

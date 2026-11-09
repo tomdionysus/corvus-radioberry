@@ -14,7 +14,7 @@
 
 namespace radioberry::daemon::p2 {
 
-// UDP ports as offsets from the base port (1024). Host to radio: General
+// UDP ports as offsets from the base port (default 1024). Host to radio: General
 // (and discovery) on 0, Receiver Specific 1, Transmitter Specific 2, High
 // Priority 3, audio 4, TX I/Q 5. Radio to host, by source port: command
 // response 0, High Priority status 1, Mic/Line 2, wideband 3, DDC n I/Q
