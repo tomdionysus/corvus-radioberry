@@ -55,3 +55,6 @@ The receiver-count test is also the pattern that triggers the gateware's
 receive lock-up when the driver's RX clock hold is disabled
 (`rx_clock_hold_us=0`); [fault-rx-lockup.md](fault-rx-lockup.md)
 describes running it in a loop to measure the lock-up rate.
+
+[kernel-debug.md](kernel-debug.md) describes a run of this harness and
+more under a debug kernel.

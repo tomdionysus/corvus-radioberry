@@ -106,7 +106,8 @@ TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
 
 - Docs state the current facts: what exists, how to install and use it,
   what was measured. No history, no plans (those belong in `TODO/`).
-- No dates, personal names, callsigns, machine paths, addresses,
+- No dates (except in [docs/kernel-debug.md](docs/kernel-debug.md), a dated
+  test record), personal names, callsigns, machine paths, addresses,
   hostnames, serials or other identifiers of the development hardware or
   its network. Describe hosts generically.
 - [README.md](README.md) holds only the overview, status, installation,

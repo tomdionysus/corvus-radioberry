@@ -69,3 +69,9 @@ Should the stream stop anyway, the driver logs "RX stream stalled" after
 The module reloads with `rmmod radioberry; modprobe radioberry` (add
 `load_gateware=0` to keep the FPGA as it is). Stop `radioberry.service`
 first: it holds the device.
+
+## Under a debug kernel
+
+The driver has been run under KASAN, lockdep, DMA API checking, kmemleak
+and UBSAN with no reports; see [kernel-debug.md](kernel-debug.md), which
+also describes a small leak in `rp1-pio` itself at stream teardown.

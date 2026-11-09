@@ -196,9 +196,19 @@ bool Daemon::run(const std::atomic<bool>& stop) {
     std::chrono::nanoseconds tx_started{};
     radioberry_stats tx_before{};
     std::uint64_t dropped_before = 0;
+    // Failed sends, reported at most every 10 s with the count since.
+    std::uint64_t send_failures_reported = 0;
+    std::chrono::nanoseconds send_failures_at{};
     while (!stop && !service_.failed()) {
         network_.poll(100, handler);
         const auto now = clock();
+        const std::uint64_t send_failures = network_.send_failures() + p2_network_.send_failures();
+        if (send_failures != send_failures_reported &&
+            now - send_failures_at >= std::chrono::seconds(10)) {
+            spdlog::warn("{} sends to clients failed", send_failures - send_failures_reported);
+            send_failures_reported = send_failures;
+            send_failures_at = now;
+        }
         session_.tick(now);
         policy_.tick(now);
         server_.tick();

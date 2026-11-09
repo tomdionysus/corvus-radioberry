@@ -349,11 +349,26 @@ TEST_CASE("driver TX underruns do not drop MOX", "[daemon]") {
         std::this_thread::sleep_for(5ms);
     }
     REQUIRE(r.daemon.policy().transmitting());
+    std::size_t polls = 0;
     {
         const std::lock_guard lock(device.mutex);
         device.stats_.tx_underruns += 23;  // reported at the next statistics poll
+        polls = device.stats_calls;
     }
-    std::this_thread::sleep_for(100ms);  // one statistics period (default 100 ms)
+    // Two polls after the change: at least one complete poll has seen it.
+    for (int i = 0; i < 400; ++i) {
+        {
+            const std::lock_guard lock(device.mutex);
+            if (device.stats_calls >= polls + 2) {
+                break;
+            }
+        }
+        std::this_thread::sleep_for(5ms);
+    }
+    {
+        const std::lock_guard lock(device.mutex);
+        REQUIRE(device.stats_calls >= polls + 2);
+    }
     CHECK_FALSE(r.daemon.session().latched());
     CHECK(r.daemon.policy().transmitting());
     CHECK(r.finish());

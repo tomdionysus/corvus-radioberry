@@ -674,7 +674,11 @@ static void rb_stop_streams(struct rb_dev *rb)
 			off.mask |= BIT(rb->tx.sm);
 		if (off.mask)
 			rp1_pio_sm_set_enabled(rb->pio, &off);
-		/* Unclaims the state machines, frees DMA and waits for callbacks. */
+		/*
+		 * Unclaims the state machines and frees their DMA. Transfers still in
+		 * flight are terminated without their callbacks; rp1-pio then leaks
+		 * its 64-byte record for each (docs/kernel-debug.md).
+		 */
 		rp1_pio_close(rb->pio);
 		rb->pio = NULL;
 	}

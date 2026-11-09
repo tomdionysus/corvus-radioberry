@@ -46,6 +46,7 @@ Documentation:
 | [docs/design.md](docs/design.md) | architecture of the driver, daemon and probe |
 | [docs/driver.md](docs/driver.md) | kernel driver: device interface, sysfs, module parameters |
 | [docs/driver-tests.md](docs/driver-tests.md) | `rbdrivertest`, the driver's hardware tests |
+| [docs/kernel-debug.md](docs/kernel-debug.md) | the driver under a debug kernel (KASAN, lockdep, kmemleak): method and results |
 | [docs/daemon.md](docs/daemon.md) | `radioberryd`: options, service, Protocols 1 and 2, client notes |
 | [docs/tools.md](docs/tools.md) | `rbprobe`, `rbcat`, `rbctl`, `rbload`, `p1probe`, `p2probe` |
 | [docs/examples.md](docs/examples.md) | `ft8rx`, sample order, frequency calibration |

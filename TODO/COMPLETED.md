@@ -3,6 +3,17 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-09: Kernel and C++ checks. `checkpatch.pl` (no errors or
+  warnings) and `sparse` (silent) over the driver, and clang-tidy over the
+  userspace C++ (fails on any warning), all in CI. Driver: `usleep_range()`
+  for short waits, `ARRAY_SIZE`. Debug-kernel session (6.18.60 with KASAN,
+  lockdep, DMA API, kmemleak, UBSAN, booted once with tryboot): no reports
+  from the driver; `rbdrivertest` passed; kmemleak found `rp1-pio` leaking
+  64 bytes per transfer in flight at stream teardown
+  (`docs/kernel-debug.md`).
+  Chasing a CI hang found and fixed two bugs: Protocol 2 Receiver Specific
+  overtaking General was dropped (no DDC stream), and the probe clients'
+  poll() was unbounded.
 - 2026-11-09: `rbload` (`tools/rbload/`): loads a gateware image through
   the passive serial lines with the driver unloaded, refusing unknown
   images and other families unless `--force`, and an image for the other
