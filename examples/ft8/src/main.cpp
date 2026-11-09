@@ -163,9 +163,13 @@ int main(int argc, char** argv) {
             std::cerr << "ft8rx: no reply to discovery from " << options.host << "\n";
             return 1;
         }
-        std::printf("radio: Protocol %d, board %u, gateware %u.%u, %u receivers\n",
-                    options.protocol, radio->board, radio->version_major, radio->version_minor,
-                    radio->receivers);
+        // Protocol 2 discovery carries only the major version.
+        const std::string gateware =
+            options.protocol == 1
+                ? std::to_string(radio->version_major) + "." + std::to_string(radio->version_minor)
+                : std::to_string(radio->version_major);
+        std::printf("radio: Protocol %d, board %u, gateware %s, %u receivers\n", options.protocol,
+                    radio->board, gateware.c_str(), radio->receivers);
         if (radio->busy) {
             std::cerr << "ft8rx: the radio is streaming to another client\n";
             return 1;

@@ -7,6 +7,7 @@ item is removed from here and recorded at the top of
 
 ## Where things stand
 
+- Released: v0.2.0.
 - Working on the development Pi: the CL025 gateware (75.3, built from
   source), the driver (0.4.0; the PIO gateware's RX lock-up worked around,
   [docs/fault-rx-lockup.md](../docs/fault-rx-lockup.md)), `rbprobe`,
@@ -25,7 +26,8 @@ item is removed from here and recorded at the top of
   floor about 46 dB down).
 - `ft8rx` (`examples/ft8`, optional): receive-only FT8 decoder over
   Protocol 1 or 2.
-- Next: the integration test's fault injection; the HL2 drive item and
+- Next: fuzzing the packet parsers and servers, and the integration
+  test's fault injection; the HL2 drive item and
   the Protocol 2 output checks wait for the board owner's go-ahead to
   transmit.
 

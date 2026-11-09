@@ -4,7 +4,7 @@
 [![codecov](https://codecov.io/gh/tomdionysus/corvus-radioberry/graph/badge.svg)](https://codecov.io/gh/tomdionysus/corvus-radioberry)
 [![CodeQL](https://github.com/tomdionysus/corvus-radioberry/actions/workflows/codeql.yml/badge.svg)](https://github.com/tomdionysus/corvus-radioberry/actions/workflows/codeql.yml)
 
-Version 0.1.1
+Version 0.2.0
 
 A self-contained software stack for the
 [RadioBerry 2.x HF transceiver HAT](https://github.com/pa3gsb/Radioberry-2.x/wiki)

@@ -3,6 +3,10 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-09: v0.2.0 released. Release check on the development Pi with
+  the final build installed: `ft8rx` over `radioberryd` decoded FT8 on
+  40 m (15 messages in four slots on each protocol) and 20 m (84 over
+  Protocol 1, 100 over Protocol 2), no packets lost; `rbprobe` exits 0.
 - 2026-11-09: Kernel and C++ checks. `checkpatch.pl` (no errors or
   warnings) and `sparse` (silent) over the driver, and clang-tidy over the
   userspace C++ (fails on any warning), all in CI. Driver: `usleep_range()`
