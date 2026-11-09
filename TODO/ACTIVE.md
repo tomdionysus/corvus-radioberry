@@ -5,59 +5,24 @@ dependencies are done. Each item names its acceptance test. A finished
 item is removed from here and recorded at the top of `COMPLETED.md` with
 its date.
 
-## Where things stand (2026-11-08)
+## Where things stand (2026-11-09, v0.1.0)
 
-- Built, installed and verified on the development Pi: `rbprobe`, the
-  CL025 gateware (75.3, built from source), the kernel module and overlay
-  (load at boot, gateware identity read, receive streaming verified up to
-  the PIO bus capacity), the ABI header, and the CI gate
-  `tools/ci-pi.sh`.
-- `rbcat` built and verified on the Pi: 10 minutes at 48 ksps with no
-  stream faults; zero TX samples at 48000 words per second with PTT and
-  the TX permission bit clear and no underruns.
-- `rbprobe` on the Pi reports one blocker: no daemon.
-- Nothing has transmitted. The driver's TX path has carried zero samples
-  with PTT and the TX permission bit clear (`rbcat --tx-zeros`), never
-  with PTT set.
-- `rbctl` sends single gateware commands; it refuses anything that can
-  transmit without `--allow-tx`, which has not been used on hardware.
-- The PIO gateware's RX lock-up (`docs/fault-rx-lockup.md`) is worked
-  around by driver 0.4.0, which holds its RX clock still across every
-  receiver-count command and reports a stalled stream in the log and in
-  sysfs. Accepted as the fix (Standing decisions); the gateware defect
-  itself is an owner-gated item in section 5.
-- The driver test harness `rbdrivertest` passes 20 consecutive runs on
-  the Pi and runs in `tools/ci-pi.sh` when the device is present and free.
-- The daemon's device layer (`daemon/src/device/`) is built and tested
-  against a fake device and, in `rbdrivertest`, against the driver.
-- `radioberryd` serves Protocol 1 receive over UDP and TCP; piHPSDR and
-  WSJT-X decoded 40 m FT8 off air through it. It does not transmit.
-- `ft8rx` (`examples/ft8`, optional): a receive-only Protocol 1 FT8
-  decoder; 23 messages in 6 live 40 m slots through `radioberryd`.
-  `docs/examples.md`.
-- `radioberryd` transmits for the owning client only with `--allow-tx`
-  (PTT and TX permission while MOX is granted, drive capped by
-  `--drive-ceiling`, PA enable only with `--allow-pa`), proved against
-  the fake device. Nothing has transmitted on air.
-- Frequency calibration: `radioberryd --frequency-ppm 22.9` puts the
-  development board's received frequencies within 2 Hz of PSK Reporter
-  on 40 m and 30 m.
-- Transmitted at zero drive into a 50 ohm dummy load, PA disabled
-  (2026-11-08): PTT held for the commanded 5 and 10 s, the test tone
-  seen in the duplex receiver 110 dB above the floor during MOX only.
-  On-air sideband not yet established (receive is mirrored read I
-  first; transmit may be).
-- PA step done: 0.9 W at drive 128, 3.2 W at drive 170 (the owner's
-  known distortion-free limit) into a 50 ohm dummy load, half-scale tone.
-- I/Q: the HL2 stream (I first, as piHPSDR reads it) is the mirror of
-  plain complex baseband in both directions, measured on receive (FT8,
-  PSK Reporter) and transmit (HackRF); `radioberryd --iq-convention
-  standard` swaps both ways for plain-baseband clients, `hl2` (default)
-  passes through.
-- FT8 on air through `radioberryd` (2026-11-08): piHPSDR and WSJT-X
-  transmitting about 4.8 W on 40 m were decoded by two distant stations
-  at -19 and -20 dB, on the frequency the HackRF measured.
-- Next: Protocol 2 (section 3); open follow-ups below.
+- Working on the development Pi: the CL025 gateware (75.3, built from
+  source), the driver (0.4.0; the PIO gateware's RX lock-up worked around,
+  `docs/fault-rx-lockup.md`), `rbprobe`, `rbcat`, `rbctl`, the driver
+  harness `rbdrivertest` and the CI gate `tools/ci-pi.sh`.
+- `radioberryd`: Protocol 1 (HL2 dialect) receive and transmit over UDP
+  and TCP, one owning client, transmit only with `--allow-tx` through the
+  transmit policy and fail-safes, frequency calibration
+  (`--frequency-ppm`, +22.9 on the development board), I/Q convention
+  option. Not yet a service: started by hand.
+- On air: piHPSDR and WSJT-X through `radioberryd` received and decoded
+  FT8, transmitted it (decoded by distant stations on PSK Reporter), and
+  completed an FT8 contact. The transmit chain measured clean with a
+  HackRF (no spurs or image above a broadband floor about 46 dB down).
+- `ft8rx` (`examples/ft8`, optional): receive-only FT8 decoder over
+  Protocol 1.
+- Next: the two small daemon follow-ups below, then Protocol 2.
 
 ## Standing decisions
 
@@ -181,3 +146,11 @@ Transmit items each need the owner's go-ahead at the time.
 - [ ] SparkSDR and Quisk receive and tune via Protocol 1.
 - [ ] Receive via Protocol 2.
 - [ ] corvus-protocol end-to-end run, logged in `docs/` (FT8 is done).
+- [ ] Two-tone linearity. A test client's two tones (700 and 1900 Hz)
+      measured third-order products at -13 to -15 dBc at every drive from
+      64 to 170, and fifth-order products rising with drive (-44 to
+      -28 dBc), while piHPSDR's carrier and FT8 showed no products above
+      a floor about 46 dB down. Establish whether the two-tone result is
+      the test client or the radio (repeat with piHPSDR's own two-tone
+      generator, and in the duplex receiver into a dummy load), then
+      measure the drive at which compression sets in.

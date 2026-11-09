@@ -19,7 +19,7 @@ complete coverage; the kernel module's pure logic is compiled into a
 userspace test binary for the same purpose. All dependencies come from
 Debian trixie packages.
 
-## Status (2026-11-08)
+## Status (2026-11-09, v0.1.0)
 
 | Component | Directory | State |
 |---|---|---|
@@ -28,12 +28,12 @@ Debian trixie packages.
 | Command tool `rbctl` | `tools/rbctl/` | working |
 | FPGA gateware, Hermes-Lite 2 Radioberry PIO variants 75.3 | `gateware/` | CL025 built and verified on hardware; its receive-stream lock-up (`docs/fault-rx-lockup.md`) is worked around by the driver; CL016 built, untested, misses AD9866 TX output timing (`gateware/PROVENANCE.md`) |
 | Kernel driver `radioberry.ko`, overlay, ABI header | `driver/` | working: loads the gateware at boot, receive streaming verified, TX path carried zero samples with PTT clear; sysfs `reload`, stall indicator, `debug` parameter |
-| Radio daemon `radioberryd` (OpenHPSDR Protocol 1 and 2, PA control) | `daemon/` | not started |
+| Radio daemon `radioberryd` | `daemon/` | Protocol 1 (Hermes-Lite 2 dialect) receive and transmit over UDP and TCP, transmit policy and fail-safes, frequency calibration; verified on air with piHPSDR and WSJT-X (FT8 contacts on 40 m). Protocol 2, systemd service: not started |
+| Example FT8 client `ft8rx` | `examples/ft8/` | working, optional build |
 | Loader and protocol tools (`rbload`, `p1probe`, `p2probe`) | `tools/` | not started |
 
-There is no daemon yet, so no SDR client can use the radio. The design of
-the whole stack is in `docs/plan-v1.md`; the open work, in order, is in
-`TODO/ACTIVE.md`.
+The design of the whole stack is in `docs/plan-v1.md`; the open work, in
+order, is in `TODO/ACTIVE.md`.
 
 ## Target hardware and host
 
@@ -188,6 +188,30 @@ to `build-coverage/coverage/html`.
   2 on a usage error or refused command.
 - Receive capacity over the PIO bus is about 2.37 million values per
   second: up to six receivers at 192 ksps or three at 384 ksps.
+- `radioberryd` serves the radio to SDR clients over openHPSDR Protocol 1
+  in the Hermes-Lite 2 dialect, on UDP and TCP port 1024, so clients that
+  support the HL2 (piHPSDR and others) find it by discovery. It is not
+  yet installed as a service; run it as root, for example
+  `radioberryd --frequency-ppm 22.9`. It receives only unless started
+  with `--allow-tx`; then the client that owns the radio may transmit
+  while it holds MOX, the drive is capped by `--drive-ceiling N` (default
+  0), PA enable is passed on only with `--allow-pa`, and `--tx-watchdog-s`
+  (default 120) ends any transmission held longer. A client silent for 3 s
+  loses the radio, and any stream fault while transmitting drops MOX until
+  the client releases it. `--frequency-ppm` corrects every frequency for
+  the board's reference error (measure it against known signals;
+  `docs/examples.md`). `--iq-convention standard` swaps I and Q both ways
+  for clients using plain complex baseband; the default `hl2` is what HL2
+  software expects. It claims no PA interlock. `radioberryd --help` lists
+  every option.
+- With piHPSDR (HL2 type): its HL2 drive model assumes the Hermes-Lite 2
+  gateware, which uses the drive byte differently, so lower its per-band
+  PA calibration until the output is right (about 45 to 50 on the
+  development board). For WSJT-X through piHPSDR, use the Kenwood TS-2000
+  rig type on piHPSDR's CAT port (TCP 19090).
+- `ft8rx` (`examples/ft8`, built with `-DRADIOBERRY_BUILD_EXAMPLES=ON`) is
+  a receive-only Protocol 1 client that decodes FT8 and prints it as
+  WSJT-X does (`docs/examples.md`).
 
 ## Repository layout
 
@@ -195,7 +219,8 @@ to `build-coverage/coverage/html`.
 docs/      design (plan-v1.md), RX lock-up fault report (fault-rx-lockup.md), host, amplifier, upstream survey
 gateware/  gateware source, built bitfiles per FPGA, provenance, toolchain
 driver/    kernel module, device tree overlay, ABI header, logic tests
-daemon/    radioberryd (not started)
+daemon/    radioberryd: device layer, session, transmit policy, Protocol 1
+examples/  ft8rx, an example FT8 client (optional build)
 tools/     rbprobe, rbcat, rbctl, shared library, CI and check scripts, gateware build
 TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
 ```
@@ -236,7 +261,9 @@ private; the licence governs any future distribution.
 | Hermes-Lite 2 protocol description | softerhardware project | project wiki | Protocol 1 dialect, PA and bias commands, ADC fields | https://github.com/softerhardware/Hermes-Lite2/wiki/Protocol |
 | openHPSDR Ethernet Protocol v4.x (Protocol 2 specification) and Protocol 1 firmware sources | OpenHPSDR project, TAPR; Phil Harman VK6PH | GPL-2.0 (repository LICENSE) | Protocol 2 implementation reference | https://github.com/TAPR/OpenHPSDR-Firmware (Protocol 2/Documentation) |
 | Raspberry Pi Linux kernel, `rp1-pio` driver | Raspberry Pi Ltd; Phil Elwell | GPL-2.0 | Kernel API the driver is built on | https://github.com/raspberrypi/linux |
-| liquid-dsp | Joseph Gaeddert | MIT | DSP library linked by the daemon | https://github.com/jgaeddert/liquid-dsp |
+| liquid-dsp | Joseph Gaeddert | MIT | DSP library linked by the daemon and `ft8rx` | https://github.com/jgaeddert/liquid-dsp |
+| ft8_lib | Karlis Goba | MIT | Message text code vendored in `examples/ft8/src/ft8_lib/` with its licence; the FT8 decoder in `examples/ft8/src/ft8/` is Corvus HF's port of it | https://github.com/kgoba/ft8_lib |
+| Corvus HF FT8 decoder | T. Cully | GPL-2.0-or-later here (the author's own code, also published as Apache-2.0 in Corvus HF) | `examples/ft8/src/ft8/` | Corvus HF |
 | piHPSDR | John Melton G0ORX; Christoph van Wullen DL1YCF | GPL-2.0 | Reference client for both protocols; not linked | https://github.com/dl1ycf/pihpsdr |
 | wdsp | Warren Pratt NR0V | GPL-2.0 | Not used; listed because the upstream stack depends on it | https://github.com/g0orx/wdsp |
 | Radioberry HAT PA30 (preamp and ADC HAT design) | hish8612; JG1TWP; PA3GSB | no licence file in repository | Hardware reference for the PA family | https://github.com/hish8612/Radioberry_hat_pa30 |
