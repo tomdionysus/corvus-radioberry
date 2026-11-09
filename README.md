@@ -41,18 +41,18 @@ Documentation:
 
 | Component | Directory | Working | Notes |
 |---|---|---|---|
-| Platform probe `rbprobe` | `tools/rbprobe/` | yes | Host, boot, driver, gateware, FPGA, PA board and daemon state; text, JSON or YAML |
-| Stream tool `rbcat` | `tools/rbcat/` | yes | Receive streams and measurements without the daemon |
-| Command tool `rbctl` | `tools/rbctl/` | yes | Single gateware commands; anything that can transmit needs `--allow-tx` |
-| Gateware, CL025 (HL2 Radioberry PIO variant 75.3) | `gateware/` | yes | Built from source, verified on hardware; its receive lock-up is worked around by the driver |
-| Gateware, CL016 | `gateware/` | no | Built, not tested on a CL016 board; misses AD9866 TX output timing |
-| Kernel driver `radioberry.ko`, overlay, ABI header | `driver/` | yes | Loads the gateware at boot; receive and transmit streams |
-| `radioberryd`, Protocol 1 | `daemon/` | yes | Hermes-Lite 2 dialect, receive and transmit, UDP and TCP; FT8 contacts with piHPSDR and WSJT-X |
-| `radioberryd`, Protocol 2 | `daemon/` | yes | Receive and transmit; FT8 contacts with piHPSDR and WSJT-X; no wideband, diversity, PureSignal or radio-side CW keyer |
-| `radioberry.service` | `daemon/` | yes | Unprivileged, options in `/etc/radioberry/config.yaml`, logs to the journal |
-| Example FT8 client `ft8rx` | `examples/ft8/` | yes | Receive only, Protocol 1 or 2; optional build |
-| Gateware loader `rbload` | `tools/` | no | Not started |
-| Protocol test clients `p1probe`, `p2probe` | `tools/` | no | Not started |
+| Platform probe `rbprobe` | `tools/rbprobe/` | ✓ | Host, boot, driver, gateware, FPGA, PA board and daemon state; text, JSON or YAML |
+| Stream tool `rbcat` | `tools/rbcat/` | ✓ | Receive streams and measurements without the daemon |
+| Command tool `rbctl` | `tools/rbctl/` | ✓ | Single gateware commands; anything that can transmit needs `--allow-tx` |
+| Gateware, CL025 (HL2 Radioberry PIO variant 75.3) | `gateware/` | ✓ | Built from source, verified on hardware; its receive lock-up is worked around by the driver |
+| Gateware, CL016 | `gateware/` | ✗ | Built, not tested on a CL016 board; misses AD9866 TX output timing |
+| Kernel driver `radioberry.ko`, overlay, ABI header | `driver/` | ✓ | Loads the gateware at boot; receive and transmit streams |
+| `radioberryd`, Protocol 1 | `daemon/` | ✓ | Hermes-Lite 2 dialect, receive and transmit, UDP and TCP; FT8 contacts with piHPSDR and WSJT-X |
+| `radioberryd`, Protocol 2 | `daemon/` | ✓ | Receive and transmit; FT8 contacts with piHPSDR and WSJT-X; no wideband, diversity, PureSignal or radio-side CW keyer |
+| `radioberry.service` | `daemon/` | ✓ | Unprivileged, options in `/etc/radioberry/config.yaml`, logs to the journal |
+| Example FT8 client `ft8rx` | `examples/ft8/` | ✓ | Receive only, Protocol 1 or 2; optional build |
+| Gateware loader `rbload` | `tools/` | ✗ | Not started |
+| Protocol test clients `p1probe`, `p2probe` | `tools/` | ✗ | Not started |
 
 Open work, in order, is in `TODO/ACTIVE.md`.
 
