@@ -29,7 +29,7 @@ Debian trixie packages.
 | FPGA gateware, Hermes-Lite 2 Radioberry PIO variants 75.3 | `gateware/` | CL025 built and verified on hardware; its receive-stream lock-up (`docs/fault-rx-lockup.md`) is worked around by the driver; CL016 built, untested, misses AD9866 TX output timing (`gateware/PROVENANCE.md`) |
 | Kernel driver `radioberry.ko`, overlay, ABI header | `driver/` | working: loads the gateware at boot, receive streaming verified, TX path carried zero samples with PTT clear; sysfs `reload`, stall indicator, `debug` parameter |
 | Radio daemon `radioberryd` | `daemon/` | Protocol 1 (Hermes-Lite 2 dialect) receive and transmit over UDP and TCP, transmit policy and fail-safes, frequency calibration; verified on air with piHPSDR and WSJT-X (FT8 contacts on 40 m). Protocol 2, systemd service: not started |
-| Example FT8 client `ft8rx` | `examples/ft8/` | working, optional build |
+| Example FT8 client `ft8rx` | `examples/ft8/` | receive only (decodes FT8, never transmits); working, optional build |
 | Loader and protocol tools (`rbload`, `p1probe`, `p2probe`) | `tools/` | not started |
 
 The design of the whole stack is in `docs/plan-v1.md`; the open work, in
