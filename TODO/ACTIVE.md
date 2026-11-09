@@ -74,7 +74,11 @@ item is removed from here and recorded at the top of
 - Runtime privileges: system user and group `radioberry`, udev rule for
   `/dev/radioberry`, unit grants CAP_SYS_NICE and CAP_IPC_LOCK; never root.
 - CI is [tools/ci-pi.sh](../tools/ci-pi.sh) on the development Pi (directly or with
-  `--remote`); it is the merge gate. No hosted CI.
+  `--remote`); it is the merge gate. GitHub Actions also runs its userspace
+  half on every push ([.github/workflows/ci.yml](../.github/workflows/ci.yml):
+  no module, no hardware), uploads coverage to Codecov, and runs CodeQL
+  ([.github/workflows/codeql.yml](../.github/workflows/codeql.yml)); these
+  give the README badges and do not replace the Pi run.
 - Workflow: one branch per TODO item, squash-merged into `develop`;
   `develop` merged into `main` only at a version tag. No pull requests.
 - Protocol 2: transmit I/Q at 192 ksps resampled in the daemon with

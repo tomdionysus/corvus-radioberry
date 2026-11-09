@@ -1,5 +1,9 @@
 # corvus-radioberry
 
+[![CI](https://github.com/tomdionysus/corvus-radioberry/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/tomdionysus/corvus-radioberry/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/tomdionysus/corvus-radioberry/branch/develop/graph/badge.svg)](https://codecov.io/gh/tomdionysus/corvus-radioberry)
+[![CodeQL](https://github.com/tomdionysus/corvus-radioberry/actions/workflows/codeql.yml/badge.svg?branch=develop)](https://github.com/tomdionysus/corvus-radioberry/actions/workflows/codeql.yml)
+
 Version 0.1.1
 
 A self-contained software stack for the

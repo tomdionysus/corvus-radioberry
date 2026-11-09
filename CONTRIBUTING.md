@@ -37,6 +37,10 @@ TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
   From a workstation, `tools/ci-pi.sh --remote [user@]host` copies the
   working tree to the Pi and runs it there (it needs the main checkout,
   not a git worktree).
+- GitHub Actions runs `tools/ci-pi.sh --local` in a Debian trixie
+  container on every push to `main` and `develop` (no kernel module and no
+  hardware there), uploads the coverage report to Codecov, and runs CodeQL.
+  The Pi run stays the merge gate.
 - `tools/check-format.sh --fix` applies clang-format 19, which the
   workstation may not have; run it on the Pi and copy the result back.
 - [CMakePresets.json](CMakePresets.json) has `default`, `asan`
