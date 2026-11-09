@@ -1,10 +1,8 @@
 # Building the gateware: Quartus Prime Lite
 
-Status 2026-11-08.
-
 The gateware is compiled with Quartus Prime Lite Edition, the free edition
-of Altera's FPGA toolchain (Altera was part of Intel until 2025; older
-documentation and the download server still carry Intel's name). Lite
+of Altera's FPGA toolchain (some documentation still carries Intel's
+name). Lite
 supports the Cyclone 10 LP devices on the Radioberry and needs no licence
 file or licence server. What it does need is acceptance of the Quartus
 Prime end-user licence agreement, which each person building the gateware

@@ -3,6 +3,13 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-09: Documentation restructured. README holds only the overview,
+  status and installation (with the `apt install` line); usage moved to
+  `docs/driver.md`, `docs/daemon.md` and `docs/tools.md`, licensing to
+  `docs/licensing.md`, layout and CI to `CONTRIBUTING.md`. The design is
+  `docs/design.md` (from the plan); the reference-project survey was
+  removed. Dates, names and callsigns removed from the docs. Installed
+  config lists every option with a description, transmit and PA off.
 - 2026-11-09: `radioberry.service` (`daemon/systemd/`): the unit runs
   `radioberryd --config /etc/radioberry/config.yaml` as the `radioberry`
   system user with CAP_SYS_NICE and CAP_IPC_LOCK only, bound to
@@ -355,7 +362,7 @@ result, and where it lives.
   development board. CL016 built with seed 5 and shipped with a documented
   AD9866 TX output timing violation; untested. Upstream's free rpi-5
   images are 73.3 GPIO-mode gateware and are not used; `rbprobe`
-  classifies them. README credits PA3GSB's EUR 5 ready-to-run image.
+  classifies them. README links the upstream ready-to-run image.
 - 2026-11-08: Gateware interface notes, `gateware/README.md`: SPI command
   and reply words, RX nibble and metadata format, TX bit format and
   handshake, FIFO depths, CN301 output logic, jack inputs, post-load reset,

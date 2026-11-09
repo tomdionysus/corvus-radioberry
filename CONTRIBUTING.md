@@ -1,61 +1,66 @@
-# Working conventions
+# Contributing
 
-How work is done in this repository. Read this, `README.md`,
-`TODO/ACTIVE.md` (where things stand, standing decisions, open work),
-`docs/plan-v1.md` (design) and `gateware/README.md` (what the FPGA does)
-before starting anything; between them they contain every decision already
-made. Do not reopen a decision listed under Standing decisions in
-`TODO/ACTIVE.md` without saying so.
+Read this, `README.md`, `TODO/ACTIVE.md` (open work and standing
+decisions), `docs/design.md` and `gateware/README.md` before starting.
+Do not reopen a standing decision in `TODO/ACTIVE.md` without saying so.
 
-## Starting a piece of work
+## Repository layout
 
-1. Pick the first unchecked item in `TODO/ACTIVE.md` whose dependencies
-   are done, unless told otherwise. Items are ordered by dependency.
-2. Branch from `develop`: `git checkout -b item/<section>-<short-slug>`,
-   for example `item/1-rbprobe`.
-3. Build and test on the development Pi, not on the workstation. The Pi
-   is reached over SSH as root; its address and access details are kept
-   outside this repository. `tools/ci-pi.sh --remote [user@]host` builds
-   and tests the working tree there; for hardware tests, copy what you
-   need to the Pi and run it there. `docs/platform.md` describes the
-   machine and what is installed on it.
+```
+docs/      design, driver, daemon, tools, platform, PA, examples, fault report, licensing
+gateware/  gateware source, built bitfiles per FPGA, provenance, toolchain
+driver/    kernel module, device tree overlay, ABI header, logic tests
+daemon/    radioberryd: device layer, session, transmit policy, Protocols 1 and 2, systemd files
+examples/  ft8rx, an example FT8 client (optional build)
+tools/     rbprobe, rbcat, rbctl, shared library, driver tests, CI and check scripts, gateware build
+TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
+```
+
+## Branches and CI
+
+- Work happens on `develop`, one branch per TODO item
+  (`item/<section>-<short-slug>`), squash-merged into it. `main` receives
+  `develop` only at version tags.
+- Build and test on the Pi, not on the workstation. The Pi's address and
+  access details are kept outside this repository.
+- `tools/ci-pi.sh` is the merge gate. On the Pi it runs the format check
+  (`tools/check-format.sh`, clang-format 19), the SPDX check
+  (`tools/check-spdx.sh`), the release, sanitizer and coverage builds with
+  their tests, the driver hardware tests (skipped while another program
+  holds `/dev/radioberry`), and the coverage summary; when the ABI header
+  is installed it also builds the tools against it and checks that no
+  userspace compile sees `driver/include`. From a workstation,
+  `tools/ci-pi.sh --remote [user@]host` copies the working tree to the Pi
+  and runs it there (it needs the main checkout, not a git worktree).
+- `tools/check-format.sh --fix` applies clang-format 19, which the
+  workstation may not have; run it on the Pi and copy the result back.
+- `CMakePresets.json` has `default`, `asan` (AddressSanitizer and
+  UndefinedBehaviorSanitizer) and `coverage` presets;
+  `cmake --build --preset coverage --target coverage` writes an lcov
+  report to `build-coverage/coverage/html`.
 
 ## Finishing a piece of work
 
 1. The item's acceptance test in `TODO/ACTIVE.md` passes on the Pi.
-2. `tools/ci-pi.sh` passes, run on the Pi or from a workstation with
-   `tools/ci-pi.sh --remote [user@]host`. `tools/check-format.sh --fix`
-   applies clang-format 19, which the workstation may not have; run it on
-   the Pi and copy the result back.
-3. Tick the item in `TODO/ACTIVE.md`, move its text to the top of
-   `TODO/COMPLETED.md` with the date, and keep `README.md` current if the
-   item changed anything a user installs or runs.
-4. Squash-merge into `develop`:
-   `git checkout develop && git merge --squash item/... && git commit`.
-   Delete the item branch. `develop` is merged into `main` only when a
-   version is tagged.
+2. `tools/ci-pi.sh` passes.
+3. Tick the item, move its text to the top of `TODO/COMPLETED.md`, and
+   update the docs it affects.
+4. Squash-merge into `develop` and delete the item branch.
 
 ## Code
 
 - C++20 for everything except the kernel module and the ioctl ABI header,
-  which are C. GNU extensions off.
+  which are C. GNU extensions off. Warnings are errors.
 - Every source file starts with `// SPDX-License-Identifier: GPL-2.0-or-later`
   (`/* ... */` in C and headers shared with the kernel). Code taken from
-  an upstream work keeps that work's copyright and licence header beneath
-  the SPDX line.
-- `.clang-format` is authoritative; run `clang-format -i` before
-  committing. Warnings are errors.
+  an upstream work keeps its copyright and licence header beneath it.
+- `.clang-format` is authoritative.
 - Dependencies come only from Debian trixie packages. Adding one means
-  adding it to the README requirements and the attribution table.
+  adding it to the README's `apt install` line and `docs/licensing.md`.
 - Every component has Catch2 tests aiming at complete coverage. Logic that
   touches hardware, files or sockets sits behind an interface so tests use
   fakes and fixtures. New code without tests is not finished.
-- No emoji anywhere. No AI or tool attribution anywhere: not in code,
-  comments, commit messages, or documentation.
-- No file in the repository may contain machine paths, personal names
-  (other than upstream authors in licence attributions), addresses,
-  hostnames, serials or any other identifier of the development hardware
-  or its network. Describe hosts generically.
+- No emoji anywhere. No AI or tool attribution anywhere.
 
 ## Gateware
 
@@ -69,21 +74,22 @@ made. Do not reopen a decision listed under Standing decisions in
 
 ## Commits
 
-- One logical change per squash commit on `develop`. Subject line in the
-  imperative, under 72 characters, body explaining why when it is not
-  obvious. No trailers of any kind.
+- One logical change per squash commit on `develop`. Subject in the
+  imperative, under 72 characters; a body explaining why when it is not
+  obvious. No trailers.
 - Never commit build output, `.rbf` files outside `gateware/`, or
   anything from the Pi's filesystem.
 
 ## Documentation
 
-- `README.md` describes only the current state: what exists, how to
-  install it, how to use it. No history, no plans.
-- `docs/plan-v1.md` is the design; change it when a design decision
-  changes, and record the change in `TODO/COMPLETED.md`.
-- `docs/platform.md` and `docs/pa.md` are the hardware references; update
-  them when a measurement or hardware fact changes.
-- `TODO/ACTIVE.md` is the single list of open work. Add new items with an
+- Docs state the current facts: what exists, how to install and use it,
+  what was measured. No history, no plans (those belong in `TODO/`).
+- No dates, personal names, callsigns, machine paths, addresses,
+  hostnames, serials or other identifiers of the development hardware or
+  its network. Describe hosts generically.
+- `README.md` holds only the overview, status and installation; everything
+  else goes in `docs/`.
+- `TODO/ACTIVE.md` is the single list of open work; add items with an
   acceptance test. `TODO/COMPLETED.md` is append-only at the top.
 
 ## Safety

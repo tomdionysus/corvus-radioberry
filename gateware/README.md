@@ -1,22 +1,21 @@
-# Gateware: what the driver depends on
-
-Status 2026-11-08.
+# Gateware
 
 The FPGA runs the Hermes-Lite 2 gateware in its Radioberry PIO variants,
-`radioberry_pio_cl025` and `radioberry_pio_cl016`, version 75.3, built in
-this repository from the source in `source/`. `PROVENANCE.md` names the
-source commit and the build; `QUARTUS.md` describes the toolchain and how
-to obtain it; `tools/build-gateware.sh` builds `rpi-5/<type>/radioberry.rbf`.
+`radioberry_pio_cl025` and `radioberry_pio_cl016`, version 75.3. The
+bitfiles in `rpi-5/<type>/radioberry.rbf` are built from the unmodified
+source in `source/` with Quartus Prime Lite on an x86-64 machine
+(`tools/build-gateware.sh`) and committed, so the Pi only installs them.
+`PROVENANCE.md` records the source commit, fitter seeds, hashes and
+timing; `QUARTUS.md` describes the toolchain.
 
 Everything below is read from that source (paths relative to
 `gateware/rtl/` in the archive) and from the upstream Pi 5 driver's PIO
 programs. Statements marked *not yet measured* follow from the source and
 have not been checked on hardware.
 
-Only the PIO variants work with this project's driver. The Radioberry-2.x
-repository also carries older GPIO-mode images (version 73.3: an 8-bit RX
-bus and TX over a second SPI chip select); `rbprobe` recognises them and
-reports them as unusable.
+Only the PIO variants work with this project's driver. The older
+GPIO-mode images (73.3: an 8-bit RX bus and TX over a second SPI chip
+select) are recognised by `rbprobe` and reported as unusable.
 
 ## 1. Variants
 
