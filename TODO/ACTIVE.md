@@ -139,7 +139,6 @@ Transmit items each need the board owner's go-ahead at the time.
       Protocol 1 at the same piHPSDR settings, and the HackRF spectrum
       against Protocol 1's (no spurs or image above a floor about 46 dB
       down); TX I/Q is decimated from 192 to 48 ksps in the daemon.
-- [ ] corvus-protocol end-to-end run, logged in `docs/` (FT8 is done).
 - [ ] Two-tone linearity. A test client's two tones (700 and 1900 Hz)
       measured third-order products at -13 to -15 dBc at every drive from
       64 to 170, and fifth-order products rising with drive (-44 to

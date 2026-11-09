@@ -10,13 +10,14 @@
 #   tools/ci-pi.sh                  run here (on the Pi)
 #   tools/ci-pi.sh --remote HOST    copy this working tree to HOST over SSH
 #                                   and run there; HOST is [user@]address
+#   tools/ci-pi.sh --local          run here even if RADIOBERRY_CI_HOST is set
 #
 # RADIOBERRY_CI_HOST may stand in for --remote HOST. The remote copy lives
 # in ~/radioberry-ci on the host and is reused between runs.
 set -eu
 
 usage() {
-    sed -n '4,15p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '4,16p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 remote=${RADIOBERRY_CI_HOST:-}

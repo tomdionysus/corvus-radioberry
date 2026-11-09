@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Copyright (C) 2026 T. Cully. From Corvus HF, licensed here as
+// Copyright (C) 2026 Tom Cully. Licensed under
 // GPL-2.0-or-later. Ported from kgoba/ft8_lib (MIT, Copyright (c) 2018
 // Karlis Goba); see src/ft8_lib/LICENSE.
 #include "constants.h"

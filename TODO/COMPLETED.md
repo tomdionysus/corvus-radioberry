@@ -181,8 +181,7 @@ result, and where it lives.
   `asan` presets turn it on so the gate builds and tests it). Receive-only
   Protocol 1: one receiver at 48 ksps, decimated to 3200 sps with
   liquid-dsp (unity-gain Kaiser low-pass at 1600 Hz, 1501 taps), decoded
-  per UTC slot with Corvus HF's port of ft8_lib (the owner's code,
-  licensed here as GPL-2.0-or-later; ft8_lib's message code vendored with
+  per UTC slot with a C++ port of ft8_lib (GPL-2.0-or-later; ft8_lib's message code vendored with
   its MIT licence). `ft8_tests`: decimator passband and stopband, and
   synthesised FT8 at 48 ksps in noise decoded through the same chain (one
   message at -10 dB SNR with frequency, DT and SNR checked; three across

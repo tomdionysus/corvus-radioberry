@@ -8,7 +8,7 @@ standing decision in [TODO/ACTIVE.md](TODO/ACTIVE.md) without saying so.
 ## Repository layout
 
 ```
-docs/      design, driver, daemon, tools, platform, PA, examples, fault report, licensing
+docs/      design, driver, driver tests, daemon, tools, platform, PA, examples, fault report, licensing
 gateware/  gateware source, built bitfiles per FPGA, provenance, toolchain
 driver/    kernel module, device tree overlay, ABI header, logic tests
 daemon/    radioberryd: device layer, session, transmit policy, Protocols 1 and 2, systemd files

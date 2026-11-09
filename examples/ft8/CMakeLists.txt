@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 # ft8rx: an example receive-only openHPSDR client (Protocol 1 or 2) that
-# decodes FT8. The FT8 code comes from Corvus HF (ported from
-# kgoba/ft8_lib); the message text code is ft8_lib's own (MIT,
-# src/ft8_lib/LICENSE).
+# decodes FT8. The decoder is a C++ port of kgoba/ft8_lib; the message
+# text code is ft8_lib's own (MIT, src/ft8_lib/LICENSE).
 
 find_path(LIQUID_INCLUDE_DIR liquid/liquid.h REQUIRED)
 find_library(LIQUID_LIBRARY liquid REQUIRED)
