@@ -2,7 +2,8 @@
 
 Version 0.1.1
 
-A self-contained software stack for the Radioberry 2.x HF transceiver HAT
+A self-contained software stack for the
+[Radioberry 2.x HF transceiver HAT](https://github.com/pa3gsb/Radioberry-2.x/wiki)
 on a Raspberry Pi 5:
 
 - `radioberry.ko`, the Linux kernel driver
