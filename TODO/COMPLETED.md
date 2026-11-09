@@ -3,6 +3,13 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-09: `radioberryd` logs the drive actually in use: PTT on logs
+  the drive at that moment, and every later change of the effective drive
+  while transmitting is logged, with the client's request when the
+  ceiling capped it ("drive 64 (client asked for 144, ceiling 64)"). PA
+  changes were already logged. Acceptance: unit test in
+  `daemon/tests/tx_policy_test.cpp` against captured log output
+  (`daemon/src/tx_policy.cpp`).
 - 2026-11-09: First complete FT8 contact through `radioberryd`, operated
   by the owner on 40 m: piHPSDR and WSJT-X on the Pi, the Radioberry
   driving an external 25 W amplifier (the owner's calibration), with a

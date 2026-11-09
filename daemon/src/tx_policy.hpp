@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstdint>
 #include <mutex>
+#include <string>
 
 #include "device/control.hpp"
 #include "session.hpp"
@@ -32,7 +33,8 @@ struct TxPolicyOptions {
 // drive capped at the ceiling, VNA always clear, and PA enable only while
 // MOX is granted and the PA is allowed, so envpa is driven only while a
 // client holds MOX. CWX is set only with MOX. Every PTT and PA change is
-// logged. This is software policy, not an interlock.
+// logged, and so is every drive change while transmitting. This is software
+// policy, not an interlock.
 class TxPolicy {
 public:
     TxPolicy(Control& control, Session& session, TxPolicyOptions options);
@@ -55,6 +57,7 @@ public:
 private:
     void apply_locked(bool granted, std::chrono::nanoseconds now);
     std::uint32_t effective_locked(bool transmitting) const;
+    std::string describe_drive_locked(std::uint32_t drive) const;
 
     Control& control_;
     Session& session_;
@@ -65,6 +68,8 @@ private:
     bool granted_ = false;
     std::chrono::nanoseconds granted_since_{};
     bool pa_ = false;
+    // The drive last logged while transmitting.
+    std::uint32_t logged_drive_ = 0;
     bool refusal_logged_ = false;
 };
 

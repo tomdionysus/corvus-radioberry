@@ -78,12 +78,28 @@ std::uint32_t TxPolicy::effective_locked(bool transmitting) const {
            (pa ? kPaEnable : 0u);
 }
 
+std::string TxPolicy::describe_drive_locked(std::uint32_t drive) const {
+    const std::uint32_t requested = requested_drive_ >> 24;
+    if (requested > drive) {
+        return fmt::format("drive {} (client asked for {}, ceiling {})", drive, requested,
+                           options_.drive_ceiling);
+    }
+    return fmt::format("drive {} (ceiling {})", drive, options_.drive_ceiling);
+}
+
 // Under the session's lock: see Session::mox.
 void TxPolicy::apply_locked(bool granted, std::chrono::nanoseconds now) {
     const std::uint32_t drive_word = effective_locked(granted);
+    const std::uint32_t drive = drive_word >> 24;
     if (granted && !granted_) {
         granted_since_ = now;
-        spdlog::info("PTT on: drive {} (ceiling {})", drive_word >> 24, options_.drive_ceiling);
+        // Clients send 0x09 only every few packets, so this may still be the
+        // receive value; each change while transmitting is logged below.
+        spdlog::info("PTT on: {}", describe_drive_locked(drive));
+        logged_drive_ = drive;
+    } else if (granted && drive != logged_drive_) {
+        spdlog::info("{}", describe_drive_locked(drive));
+        logged_drive_ = drive;
     } else if (!granted && granted_) {
         spdlog::info("PTT off");
     }

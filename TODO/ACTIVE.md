@@ -22,7 +22,7 @@ its date.
   HackRF (no spurs or image above a broadband floor about 46 dB down).
 - `ft8rx` (`examples/ft8`, optional): receive-only FT8 decoder over
   Protocol 1.
-- Next: the two small daemon follow-ups below, then Protocol 2.
+- Next: the HL2 drive compatibility item below, then Protocol 2.
 
 ## Standing decisions
 
@@ -86,10 +86,6 @@ Nothing open.
 
 ## 3. Daemon (`daemon/`)
 
-- [ ] Log the drive actually in use: `radioberryd` logs the drive at
-      PTT on, before a client's 0x09 has arrived (piHPSDR sends it every
-      11 packets), so it shows the receive value; log each drive and PA
-      change while transmitting instead.
 - [ ] HL2 drive compatibility: the HL2 gateware takes 0x09's top four
       bits as AD9866 TX gain codes 0 to 15, the Radioberry build maps the
       whole byte to codes 0 to 39 (`ad9866ctrl.v`), and the PA hat is not

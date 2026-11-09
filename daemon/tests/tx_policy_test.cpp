@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "tx_policy.hpp"
 
+#include <spdlog/sinks/ringbuffer_sink.h>
+#include <spdlog/spdlog.h>
+
 #include <catch2/catch_test_macros.hpp>
+#include <memory>
+#include <string>
 #include <vector>
 
 using namespace radioberry;
@@ -39,7 +44,70 @@ TxPolicyOptions allowed(bool pa = false, std::uint8_t ceiling = 0x40) {
     return o;
 }
 
+// Captures the default logger's messages for the life of the object.
+class LogCapture {
+public:
+    LogCapture()
+        : sink_(std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(64)),
+          previous_(spdlog::default_logger()) {
+        sink_->set_pattern("%v");
+        spdlog::set_default_logger(std::make_shared<spdlog::logger>("capture", sink_));
+    }
+    ~LogCapture() { spdlog::set_default_logger(previous_); }
+    LogCapture(const LogCapture&) = delete;
+    LogCapture& operator=(const LogCapture&) = delete;
+
+    // Messages since the last call.
+    std::vector<std::string> take() {
+        std::vector<std::string> lines = sink_->last_formatted();
+        std::vector<std::string> out(lines.begin() + static_cast<std::ptrdiff_t>(seen_),
+                                     lines.end());
+        seen_ = lines.size();
+        for (std::string& line : out) {
+            while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) {
+                line.pop_back();
+            }
+        }
+        return out;
+    }
+
+private:
+    std::shared_ptr<spdlog::sinks::ringbuffer_sink_mt> sink_;
+    std::shared_ptr<spdlog::logger> previous_;
+    std::size_t seen_ = 0;
+};
+
 }  // namespace
+
+TEST_CASE("every drive change while transmitting is logged", "[policy]") {
+    LogCapture log;
+    Rig rig(allowed(true, 0x40));
+    // Receive value in place when MOX arrives, as from piHPSDR.
+    rig.policy.set_tx_drive(0);
+    rig.policy.update(kClient, false, 0s);
+    log.take();  // the session's ownership message
+    rig.policy.update(kClient, true, 1s);
+    CHECK(log.take() == std::vector<std::string>{"PTT on: drive 0 (ceiling 64)"});
+    // The client's transmit drive arrives a few packets later.
+    rig.policy.set_tx_drive(0x2eu << 24);
+    rig.policy.update(kClient, true, 2s);
+    CHECK(log.take() == std::vector<std::string>{"drive 46 (ceiling 64)"});
+    rig.policy.update(kClient, true, 3s);  // unchanged: nothing
+    CHECK(log.take().empty());
+    // Above the ceiling: the capped value and the request.
+    rig.policy.set_tx_drive(0x90u << 24 | kPa);
+    rig.policy.update(kClient, true, 4s);
+    CHECK(log.take() == std::vector<std::string>{"drive 64 (client asked for 144, ceiling 64)",
+                                                 "PA enabled (envpa follows PTT)"});
+    rig.policy.update(kClient, false, 5s);
+    CHECK(log.take() == std::vector<std::string>{"PTT off", "PA disabled"});
+    // Drive changes while receiving are not logged.
+    rig.policy.set_tx_drive(0x10u << 24);
+    rig.policy.update(kClient, false, 6s);
+    CHECK(log.take().empty());
+    rig.policy.update(kClient, true, 7s);
+    CHECK(log.take() == std::vector<std::string>{"PTT on: drive 16 (ceiling 64)"});
+}
 
 TEST_CASE("the defaults never transmit", "[policy]") {
     Rig rig(TxPolicyOptions{});
