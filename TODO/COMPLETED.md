@@ -3,6 +3,19 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-09: Protocol 2 TX underruns. The driver counts an underrun
+  when its ring is empty with PTT set and no DMA in flight, which happens
+  whenever the gateware's TX FIFO has room, not only when it runs dry.
+  piHPSDR sends no TX samples while receiving in Protocol 2, so the FIFO
+  started each transmission empty and held only the TX buffer latency
+  (address 0x17), never full: about 94 counted underruns per second (1 300
+  in a 13.9 s FT8 transmission). The Protocol 2 server now sets 0x17 when
+  a stream starts, 100 ms latency (more than the 85 ms FIFO) and 20 ms PTT
+  hang (`daemon/src/p2/server.cpp`). Acceptance on the development board,
+  piHPSDR in Protocol 2: 13.9 s FT8 transmissions at 47 811 and 47 829
+  samples per second, 8 underruns each, 0 blocks dropped; with the
+  driver's `debug` at 1 the 8 were logged 6 to 73 ms after PTT on, while
+  the FIFO filled, and none after; a 10.7 s transmission logged 0.
 - 2026-11-09: First FT8 contacts over Protocol 2, operated by the owner
   on 40 m: piHPSDR (Protocol 2) and WSJT-X on the Pi, `radioberryd
   --frequency-ppm 22.9 --allow-tx --allow-pa --drive-ceiling 150`, drive

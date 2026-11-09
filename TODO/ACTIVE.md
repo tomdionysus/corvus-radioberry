@@ -23,8 +23,7 @@ its date.
   HackRF (no spurs or image above a broadband floor about 46 dB down).
 - `ft8rx` (`examples/ft8`, optional): receive-only FT8 decoder over
   Protocol 1 or 2.
-- Next: the Protocol 2 TX underruns, then real-time setup and the
-  systemd service; the HL2 drive item and the Protocol 2 output checks
+- Next: real-time setup and the systemd service; the HL2 drive item and the Protocol 2 output checks
   wait for the owner's go-ahead to transmit.
 
 ## Standing decisions
@@ -97,23 +96,6 @@ Nothing open.
       output against gain code across the range, then decide whether
       `radioberryd` maps HL2 drive to Radioberry codes. Until then piHPSDR
       is calibrated by hand (its per-band PA calibration, about 45 to 50).
-- [ ] Protocol 2 TX underruns: through piHPSDR in Protocol 2 the driver
-      counted about 94 TX underruns per second while transmitting (1 300
-      in a 13.9 s FT8 transmission), at 47 850 to 47 998 samples per
-      second delivered and 0 blocks dropped; Protocol 1 transmissions
-      logged none. The driver counts one when its ring is empty with PTT
-      set and no DMA in flight, which happens whenever the gateware's TX
-      FIFO has room and takes samples at PIO speed, not only when the
-      FIFO runs dry. piHPSDR sends no TX samples while receiving in
-      Protocol 2 (none to port 1029 in a receive capture), so the FIFO
-      starts each transmission empty and settles at the gateware's TX
-      buffer latency (address 0x17; 20 ms by default, or what an earlier
-      client set; piHPSDR sends 40 ms in Protocol 1), never full. The
-      Protocol 2 server now sets 0x17 when a stream starts: 100 ms
-      latency, more than the 85 ms FIFO, and 20 ms hang. Acceptance: a
-      13.9 s FT8 transmission through piHPSDR in Protocol 2 into the dummy
-      load logs underruns no higher than Protocol 1's, and decodes as
-      before.
 - [ ] Real-time setup: thread priorities, CPU affinity, socket buffer
       sizes, `SO_PRIORITY`; RX packet jitter over Wi-Fi measured and
       recorded in `docs/platform.md`.
