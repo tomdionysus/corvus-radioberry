@@ -3,6 +3,20 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-09: `radioberry.service` (`daemon/systemd/`): the unit runs
+  `radioberryd --config /etc/radioberry/config.yaml` as the `radioberry`
+  system user with CAP_SYS_NICE and CAP_IPC_LOCK only, bound to
+  `dev-radioberry.device`, restarted on failure; a sysusers.d entry, a
+  udev rule (`/dev/radioberry` root:radioberry 0660, tagged for systemd)
+  and the config file (installed only where absent), all installed by
+  `cmake --install`, which also creates the user and reloads udev and
+  systemd but enables nothing. `--config` reads a YAML file of options
+  (`daemon/src/options.cpp`); under systemd the log goes to the journal.
+  `rbprobe` finds the daemon in sbin and lists the Protocol 2 DDC ports.
+  Acceptance on the development board: `rbprobe` exits 0 ("radio can
+  run: yes") with the service active; the daemon ran as `radioberry`
+  with only those two capabilities, all its threads at SCHED_FIFO, and
+  delivered loopback RX at p99 0.89 ms.
 - 2026-11-09: Real-time setup for `radioberryd` (`daemon/src/realtime.cpp`):
   SCHED_FIFO 20 for the two device threads and 10 for the network
   threads, below the driver's kernel thread (50); memory locked;

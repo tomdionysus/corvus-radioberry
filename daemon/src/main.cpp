@@ -2,12 +2,15 @@
 //
 // radioberryd. Process glue: options, logging, signals; the work is in
 // Daemon, which the tests run against a fake device.
+#include <spdlog/sinks/systemd_sink.h>
 #include <spdlog/spdlog.h>
 
 #include <atomic>
 #include <csignal>
+#include <cstdlib>
 #include <exception>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -39,6 +42,12 @@ int main(int argc, char** argv) {
     if (options.version) {
         std::cout << "radioberryd " << radioberry::kVersion << "\n";
         return 0;
+    }
+    // Under systemd stderr is the journal: log to it directly, with each
+    // message's priority and the journal's own timestamps.
+    if (std::getenv("JOURNAL_STREAM") != nullptr) {
+        spdlog::set_default_logger(std::make_shared<spdlog::logger>(
+            "radioberryd", std::make_shared<spdlog::sinks::systemd_sink_mt>("radioberryd")));
     }
     spdlog::set_level(spdlog::level::from_str(options.log_level));
     spdlog::info("radioberryd {}", radioberry::kVersion);

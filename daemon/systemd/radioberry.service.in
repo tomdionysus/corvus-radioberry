@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# radioberryd as a service: unprivileged, with only the capabilities its
+# real-time threads (CAP_SYS_NICE) and locked memory (CAP_IPC_LOCK) need.
+# Options are in @RADIOBERRY_CONFIG_FILE@. It stops when /dev/radioberry
+# goes (the driver unloaded) and restarts after a failure.
+
+[Unit]
+Description=Radioberry radio daemon (openHPSDR Protocol 1 and 2)
+BindsTo=dev-radioberry.device
+After=dev-radioberry.device network.target
+
+[Service]
+Type=simple
+ExecStart=@RADIOBERRYD@ --config @RADIOBERRY_CONFIG_FILE@
+User=radioberry
+Group=radioberry
+AmbientCapabilities=CAP_SYS_NICE CAP_IPC_LOCK
+CapabilityBoundingSet=CAP_SYS_NICE CAP_IPC_LOCK
+NoNewPrivileges=yes
+LimitMEMLOCK=infinity
+Restart=on-failure
+RestartSec=2
+DevicePolicy=closed
+DeviceAllow=/dev/radioberry rw
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_NETLINK AF_UNIX AF_PACKET
+
+[Install]
+WantedBy=multi-user.target

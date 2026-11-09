@@ -16,9 +16,18 @@ struct Options {
     bool version = false;
 };
 
-// Parses the command line (without the program name). Throws
+// Parses the command line (without the program name). With `--config
+// PATH`, the YAML file there is read first, as if its options came before
+// the others, so the command line overrides it. Throws
 // std::invalid_argument with a message for the user.
 Options parse_options(const std::vector<std::string>& args);
+
+// The options a config file stands for: each key is a long option with
+// `_` for `-` (`frequency_ppm: 22.9` is `--frequency-ppm 22.9`); `allow_tx`,
+// `allow_pa` and `realtime` are true or false. An empty file is no options.
+// Throws std::invalid_argument for an unreadable file, an unknown key or a
+// value that is not a scalar.
+std::vector<std::string> config_args(const std::string& path);
 
 std::string usage();
 

@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# /dev/radioberry for the radioberry group, and a systemd device unit
+# (dev-radioberry.device) for radioberry.service to bind to.
+SUBSYSTEM=="misc", KERNEL=="radioberry", GROUP="radioberry", MODE="0660", TAG+="systemd"

@@ -176,11 +176,14 @@ TEST_CASE("working Pi: radio can run", "[collect]") {
     CHECK_FALSE(flag(r, "fpga.config_lines.available"));
     CHECK(str(r, "fpga.config_lines.consumer") == "radioberry");
 
+    CHECK(str(r, "software.daemon.path") == "/usr/local/sbin/radioberryd");
+    // 1024 and DDC0's 1035 (0x040b) listed; 1065 (0x0429) is not ours.
     const auto& ports = r.root.at("software.udp_ports")->items();
-    REQUIRE(ports.size() == 2);
+    REQUIRE(ports.size() == 3);
     CHECK(ports[0].find("port")->as_int() == 1024);
     CHECK(ports[0].find("family")->as_string() == "ipv4");
-    CHECK(ports[1].find("family")->as_string() == "ipv6");
+    CHECK(ports[1].find("port")->as_int() == 1035);
+    CHECK(ports[2].find("family")->as_string() == "ipv6");
 }
 
 TEST_CASE("driver-reported identity: CL016, odd values, mismatch", "[collect]") {

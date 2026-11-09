@@ -2,9 +2,12 @@
 #include "options.hpp"
 
 #include <arpa/inet.h>
+#include <yaml-cpp/yaml.h>
 
+#include <algorithm>
 #include <charconv>
 #include <cstdio>
+#include <set>
 #include <stdexcept>
 
 namespace radioberry::daemon {
@@ -34,9 +37,78 @@ std::array<std::uint8_t, 6> mac(const std::string& text) {
     return m;
 }
 
+// Config keys that take a value, as their long options do.
+const std::set<std::string> kValueKeys = {"device",        "address",           "port",
+                                          "mac",           "client_timeout_ms", "frequency_ppm",
+                                          "iq_convention", "p2_rx_gain",        "drive_ceiling",
+                                          "tx_watchdog_s", "log_level"};
+
 }  // namespace
 
-Options parse_options(const std::vector<std::string>& args) {
+std::vector<std::string> config_args(const std::string& path) {
+    const auto fail = [&](const std::string& why) {
+        return std::invalid_argument("config " + path + ": " + why);
+    };
+    YAML::Node root;
+    try {
+        root = YAML::LoadFile(path);
+    } catch (const YAML::Exception& e) {
+        throw fail(e.what());
+    }
+    std::vector<std::string> out;
+    if (root.IsNull()) {
+        return out;
+    }
+    if (!root.IsMap()) {
+        throw fail("not a map of options");
+    }
+    for (const auto& entry : root) {
+        const std::string key = entry.first.as<std::string>();
+        const YAML::Node& value = entry.second;
+        if (!value.IsScalar()) {
+            throw fail(key + ": not a single value");
+        }
+        std::string option = "--" + key;
+        std::replace(option.begin(), option.end(), '_', '-');
+        if (kValueKeys.contains(key)) {
+            out.push_back(option);
+            out.push_back(value.Scalar());
+            continue;
+        }
+        if (key != "allow_tx" && key != "allow_pa" && key != "realtime") {
+            throw fail("unknown key: " + key);
+        }
+        bool on = false;
+        if (!YAML::convert<bool>::decode(value, on)) {
+            throw fail(key + ": not true or false: " + value.Scalar());
+        }
+        if (key == "realtime") {
+            if (!on) {
+                out.push_back("--no-realtime");
+            }
+        } else if (on) {
+            out.push_back(option);
+        }
+    }
+    return out;
+}
+
+Options parse_options(const std::vector<std::string>& command_line) {
+    // The config file's options come first, so the command line's win.
+    std::vector<std::string> args;
+    std::vector<std::string> rest;
+    for (std::size_t i = 0; i < command_line.size(); ++i) {
+        if (command_line[i] != "--config") {
+            rest.push_back(command_line[i]);
+        } else if (i + 1 >= command_line.size()) {
+            throw std::invalid_argument("--config: needs a value");
+        } else {
+            const auto from_file = config_args(command_line[++i]);
+            args.insert(args.end(), from_file.begin(), from_file.end());
+        }
+    }
+    args.insert(args.end(), rest.begin(), rest.end());
+
     Options o;
     for (std::size_t i = 0; i < args.size(); ++i) {
         const std::string& a = args[i];
@@ -131,6 +203,8 @@ std::string usage() {
            "owns the radio, and only while that client holds MOX. It claims no PA\n"
            "interlock.\n"
            "\n"
+           "  --config PATH            read options from this YAML file first (keys are the\n"
+           "                           long options with _ for -; the command line wins)\n"
            "  --device PATH            radioberry.ko device (default /dev/radioberry)\n"
            "  --address IPV4           address to listen on (default all)\n"
            "  --port N                 Protocol 1 port and Protocol 2 base port (default\n"

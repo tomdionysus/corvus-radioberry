@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# radioberryd options, read with --config (radioberry.service passes this
+# file). Each key is a long option with _ for - (radioberryd --help); an
+# option given on the command line overrides it. Shown with the defaults.
+# radioberryd reads this at start: restart the service after a change.
+
+# device: /dev/radioberry
+# address: 0.0.0.0              # listen on every interface
+# port: 1024                    # Protocol 1, and Protocol 2's base port
+# mac: 02:00:00:00:00:01        # default: the interface's
+# client_timeout_ms: 3000
+# frequency_ppm: 0              # the radio's frequency error, + if it tunes high
+# iq_convention: hl2            # or standard
+# p2_rx_gain: 14                # Protocol 2 LNA gain, dB
+# realtime: true                # SCHED_FIFO threads and locked memory
+# log_level: info
+
+# Transmit: off unless set here. No PA interlock is claimed.
+# allow_tx: false
+# allow_pa: false
+# drive_ceiling: 0
+# tx_watchdog_s: 120

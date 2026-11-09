@@ -647,7 +647,9 @@ private:
         Node daemon = Node::map();
         Node path;
         Node version;
-        for (const char* candidate : {"/usr/local/bin/radioberryd", "/usr/bin/radioberryd"}) {
+        // `cmake --install` puts it in sbin; bin is where it was once.
+        for (const char* candidate : {"/usr/local/sbin/radioberryd", "/usr/sbin/radioberryd",
+                                      "/usr/local/bin/radioberryd", "/usr/bin/radioberryd"}) {
             if (src_.exists(candidate)) {
                 path = candidate;
                 if (auto r = src_.run({candidate, "--version"}); r && r->exit_status == 0) {
@@ -697,7 +699,8 @@ private:
     }
 
     Node udp_ports() {
-        // Protocol 1 uses 1024; Protocol 2 uses 1024 to 1029 on the radio.
+        // Protocol 1 uses 1024; Protocol 2 uses 1024 to 1029 on the radio and
+        // sends DDC I/Q from 1035 onwards (1040 for the CL025's sixth DDC).
         Node list = Node::seq();
         std::set<std::pair<int, std::string>> seen;
         for (const char* table : {"udp", "udp6"}) {
@@ -721,7 +724,8 @@ private:
                 } catch (const std::exception&) {
                     continue;
                 }
-                if (port >= 1024 && port <= 1029 && seen.insert({port, table}).second) {
+                const bool ours = (port >= 1024 && port <= 1029) || (port >= 1035 && port <= 1040);
+                if (ours && seen.insert({port, table}).second) {
                     Node p = Node::map();
                     p.set("port", port);
                     p.set("family", std::string(table) == "udp" ? "ipv4" : "ipv6");

@@ -31,7 +31,7 @@ Debian trixie packages.
 | Kernel driver `radioberry.ko`, overlay, ABI header | `driver/` | ✓ | Loads the gateware at boot; receive and transmit streams; sysfs `reload`, stall indicator, `debug` parameter |
 | Radio daemon `radioberryd`, Protocol 1 | `daemon/` | ✓ | Hermes-Lite 2 dialect, receive and transmit, UDP and TCP; transmit policy and fail-safes; frequency calibration; FT8 contacts on 40 m with piHPSDR and WSJT-X |
 | Radio daemon `radioberryd`, Protocol 2 | `daemon/` | ✓ | Receive and transmit; FT8 contacts on 40 m with piHPSDR (Protocol 2) and WSJT-X; no wideband, diversity, PureSignal or radio-side CW keyer |
-| `radioberryd` as a systemd service | `daemon/` | ✗ | Not started; run by hand for now |
+| `radioberryd` as a systemd service | `daemon/` | ✓ | `radioberry.service`: unprivileged `radioberry` user with CAP_SYS_NICE and CAP_IPC_LOCK, options in `/etc/radioberry/config.yaml`, logs to the journal |
 | Example FT8 client `ft8rx` | `examples/ft8/` | ✓ | Receive only over Protocol 1 or 2: decodes FT8, never transmits; optional build |
 | Gateware loader `rbload` | `tools/` | ✗ | Not started |
 | Protocol test clients `p1probe`, `p2probe` | `tools/` | ✗ | Not started |
@@ -194,8 +194,8 @@ to `build-coverage/coverage/html`.
   second: up to six receivers at 192 ksps or three at 384 ksps.
 - `radioberryd` serves the radio to SDR clients over openHPSDR Protocol 1
   in the Hermes-Lite 2 dialect, on UDP and TCP port 1024, so clients that
-  support the HL2 (piHPSDR and others) find it by discovery. It is not
-  yet installed as a service; run it as root, for example
+  support the HL2 (piHPSDR and others) find it by discovery. It runs as
+  `radioberry.service` (below), or by hand as root, for example
   `radioberryd --frequency-ppm 22.9`. It receives only unless started
   with `--allow-tx`; then the client that owns the radio may transmit
   while it holds MOX, the drive is capped by `--drive-ceiling N` (default
@@ -207,7 +207,22 @@ to `build-coverage/coverage/html`.
   `docs/examples.md`). `--iq-convention standard` swaps I and Q both ways
   for clients using plain complex baseband; the default `hl2` is what HL2
   software expects. It claims no PA interlock. `radioberryd --help` lists
-  every option.
+  every option. It runs its stream threads at SCHED_FIFO and locks its
+  memory (`--no-realtime` turns both off); RX jitter measurements are in
+  `docs/platform.md`.
+- `cmake --install` installs `radioberry.service`, a sysusers.d entry for
+  the `radioberry` system user (created at install), a udev rule giving
+  `/dev/radioberry` to the `radioberry` group, and
+  `/etc/radioberry/config.yaml` if there is none. The service runs
+  `radioberryd --config /etc/radioberry/config.yaml` as that user with
+  CAP_SYS_NICE and CAP_IPC_LOCK only, logs to the journal
+  (`journalctl -u radioberry`), stops when the driver goes and restarts
+  after a failure. The config file's keys are the long options with `_`
+  for `-` (for example `frequency_ppm: 22.9`, `allow_tx: true`); edit it
+  and `systemctl restart radioberry`. Nothing is enabled at install:
+  `systemctl enable --now radioberry` starts it now and at boot. Stop it
+  (`systemctl stop radioberry`) before running anything else that opens
+  `/dev/radioberry`, `rbcat`, `rbctl` and the CI driver tests included.
 - `radioberryd` also serves openHPSDR Protocol 2 over UDP: discovery and
   General on port 1024, the other host packets on 1025 to 1029, DDC I/Q
   from 1035 to 1040 (with `--port N`, N and the same offsets). It reports

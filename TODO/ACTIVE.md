@@ -16,14 +16,15 @@ its date.
   in Protocol 2), one owning client, transmit
   only with `--allow-tx` through the transmit policy and fail-safes,
   frequency calibration (`--frequency-ppm`, +22.9 on the development
-  board), I/Q convention option. Not yet a service: started by hand.
+  board), I/Q convention option, real-time threads; runs as
+  `radioberry.service`.
 - On air: piHPSDR and WSJT-X through `radioberryd` received and decoded
   FT8, transmitted it (decoded by distant stations on PSK Reporter), and
   completed an FT8 contact. The transmit chain measured clean with a
   HackRF (no spurs or image above a broadband floor about 46 dB down).
 - `ft8rx` (`examples/ft8`, optional): receive-only FT8 decoder over
   Protocol 1 or 2.
-- Next: the systemd service; the HL2 drive item and the Protocol 2 output checks
+- Next: the integration test and the protocol tools; the HL2 drive item and the Protocol 2 output checks
   wait for the owner's go-ahead to transmit.
 
 ## Standing decisions
@@ -96,25 +97,8 @@ Nothing open.
       output against gain code across the range, then decide whether
       `radioberryd` maps HL2 drive to Radioberry codes. Until then piHPSDR
       is calibrated by hand (its per-band PA calibration, about 45 to 50).
-- [ ] systemd unit `radioberry.service` as user `radioberry` with
-      CAP_SYS_NICE and CAP_IPC_LOCK, udev rule, system user, config file
-      `/etc/radioberry/config.yaml`, `--version`, spdlog to the journal,
-      all installed by `cmake --install`. Acceptance: `rbprobe` exits 0 on
-      the Pi.
 - [ ] Integration test: a fake client against the daemon on loopback for
       both protocols, with fault injection for every fail-safe path.
-
-## 4a. Development Pi
-
-- [ ] Wi-Fi background scans: while associated, the development Pi scans
-      every 33.7 s for 3.65 s, which stalls UDP to a Wi-Fi client for about
-      130 ms at a time (`docs/platform.md`); longer than the 85 ms TX FIFO,
-      so a Protocol 2 client transmitting over Wi-Fi would run it dry.
-      Stop the scans (for example by locking the connection to the access
-      point's BSSID, in the netplan configuration so it survives reboots),
-      with a rollback in place since Wi-Fi is the Pi's only link; owner's
-      decision. Acceptance: RX packet lateness to a Wi-Fi client under
-      10 ms at p99.9 over 60 s.
 
 ## 4. Protocol tools (`tools/`)
 
@@ -157,3 +141,15 @@ Transmit items each need the owner's go-ahead at the time.
       the test client or the radio (repeat with piHPSDR's own two-tone
       generator, and in the duplex receiver into a dummy load), then
       measure the drive at which compression sets in.
+
+## 7. Development Pi
+
+- [ ] Wi-Fi background scans: while associated, the development Pi scans
+      every 33.7 s for 3.65 s, which stalls UDP to a Wi-Fi client for about
+      130 ms at a time (`docs/platform.md`); longer than the 85 ms TX FIFO,
+      so a Protocol 2 client transmitting over Wi-Fi would run it dry.
+      Stop the scans (for example by locking the connection to the access
+      point's BSSID, in the netplan configuration so it survives reboots),
+      with a rollback in place since Wi-Fi is the Pi's only link; owner's
+      decision. Acceptance: RX packet lateness to a Wi-Fi client under
+      10 ms at p99.9 over 60 s.
