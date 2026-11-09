@@ -10,7 +10,7 @@
 namespace radioberry {
 
 // Raspberry Pi GPIO lines wired to the FPGA's passive serial configuration
-// port on the Radioberry 2.x.
+// port on the RadioBerry 2.x.
 struct ConfigLines {
     static constexpr unsigned kData = 13;
     static constexpr unsigned kDclk = 24;

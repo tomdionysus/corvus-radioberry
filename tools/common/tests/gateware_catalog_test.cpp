@@ -32,7 +32,7 @@ TEST_CASE("catalog lists this project's CL025 PIO build first", "[catalog]") {
     CHECK(images[1].family == GatewareFamily::kRpi5Pio);
     for (const auto& image : images) {
         CHECK(image.sha256.size() == 64);
-        CHECK_FALSE(image.upstream_ref.empty());
+        CHECK_FALSE(image.source.empty());
     }
 }
 

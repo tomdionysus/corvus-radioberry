@@ -199,8 +199,8 @@ FakeSource working_pi() {
     s.files["/sys/bus/spi/devices/spi0.0/receivers"] = "6\n";
     s.files["/sys/bus/spi/devices/spi0.0/transmitters"] = "1\n";
     s.files.erase("/etc/init.d/radioberryd");
-    s.files["/usr/local/bin/radioberryd"] = "";
-    s.commands[{"/usr/local/bin/radioberryd", "--version"}] = {0, "radioberryd v0.1.0\n"};
+    s.files["/usr/local/sbin/radioberryd"] = "";
+    s.commands[{"/usr/local/sbin/radioberryd", "--version"}] = {0, "radioberryd v0.1.0\n"};
     s.commands[{"systemctl", "is-enabled", "radioberry.service"}] = {0, "enabled\n"};
     s.commands[{"systemctl", "is-active", "radioberry.service"}] = {0, "active\n"};
     s.config_lines = {false, "radioberry", false, false};
@@ -215,7 +215,9 @@ FakeSource working_pi() {
         "   2: bad\n   3: 0000:zz 0000:0000 07\n";
     s.files["/proc/net/udp"] =
         "  sl  local_address rem_address   st\n"
-        " 1: 00000000:0400 00000000:0000 07\n";
+        " 1: 00000000:0400 00000000:0000 07\n"
+        " 2: 00000000:040B 00000000:0000 07\n"
+        " 3: 00000000:0429 00000000:0000 07\n";
     return s;
 }
 

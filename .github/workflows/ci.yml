@@ -1,0 +1,64 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# The userspace half of tools/ci-pi.sh on GitHub's runners: format and
+# SPDX checks, the release, sanitizer and coverage builds with their tests,
+# and the coverage report to Codecov. There is no kernel module (no
+# headers for the runner's kernel) and no hardware here; the run on the
+# Raspberry Pi stays the merge gate for those.
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    container:
+      image: debian:trixie
+      # LeakSanitizer needs ptrace to stop the process's threads.
+      options: --cap-add SYS_PTRACE --security-opt seccomp=unconfined
+    steps:
+      - name: Install packages
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential cmake pkg-config device-tree-compiler git ca-certificates \
+            libliquid-dev libgpiod-dev libi2c-dev libyaml-cpp-dev nlohmann-json3-dev \
+            libspdlog-dev libsystemd-dev catch2 lcov clang-format-19 clang-tidy-19 python3 perl \
+            curl gnupg  # Codecov's uploader verifies its own signature
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # tags, for the version string
+
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # checkpatch.pl and its data files from the Raspberry Pi kernel
+      # (rpi-6.18.y); sparse needs the Pi's kernel headers, so it runs on
+      # the Pi only.
+      - name: Fetch checkpatch
+        run: |
+          base=https://raw.githubusercontent.com/raspberrypi/linux/31a34885388835dce2460744d7961f2b9e7dc416/scripts
+          mkdir -p /opt/checkpatch
+          for f in checkpatch.pl spelling.txt const_structs.checkpatch; do
+            curl -fsSL "$base/$f" -o "/opt/checkpatch/$f"
+          done
+
+      - name: Build and test
+        env:
+          CHECKPATCH: /opt/checkpatch/checkpatch.pl
+        run: sh tools/ci-pi.sh --local
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v5
+        with:
+          files: build-coverage/coverage/coverage.info
+          disable_search: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false

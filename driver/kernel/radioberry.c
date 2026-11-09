@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- * Radioberry 2.x on the Raspberry Pi 5.
+ * RadioBerry 2.x on the Raspberry Pi 5.
  *
  * Binds to the "sdr,radioberry" device on spi0 created by the radioberry
  * overlay. On probe it loads the gateware through passive serial, reads
@@ -16,8 +16,8 @@
  * and a FIFO-priority kernel thread refills them, so the state machines
  * never wait for a restart.
  *
- * The PIO programs and the overall design follow the upstream Radioberry
- * Pi 5 driver by Johan Maas, PA3GSB (public domain, Unlicense).
+ * The PIO programs and the overall design follow the original RadioBerry
+ * Pi 5 driver, released into the public domain under the Unlicense.
  */
 
 #include <linux/delay.h>
@@ -203,6 +203,19 @@ static int rb_command_safe(struct rb_dev *rb, u8 *rx)
 	return ret;
 }
 
+/* The FPGA the gateware reports, by name. */
+static const char *rb_fpga_name(u8 fpga_type)
+{
+	switch (fpga_type) {
+	case RADIOBERRY_FPGA_CL025:
+		return "10CL025";
+	case RADIOBERRY_FPGA_CL016:
+		return "10CL016";
+	default:
+		return "unknown";
+	}
+}
+
 /* Polls the identity word until the gateware has left its reset. */
 static int rb_read_identity(struct rb_dev *rb)
 {
@@ -233,7 +246,7 @@ static int rb_wait_nstatus(struct rb_dev *rb, int level, unsigned int timeout_us
 	for (waited = 0; waited < timeout_us; waited += 10) {
 		if (gpiod_get_value_cansleep(rb->nstatus) == level)
 			return 0;
-		udelay(10);
+		usleep_range(10, 20);
 	}
 	return -ETIMEDOUT;
 }
@@ -347,8 +360,8 @@ static void rb_rx_dma_done(void *param)
 	spin_unlock_irqrestore(&rb->rx_lock, flags);
 
 	if (resyncs || dropped)
-		rb_debug(rb, "RX period of %u words: %llu resyncs, %llu words dropped\n", n, resyncs,
-			 dropped);
+		rb_debug(rb, "RX period of %u words: %llu resyncs, %llu words dropped\n", n,
+			 resyncs, dropped);
 	if (overruns)
 		rb_debug(rb, "RX ring full: %llu frames dropped\n", overruns);
 
@@ -419,8 +432,8 @@ static int rb_tx_submit(struct rb_dev *rb)
 		wake_up_interruptible(&rb->tx_wait);
 
 		atomic_inc(&s->inflight);
-		ret = rp1_pio_sm_xfer_data(rb->pio, s->sm, RP1_PIO_DIR_TO_SM, bytes, s->slot[idx], 0,
-					   rb_tx_dma_done, rb);
+		ret = rp1_pio_sm_xfer_data(rb->pio, s->sm, RP1_PIO_DIR_TO_SM, bytes, s->slot[idx],
+					   0, rb_tx_dma_done, rb);
 		if (ret) {
 			atomic_dec(&s->inflight);
 			dev_err_ratelimited(rb->dev, "TX DMA submit failed: %d; %u bytes dropped\n",
@@ -498,7 +511,7 @@ static int rb_worker(void *arg)
 		rb_check_stall(rb);
 		/* Back off on a submit error rather than spin on it. */
 		if (rb_rx_submit(rb) || rb_tx_submit(rb))
-			msleep(10);
+			usleep_range(10000, 11000);
 	}
 	return 0;
 }
@@ -661,7 +674,11 @@ static void rb_stop_streams(struct rb_dev *rb)
 			off.mask |= BIT(rb->tx.sm);
 		if (off.mask)
 			rp1_pio_sm_set_enabled(rb->pio, &off);
-		/* Unclaims the state machines, frees DMA and waits for callbacks. */
+		/*
+		 * Unclaims the state machines and frees their DMA. Transfers still in
+		 * flight are terminated without their callbacks; rp1-pio then leaks
+		 * its 64-byte record for each (docs/kernel-debug.md).
+		 */
 		rp1_pio_close(rb->pio);
 		rb->pio = NULL;
 	}
@@ -748,7 +765,7 @@ static int rb_reload(struct rb_dev *rb)
 	if (ret)
 		return ret;
 	dev_info(rb->dev, "reloaded: gateware %u.%u, FPGA %s, %u receivers, %u transmitter(s)\n",
-		 rb->id.major, rb->id.minor, rb->id.fpga_type == 2 ? "10CL025" : "10CL016",
+		 rb->id.major, rb->id.minor, rb_fpga_name(rb->id.fpga_type),
 		 rb->id.receivers, rb->id.transmitters);
 	rb_reset_stream_state(rb);
 	ret = rb_streams_up(rb);
@@ -995,10 +1012,11 @@ static long rb_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		mutex_lock(&rb->cmd_lock);
 		/*
 		 * RX lock-up workaround (see rx_clock_hold_us above and
-		 * docs/fault-rx-lockup.md, section 7): a receiver-count change clears
-		 * the gateware's RX FIFO, whose read side runs on the clock this
-		 * driver's RX state machine drives. With the state machine stopped
-		 * that clock is still while the clear is asserted and released.
+		 * docs/fault-rx-lockup.md, "The workaround"): a receiver-count
+		 * change clears the gateware's RX FIFO, whose read side runs on the
+		 * clock this driver's RX state machine drives. With the state
+		 * machine stopped that clock is still while the clear is asserted
+		 * and released.
 		 */
 		if (hold && rb->pio && rb_cmd_general(c.tx, &receivers, &rate_code) &&
 		    receivers != READ_ONCE(rb->receivers)) {
@@ -1006,7 +1024,7 @@ static long rb_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 			held = rp1_pio_sm_set_enabled(rb->pio, &off) == 0;
 			if (held)
-				udelay(20);
+				usleep_range(20, 30);
 		}
 		ret = rb_command_locked(rb, c.tx, c.rx);
 		if (!ret) {
@@ -1089,9 +1107,7 @@ static ssize_t fpga_type_show(struct device *dev, struct device_attribute *attr,
 {
 	struct rb_dev *rb = dev_get_drvdata(dev);
 
-	return sysfs_emit(buf, "%s\n", rb->id.fpga_type == RADIOBERRY_FPGA_CL025 ? "10CL025" :
-				       rb->id.fpga_type == RADIOBERRY_FPGA_CL016 ? "10CL016" :
-										  "unknown");
+	return sysfs_emit(buf, "%s\n", rb_fpga_name(rb->id.fpga_type));
 }
 static DEVICE_ATTR_RO(fpga_type);
 
@@ -1272,7 +1288,7 @@ static int rb_probe(struct spi_device *spi)
 	if (ret)
 		goto err_free;
 	dev_info(rb->dev, "gateware %u.%u, FPGA %s, %u receivers, %u transmitter(s)\n",
-		 rb->id.major, rb->id.minor, rb->id.fpga_type == 2 ? "10CL025" : "10CL016",
+		 rb->id.major, rb->id.minor, rb_fpga_name(rb->id.fpga_type),
 		 rb->id.receivers, rb->id.transmitters);
 
 	rb_reset_stream_state(rb);
@@ -1333,7 +1349,7 @@ static struct spi_driver rb_driver = {
 };
 module_spi_driver(rb_driver);
 
-MODULE_DESCRIPTION("Radioberry 2.x SDR on the Raspberry Pi 5 (RP1 PIO)");
+MODULE_DESCRIPTION("RadioBerry 2.x SDR on the Raspberry Pi 5 (RP1 PIO)");
 MODULE_LICENSE("GPL");
 MODULE_VERSION(RB_DRIVER_VERSION_STRING);
 MODULE_SOFTDEP("pre: rp1_pio");

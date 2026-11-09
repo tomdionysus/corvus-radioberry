@@ -52,7 +52,7 @@ std::unique_ptr<Device> open_device(const std::string& path);
 std::unique_ptr<Device> open_device_nonblocking(const std::string& path);
 
 // Bytes per RX frame for `receivers` receivers: 24-bit I and Q each.
-constexpr std::size_t rx_frame_bytes(unsigned receivers) { return 6u * receivers; }
+constexpr std::size_t rx_frame_bytes(unsigned receivers) { return std::size_t{6} * receivers; }
 // Bytes per TX sample: 16-bit I and Q.
 inline constexpr std::size_t kTxSampleBytes = 4;
 

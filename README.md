@@ -1,98 +1,116 @@
 # corvus-radioberry
 
-A self-contained software stack for the Radioberry 2.x HF transceiver HAT
-on a Raspberry Pi 5: Linux kernel driver, a radio daemon speaking
-OpenHPSDR Protocol 1 and Protocol 2 (DSP by liquid-dsp), platform
-diagnostics, and control of the AURSINC PA5W V2 amplifier board, with the
-FPGA gateware built from its GPL source. Every component is built
-from this repository against the current Raspberry Pi OS kernel (6.18 and
-newer) with no dependency on out-of-tree kernel patches.
+[![CI](https://github.com/tomdionysus/corvus-radioberry/actions/workflows/ci.yml/badge.svg)](https://github.com/tomdionysus/corvus-radioberry/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/tomdionysus/corvus-radioberry/graph/badge.svg)](https://codecov.io/gh/tomdionysus/corvus-radioberry)
+[![CodeQL](https://github.com/tomdionysus/corvus-radioberry/actions/workflows/codeql.yml/badge.svg)](https://github.com/tomdionysus/corvus-radioberry/actions/workflows/codeql.yml)
 
-The Radioberry and the upstream software this project builds on are the
-work of Johan Maas, PA3GSB. He offers a ready-to-run Raspberry Pi 5 image
-of his software for EUR 5 at https://pa3gsb.gumroad.com/l/radioberry. If
-the Radioberry is useful to you, buying it supports his work.
+Version 0.2.0
+
+A self-contained software stack for the
+[RadioBerry 2.x HF transceiver HAT](https://github.com/pa3gsb/Radioberry-2.x/wiki)
+on a Raspberry Pi 5:
+
+- `radioberry.ko`, the Linux kernel driver
+- `radioberryd`, a daemon speaking openHPSDR Protocol 1 and Protocol 2
+- signal processing with liquid-dsp
+- platform diagnostics
+- control of an [AURSINC PA5W V2](https://www.aursinc.com/products/aursinc-radioberry-preamp-board-v2-output-1-5w-3w-for-hf-power-ampfier-10w-100w-pa-for-raspberry-pi-4-4b) amplifier board
+- FPGA gateware built from its GPL source
+
+Every component is built from this repository against the current
+Raspberry Pi OS kernel (6.18 and newer) with no out-of-tree kernel
+patches. In particular, no patched `rp1-pio` is needed: the driver uses
+only what the stock kernel's `rp1-pio` driver exports. The original
+RadioBerry driver depends on a symbol only a private `rp1-pio` patch
+provides, and
+[kernel updates break it](https://m0aws.co.uk/?p=3670). After a kernel
+update, rebuild and reinstall this one (Build and install, below).
+
+The RadioBerry and its original software come from the
+[RadioBerry project](https://github.com/pa3gsb/Radioberry-2.x). A
+[ready-to-run Raspberry Pi 5 image](https://pa3gsb.gumroad.com/l/radioberry)
+of the original software is sold by the RadioBerry's author; buying it
+supports their work. Please consider buying it even if you don't use it:
+the RadioBerry hardware is a work of art.
 
 The code is C++20, with C only where the kernel or a shared ABI header
-requires it. Every component carries Catch2 unit tests with the aim of
-complete coverage; the kernel module's pure logic is compiled into a
-userspace test binary for the same purpose. All dependencies come from
-Debian trixie packages.
+requires it, tested with Catch2. All dependencies are Debian trixie
+packages.
 
-## Status (2026-11-09, v0.1.0)
+Documentation:
 
-| Component | Directory | State |
-|---|---|---|
-| Platform probe `rbprobe` | `tools/rbprobe/` | working |
-| Stream tool `rbcat` | `tools/rbcat/` | working |
-| Command tool `rbctl` | `tools/rbctl/` | working |
-| FPGA gateware, Hermes-Lite 2 Radioberry PIO variants 75.3 | `gateware/` | CL025 built and verified on hardware; its receive-stream lock-up (`docs/fault-rx-lockup.md`) is worked around by the driver; CL016 built, untested, misses AD9866 TX output timing (`gateware/PROVENANCE.md`) |
-| Kernel driver `radioberry.ko`, overlay, ABI header | `driver/` | working: loads the gateware at boot, receive streaming verified, TX path carried zero samples with PTT clear; sysfs `reload`, stall indicator, `debug` parameter |
-| Radio daemon `radioberryd` | `daemon/` | Protocol 1 (Hermes-Lite 2 dialect) receive and transmit over UDP and TCP, transmit policy and fail-safes, frequency calibration; verified on air with piHPSDR and WSJT-X (FT8 contacts on 40 m). Protocol 2, systemd service: not started |
-| Example FT8 client `ft8rx` | `examples/ft8/` | receive only (decodes FT8, never transmits); working, optional build |
-| Loader and protocol tools (`rbload`, `p1probe`, `p2probe`) | `tools/` | not started |
+| Document | Contents |
+|---|---|
+| [docs/platform.md](docs/platform.md) | supported hardware, the development Pi, kernel facts, real-time and jitter measurements |
+| [docs/pa.md](docs/pa.md) | the PA5W V2 amplifier board |
+| [docs/design.md](docs/design.md) | architecture of the driver, daemon and probe |
+| [docs/driver.md](docs/driver.md) | kernel driver: device interface, sysfs, module parameters |
+| [docs/driver-tests.md](docs/driver-tests.md) | `rbdrivertest`, the driver's hardware tests |
+| [docs/kernel-debug.md](docs/kernel-debug.md) | the driver under a debug kernel (KASAN, lockdep, kmemleak): method and results |
+| [docs/daemon.md](docs/daemon.md) | `radioberryd`: options, service, Protocols 1 and 2, client notes |
+| [docs/tools.md](docs/tools.md) | `rbprobe`, `rbcat`, `rbctl`, `rbload`, `p1probe`, `p2probe` |
+| [docs/examples.md](docs/examples.md) | `ft8rx`, sample order, frequency calibration |
+| [docs/fault-rx-lockup.md](docs/fault-rx-lockup.md) | the gateware's receive lock-up and the driver's workaround |
+| [gateware/README.md](gateware/README.md) | the gateware: interface the driver depends on |
+| [gateware/PROVENANCE.md](gateware/PROVENANCE.md), [gateware/QUARTUS.md](gateware/QUARTUS.md) | gateware source, build, timing, toolchain |
+| [docs/licensing.md](docs/licensing.md) | licence and third-party works |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | repository layout, CI, working conventions |
 
-The design of the whole stack is in `docs/plan-v1.md`; the open work, in
-order, is in `TODO/ACTIVE.md`.
+## Status
 
-## Target hardware and host
+| Component | Directory | Working | Notes |
+|---|---|---|---|
+| Platform probe `rbprobe` | `tools/rbprobe/` | ✓ | Host, boot, driver, gateware, FPGA, PA board and daemon state; text, JSON or YAML |
+| Stream tool `rbcat` | `tools/rbcat/` | ✓ | Receive streams and measurements without the daemon |
+| Command tool `rbctl` | `tools/rbctl/` | ✓ | Single gateware commands; anything that can transmit needs `--allow-tx` |
+| Gateware, CL025 (HL2 RadioBerry PIO variant 75.3) | `gateware/` | ✓ | Built from source, verified on hardware; its receive lock-up is worked around by the driver |
+| Gateware, CL016 | `gateware/` | ✗ | Built, not tested on a CL016 board; misses AD9866 TX output timing |
+| Kernel driver `radioberry.ko`, overlay, ABI header | `driver/` | ✓ | Loads the gateware at boot; receive and transmit streams |
+| `radioberryd`, Protocol 1 | `daemon/` | ✓ | Hermes-Lite 2 dialect, receive and transmit, UDP and TCP; FT8 contacts with piHPSDR and WSJT-X |
+| `radioberryd`, Protocol 2 | `daemon/` | ✓ | Receive and transmit; FT8 contacts with piHPSDR and WSJT-X; no wideband, diversity, PureSignal or radio-side CW keyer |
+| `radioberry.service` | `daemon/` | ✓ | Unprivileged, options in `/etc/radioberry/config.yaml`, logs to the journal |
+| Example FT8 client `ft8rx` | `examples/ft8/` | ✓ | Receive only, Protocol 1 or 2; optional build |
+| Gateware loader `rbload` | `tools/rbload/` | ✓ | Loads the FPGA without the driver; checks the image family and CONF_DONE |
+| Protocol test clients `p1probe`, `p2probe` | `tools/protoprobe/` | ✓ | Discovery, receive and zero-drive transmit checks over Protocol 1 and 2 |
 
-- Raspberry Pi 5 running Raspberry Pi OS (Debian 13 trixie, 64-bit),
-  kernel 6.18.60+rpt-rpi-2712 or newer. The stock in-tree `rp1-pio` driver
-  is used as it is.
-- Radioberry 2.x HAT (AD9866 front end, Intel Cyclone 10 LP 10CL025 or
-  10CL016), 0 to 30 MHz.
-- AURSINC "Radioberry Preamp Board V2" (PCB marked PA5W V2) stacked on the
-  Radioberry: 1.5 to 3.5 W output, manual BIAS1/BIAS2 trimmers, INA199A1
-  current sense on the PA_CUR header, no I2C devices.
+Open work, in order, is in [TODO/ACTIVE.md](TODO/ACTIVE.md).
 
-Details: `docs/platform.md` (development host), `docs/pa.md` (amplifier),
-`gateware/README.md` (FPGA interface), `docs/history.md` (the upstream
-projects this replaces).
+## Build and install
 
-## Requirements on the Pi
+On a Raspberry Pi 5 running Raspberry Pi OS (Debian 13 trixie, 64-bit,
+kernel 6.18 or newer), from the repository root:
 
 ```
-sudo apt install build-essential cmake device-tree-compiler \
-    linux-headers-rpi-2712 libliquid-dev libgpiod-dev libi2c-dev i2c-tools \
-    libyaml-cpp-dev nlohmann-json3-dev libspdlog-dev libsystemd-dev \
-    catch2 lcov clang-format-19 rsync
+sudo apt install build-essential cmake pkg-config device-tree-compiler \
+    linux-headers-rpi-2712 libliquid-dev libgpiod-dev libi2c-dev \
+    libyaml-cpp-dev nlohmann-json3-dev libspdlog-dev libsystemd-dev catch2
+
+cmake -S . -B build -DFPGATYPE=CL025   # CL016 if the RadioBerry has a CL016 FPGA
+cmake --build build -j
+ctest --test-dir build
+sudo cmake --install build
 ```
 
-`/boot/firmware/config.txt` needs:
+To tell which FPGA the RadioBerry has, read the marking on the chip's
+package: `10CL025YE144C8G` is a CL025, `10CL016YE144C8G` a CL016.
+
+To enable the kernel driver, add the following to
+`/boot/firmware/config.txt`, then reboot (first install only):
 
 ```
 dtparam=i2c_arm=on
 dtoverlay=radioberry
 ```
 
-The `radioberry` overlay is built and installed by this repository. It
-enables `spi0` and `rp1_pio`, creates the `sdr,radioberry` device on
-`spi0` chip select 0 (SPI mode 3, 12.5 MHz) with the FPGA configuration
-GPIOs, and disables the spidev nodes.
-
-## Gateware
-
-The FPGA runs the Hermes-Lite 2 `radioberry_pio_cl025` or
-`radioberry_pio_cl016` variant, version 75.3. The bitfiles in
-`gateware/rpi-5/<type>/radioberry.rbf` are built here from the unmodified
-source in `gateware/source/` with Quartus Prime Lite on an x86-64 machine
-(`tools/build-gateware.sh`; toolchain and licence in `gateware/QUARTUS.md`)
-and committed, so the Pi only installs them. `gateware/PROVENANCE.md`
-records the source commit, fitter seeds, hashes and timing results.
-
-## Build and install
-
-On the Pi, from the repository root:
+Then check the radio and start the daemon:
 
 ```
-cmake -S . -B build -DFPGATYPE=CL025   # or CL016
-cmake --build build -j
-ctest --test-dir build
-sudo cmake --install build
-sudo reboot                            # first install of the overlay only
 rbprobe
+sudo systemctl enable --now radioberry
 ```
+
+`rbprobe` exits 0 when the radio can run and lists each blocker
+otherwise. The service starts now and at every boot.
 
 `cmake --install` places:
 
@@ -103,175 +121,59 @@ rbprobe
 | gateware for `FPGATYPE` | `/lib/firmware/radioberry.rbf` |
 | both gateware images | `/usr/local/share/radioberry/gateware/rpi-5/<type>/` |
 | ABI header | `/usr/local/include/radioberry_ioctl.h` |
-| `rbprobe`, `rbcat`, `rbctl` | `/usr/local/bin/` |
+| `rbprobe`, `rbcat`, `rbctl`, `rbload`, `p1probe`, `p2probe` | `/usr/local/bin/` |
+| `radioberryd` | `/usr/local/sbin/` |
+| `radioberry.service`, sysusers.d entry, udev rule | `/usr/local/lib/systemd/system/`, `/usr/local/lib/sysusers.d/`, `/usr/local/lib/udev/rules.d/` |
+| daemon config, if there is none | `/etc/radioberry/config.yaml` |
 
-The module is built when headers for the running kernel are installed
-(`-DKERNEL_RELEASE=` picks another kernel, `-DRADIOBERRY_BUILD_MODULE=OFF`
-skips it). `-DRADIOBERRY_ABI_INCLUDE_DIR=/usr/local/include` builds the
-tools and daemon against the installed ABI header instead of
-`driver/include`; configuration fails if its ABI version differs from the
-source tree's. `CMakePresets.json` has `default`, `asan` (AddressSanitizer and
-UndefinedBehaviorSanitizer) and `coverage` presets;
-`cmake --build --preset coverage --target coverage` writes an lcov report
-to `build-coverage/coverage/html`.
+## TX & PA
 
-## Using it
+**Transmit and the PA ship OFF, for safety.** The installed
+`/etc/radioberry/config.yaml` lists every option with its default and a
+one-line description; `allow_tx` and `allow_pa` are `false`, and
+`drive_ceiling` is 150. To transmit, set `allow_tx: true` and
+`sudo systemctl restart radioberry`. To use the PA as well, connect an
+antenna or dummy load rated for its output first, then set
+`allow_pa: true` and restart.
 
-- `rbprobe` reports the Pi, kernel, overlay, driver, installed gateware,
-  FPGA type and gateware identity, PA board (I2C scan) and daemon state.
-  `--json` and `--yaml` give the same content. Exit status 0 means the
-  radio can run, 1 that it cannot (each blocker is listed under
-  `findings`), 2 a usage error. Run it as root to see device holders and
-  the I2C bus.
-- `rbprobe --identify` finds out which FPGA the board carries by loading
-  each known rpi-5 gateware image in turn until one configures the chip.
-  It reprograms the FPGA, so it refuses to run while the driver is loaded.
-  It looks for `.rbf` files in `/usr/local/share/radioberry/gateware`,
-  `/usr/share/radioberry/gateware` and `/lib/firmware`; `--gateware-dir`
-  replaces that list.
-- The driver loads the gateware when it binds, at boot, and publishes the
-  gateware identity in `/sys/bus/spi/devices/spi0.0/` (`gateware_version`,
-  `fpga_type`, `receivers`, `transmitters`). Writing 1 to `reload`
-  there reloads `/lib/firmware/radioberry.rbf`, re-reads the identity and
-  restarts the streams (about 5.5 s; EBUSY while `/dev/radioberry` is
-  open; statistics restart from zero; if it fails, opening the device
-  gives ENODEV until a reload succeeds). Module parameters:
-  `load_gateware` (default 1), `rx_clkdiv` (2), `tx_clkdiv` (8),
-  `rx_ring_kib` (512), `tx_ring_kib` (64), `rx_clock_hold_us` (200) and
-  `debug` (0); the last two are writable at run time in
-  `/sys/module/radioberry/parameters/`. `debug` 1 logs rate-limited
-  diagnostics: each command with its reply, RX resyncs and dropped words
-  per DMA period, RX ring overruns and TX underruns; 2 traces every
-  command and receiver-count change without rate limiting.
-- The PIO gateware can lock up its receive stream at a receiver-count
-  change (`docs/fault-rx-lockup.md`). The driver works around it by
-  holding its RX clock still from just before a receiver-count command
-  until `rx_clock_hold_us` after it (0 disables the hold). Should the
-  stream stop anyway, the driver logs "RX stream stalled" after 200 ms
-  without RX words while run is set, sysfs `rx_stalled` reads 1 and
-  `rx_stalls` counts the events; writing 1 to `reload` recovers.
-- `/dev/radioberry` is the interface for the daemon and tools: exclusive
-  open, whole RX frames from `read()`, TX samples to `write()`, gateware
-  commands, identity and statistics by ioctl. `driver/include/radioberry_ioctl.h`
-  documents it. Closing the device sends the gateware a command that
-  clears run, PTT, the TX permission bit, PA enable and drive.
-- `rbcat` receives from `/dev/radioberry` without the daemon: it sets the
-  sample rate (`--rate 48|96|192|384`), receiver count (`--receivers`),
-  frequencies (`--freq HZ[,HZ...]`) and LNA gain (`--lna`, -12 to 48 dB),
-  streams for `--seconds` (or until SIGINT or SIGTERM) after a settling
-  time (`--settle`, 0.5 s), and reports frame rate, RMS and peak level
-  per receiver, and the driver's resync, dropped-word and overrun counts
-  over the measurement and over the settling time, as text, `--json` or
-  `--yaml`. `--output iq24` writes the frames to stdout as read (24-bit
-  big-endian I and Q per receiver), `--output iq16` the top 16 bits of
-  each value as little-endian int16; the report then goes to stderr.
-  `--interval S` prints a progress line every S seconds. `--tx-zeros`
-  also writes zero TX samples, keeping about 50 ms queued in the driver,
-  and reports the TX word rate, underruns and the lowest queue level; the
-  gateware drains and discards them because PTT is clear. It never sets
-  PTT or the TX permission bit. Exit status 0 means a clean stream (no
-  faults after settling, frame rate within 1%, and with `--tx-zeros` a
-  TX word rate within 1% of 48000 per second, no underruns and a queue
-  that never ran empty), 1 stream faults or a device error, 2 a usage
-  error.
-- `rbctl ADDRESS DATA` sends one gateware command (Hermes-Lite 2
-  address and 32-bit C1..C4 data, decimal or 0x hex; run set unless
-  `--no-run`) and prints the command bytes, the gateware's reply, and the
-  driver's info and statistics; with no arguments it prints only the info
-  and statistics. A command that can key the transmitter or arm the PA
-  (`--ptt`, `--tx-permit`, `--cwx`, or address 0x09 with drive, VNA or
-  PA enable) is refused unless `--allow-tx` is given; a PTT hang time of
-  31 at address 0x17 is always refused. On exit the driver's close sends
-  the safe command, so run, PTT, the TX permission bit, PA enable and
-  drive last only while `rbctl` runs. Exit status 0 on success, 1 on a
-  device error (including EBUSY while another program holds the device),
-  2 on a usage error or refused command.
-- Receive capacity over the PIO bus is about 2.37 million values per
-  second: up to six receivers at 192 ksps or three at 384 ksps.
-- `radioberryd` serves the radio to SDR clients over openHPSDR Protocol 1
-  in the Hermes-Lite 2 dialect, on UDP and TCP port 1024, so clients that
-  support the HL2 (piHPSDR and others) find it by discovery. It is not
-  yet installed as a service; run it as root, for example
-  `radioberryd --frequency-ppm 22.9`. It receives only unless started
-  with `--allow-tx`; then the client that owns the radio may transmit
-  while it holds MOX, the drive is capped by `--drive-ceiling N` (default
-  0), PA enable is passed on only with `--allow-pa`, and `--tx-watchdog-s`
-  (default 120) ends any transmission held longer. A client silent for 3 s
-  loses the radio, and any stream fault while transmitting drops MOX until
-  the client releases it. `--frequency-ppm` corrects every frequency for
-  the board's reference error (measure it against known signals;
-  `docs/examples.md`). `--iq-convention standard` swaps I and Q both ways
-  for clients using plain complex baseband; the default `hl2` is what HL2
-  software expects. It claims no PA interlock. `radioberryd --help` lists
-  every option.
-- With piHPSDR (HL2 type): its HL2 drive model assumes the Hermes-Lite 2
-  gateware, which uses the drive byte differently, so lower its per-band
-  PA calibration until the output is right (about 45 to 50 on the
-  development board). For WSJT-X through piHPSDR, use the Kenwood TS-2000
-  rig type on piHPSDR's CAT port (TCP 19090).
-- `ft8rx` (`examples/ft8`, built with `-DRADIOBERRY_BUILD_EXAMPLES=ON`) is
-  a receive-only Protocol 1 client that decodes FT8 and prints it as
-  WSJT-X does (`docs/examples.md`).
+## Build options
 
-## Repository layout
+| Option | Effect |
+|---|---|
+| `-DFPGATYPE=CL025\|CL016` | which gateware is installed as `/lib/firmware/radioberry.rbf` (default CL025) |
+| `-DKERNEL_RELEASE=` | build the module for another kernel (default: the running one, if its headers are installed) |
+| `-DRADIOBERRY_BUILD_MODULE=OFF` | skip the module |
+| `-DRADIOBERRY_ABI_INCLUDE_DIR=/usr/local/include` | build the tools and daemon against the installed ABI header; configuration fails if its ABI version differs from the source tree's |
+| `-DRADIOBERRY_BUILD_TESTS=OFF` | skip the unit tests (and the need for Catch2) |
+| `-DRADIOBERRY_BUILD_EXAMPLES=ON` | build `ft8rx` |
 
-```
-docs/      design (plan-v1.md), RX lock-up fault report (fault-rx-lockup.md), host, amplifier, upstream survey
-gateware/  gateware source, built bitfiles per FPGA, provenance, toolchain
-driver/    kernel module, device tree overlay, ABI header, logic tests
-daemon/    radioberryd: device layer, session, transmit policy, Protocol 1
-examples/  ft8rx, an example FT8 client (optional build)
-tools/     rbprobe, rbcat, rbctl, shared library, CI and check scripts, gateware build
-TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
-```
+## Roadmap / Ongoing work
 
-Development happens on `develop`, one branch per TODO item squash-merged
-into it; `main` receives `develop` only at version tags.
-`tools/ci-pi.sh` is the merge gate: on the Pi it runs the format check
-(`tools/check-format.sh`, clang-format 19), the SPDX check
-(`tools/check-spdx.sh`), the release, sanitizer and coverage builds with
-their tests, prints the coverage summary, and, when the ABI header is
-installed, builds the tools against it and checks that no userspace
-compile sees `driver/include`; from a workstation,
-`tools/ci-pi.sh --remote [user@]host` copies the working tree to the Pi
-and runs it there. Working conventions are in `CONTRIBUTING.md`.
+- If someone out there could test this with a CL016 based RadioBerry, that
+  would be great. The CL016 build has a timing issue on the AD9866 TX data
+  outputs that moves with the FPGA fitter seed, and no seed tried so far
+  meets it ([gateware/PROVENANCE.md](gateware/PROVENANCE.md)). I'd also
+  like to crack that.
+- There's also a bug in the gateware: the RX FIFO clear is not
+  synchronised and the read-out state machine has no reset, so the receive
+  stream can lock up at a receiver-count change
+  ([docs/fault-rx-lockup.md](docs/fault-rx-lockup.md)). I've worked around
+  this in the driver, but the real fix belongs in the gateware itself.
+- The AURSINC RadioBerry Preamp Board I'm using is an inexpensive copy with
+  manual bias set on a pot. The
+  [original design](https://groups.google.com/g/radioberry/c/WQc_afuvViI)
+  has an MCP4662 digital potentiometer for the bias and a MAX11613 ADC for
+  current and temperature, both on I2C. If that board is available, it
+  would be good to get them integrated too.
 
-## Licence
+## AI
 
-This repository is licensed under the GNU General Public License,
-version 2 or (at your option) any later version. See `LICENSE`. Every
-source file carries an SPDX header:
+This project was developed with the use of agentic engineering,
+specifically Claude. If that's a problem for you, there are
+[guides for compiling the original driver](https://github.com/pa3gsb/Radioberry-2.x#building).
 
-```
-// SPDX-License-Identifier: GPL-2.0-or-later
-```
+## Licensing
 
-GPL-2.0-or-later is required by the kernel module, which links against
-`EXPORT_SYMBOL_GPL` symbols of the Raspberry Pi `rp1-pio` driver, and is
-compatible with every upstream component listed below. The repository is
-private; the licence governs any future distribution.
-
-## Third-party works and attributions
-
-| Work | Author / holder | Licence | Use here | Reference |
-|---|---|---|---|---|
-| Radioberry 2.x driver, daemon, overlays, gateware loader | Johan Maas, PA3GSB | Unlicense (public domain) as stated in each source file; no repository-level LICENSE file | ABI, pin map and behaviour reference; code may be reused freely | https://github.com/pa3gsb/Radioberry-2.x |
-| Hermes-Lite 2 gateware, Radioberry variants (`radioberry_pio_cl025`, `radioberry_pio_cl016`) | Steve Haynal, KF7O; Johan Maas, PA3GSB | GPL-2.0-or-later (file headers) | Source in `gateware/source/`, unmodified; built here and the bitfiles distributed under `gateware/rpi-5/` | https://github.com/softerhardware/Hermes-Lite2 |
-| openHPSDR DSP cores used by Hermes-Lite 2 (CIC, FIR, CORDIC, receiver) | Alex Shovkoplyas VE3NEA; Phil Harman VK6APH; Darrell Harmon; Cathy Moss; Steve Haynal KF7O | LGPL-2.0-or-later ("GNU Library General Public License", file headers) | Contained in the redistributed bitfiles | https://github.com/softerhardware/Hermes-Lite2/tree/master/gateware/rtl/radio_openhpsdr1 |
-| Hermes-Lite 2 protocol description | softerhardware project | project wiki | Protocol 1 dialect, PA and bias commands, ADC fields | https://github.com/softerhardware/Hermes-Lite2/wiki/Protocol |
-| openHPSDR Ethernet Protocol v4.x (Protocol 2 specification) and Protocol 1 firmware sources | OpenHPSDR project, TAPR; Phil Harman VK6PH | GPL-2.0 (repository LICENSE) | Protocol 2 implementation reference | https://github.com/TAPR/OpenHPSDR-Firmware (Protocol 2/Documentation) |
-| Raspberry Pi Linux kernel, `rp1-pio` driver | Raspberry Pi Ltd; Phil Elwell | GPL-2.0 | Kernel API the driver is built on | https://github.com/raspberrypi/linux |
-| liquid-dsp | Joseph Gaeddert | MIT | DSP library linked by the daemon and `ft8rx` | https://github.com/jgaeddert/liquid-dsp |
-| ft8_lib | Karlis Goba | MIT | Message text code vendored in `examples/ft8/src/ft8_lib/` with its licence; the FT8 decoder in `examples/ft8/src/ft8/` is Corvus HF's port of it | https://github.com/kgoba/ft8_lib |
-| Corvus HF FT8 decoder | T. Cully | GPL-2.0-or-later here (the author's own code, also published as Apache-2.0 in Corvus HF) | `examples/ft8/src/ft8/` | Corvus HF |
-| piHPSDR | John Melton G0ORX; Christoph van Wullen DL1YCF | GPL-2.0 | Reference client for both protocols; not linked | https://github.com/dl1ycf/pihpsdr |
-| wdsp | Warren Pratt NR0V | GPL-2.0 | Not used; listed because the upstream stack depends on it | https://github.com/g0orx/wdsp |
-| Radioberry HAT PA30 (preamp and ADC HAT design) | hish8612; JG1TWP; PA3GSB | no licence file in repository | Hardware reference for the PA family | https://github.com/hish8612/Radioberry_hat_pa30 |
-| HL2-PA30 (30 W amplifier design) | JI1UDD | no licence file in repository | Hardware reference for the PA family | https://github.com/ji1udd/HL2-PA30 |
-| AURSINC Radioberry Preamp Board V2 (PA5W V2) | AURSINC (commercial) | none published; test notes by BG7IYN | The amplifier board in use | https://www.aliexpress.com/item/1005008233825206.html , https://jumbo5566.github.io/pro/rb/2024/04/17/rb016_025.html |
-| AD9866 datasheet | Analog Devices | datasheet terms | Front-end reference | https://www.analog.com/en/products/ad9866.html |
-| Quartus Prime Lite Edition and its generated IP (PLL, FIFO megafunctions) | Altera (formerly Intel) | Quartus Prime licence agreement, accepted by whoever builds | Toolchain for the gateware build (`gateware/QUARTUS.md`); not redistributed; its generated IP is inside the bitfiles | https://www.altera.com/downloads |
-
-Code taken from an upstream work keeps that work's licence header and
-copyright line in addition to the SPDX line above. "Hermes", "Hermes-Lite",
-"openHPSDR" and "Radioberry" are the names of their respective projects.
+Licensed under the GNU General Public License, version 2 or (at your
+option) any later version; see [LICENSE](LICENSE). Third-party works and
+their licences are listed in [docs/licensing.md](docs/licensing.md).

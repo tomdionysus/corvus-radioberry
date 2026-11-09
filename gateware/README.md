@@ -1,22 +1,22 @@
-# Gateware: what the driver depends on
+# Gateware
 
-Status 2026-11-08.
-
-The FPGA runs the Hermes-Lite 2 gateware in its Radioberry PIO variants,
-`radioberry_pio_cl025` and `radioberry_pio_cl016`, version 75.3, built in
-this repository from the source in `source/`. `PROVENANCE.md` names the
-source commit and the build; `QUARTUS.md` describes the toolchain and how
-to obtain it; `tools/build-gateware.sh` builds `rpi-5/<type>/radioberry.rbf`.
+The FPGA runs the Hermes-Lite 2 gateware in its RadioBerry PIO variants,
+`radioberry_pio_cl025` and `radioberry_pio_cl016`, version 75.3. The
+bitfiles in `rpi-5/<type>/radioberry.rbf` are built from the unmodified
+source in `source/` with Quartus Prime Lite on an x86-64 machine
+([tools/build-gateware.sh](../tools/build-gateware.sh)) and committed, so
+the Pi only installs them. [gateware/PROVENANCE.md](PROVENANCE.md) records
+the source commit, fitter seeds, hashes and timing;
+[gateware/QUARTUS.md](QUARTUS.md) describes the toolchain.
 
 Everything below is read from that source (paths relative to
-`gateware/rtl/` in the archive) and from the upstream Pi 5 driver's PIO
-programs. Statements marked *not yet measured* follow from the source and
+`gateware/rtl/` in the archive; `variants/` is beside it) and from the
+original Pi 5 driver's PIO programs. Statements marked *not yet measured* follow from the source and
 have not been checked on hardware.
 
-Only the PIO variants work with this project's driver. The Radioberry-2.x
-repository also carries older GPIO-mode images (version 73.3: an 8-bit RX
-bus and TX over a second SPI chip select); `rbprobe` recognises them and
-reports them as unusable.
+Only the PIO variants work with this project's driver. The older
+GPIO-mode images (73.3: an 8-bit RX bus and TX over a second SPI chip
+select) are recognised by `rbprobe` and reported as unusable.
 
 ## 1. Variants
 
@@ -39,7 +39,7 @@ SPI (section 4) and is the authority at run time.
 - Passive serial on GPIO 13 (DATA), 24 (DCLK), 27 (nCONFIG), read back on
   22 (CONF_DONE) and 26 (nSTATUS). Bytes least significant bit first. A
   bitstream for the other device leaves CONF_DONE low (measured on the
-  development board, see `docs/platform.md`).
+  development board, see [docs/platform.md](../docs/platform.md)).
 - After configuration `radioberry/reset_handler.v` holds the design in
   reset for 2^24 - 16 cycles of the 10 MHz internal clock, about 1.68 s.
   During reset the SPI slave is held in reset and answers with its reset
@@ -90,7 +90,7 @@ SPI (section 4) and is the authority at run time.
   | 1, 2 | 0 |
   | 3 | bits 7..6 transmitters, 5..2 receivers, 1..0 FPGA type (1 = CL016, 2 = CL025) |
   | 4 | gateware major version (75) |
-  | 5 | gateware minor version (2) |
+  | 5 | gateware minor version (3) |
 
 - Command address 0x00, data bits 6..3, is the number of receivers minus
   one. Changing it clears the RX FIFO and restarts the receivers. The rest
@@ -116,15 +116,15 @@ SPI (section 4) and is the authority at run time.
   sample period for all receivers in the order I0, Q0, I1, Q1, ... and
   holds 2 x receivers values, so the index runs 0 to 2n - 1 (at most 11 on
   the CL025). Values are signed 24-bit two's complement.
-- The upstream PIO program (`rb2-rx-stream.c`) toggles the clock while
+- The original PIO program (`rb2-rx-stream.c`) toggles the clock while
   waiting, jumps on sample-ready, clocks seven nibbles (metadata and data)
   and autopushes at 28 bits, shifting left. Each 32-bit word the Pi reads
   is `index << 24 | sample`, top four bits zero.
 - The RX FIFO holds 1024 values; the gateware stops writing (drops) above
-  1012. With upstream clocking (PIO clock divider 2, so 100 MHz from the
+  1012. With original clocking (PIO clock divider 2, so 100 MHz from the
   200 MHz RP1 clock, five PIO cycles per nibble) one value takes 42 PIO
   cycles: at most about 2.38 million values per second. One receiver needs
-  2 x rate values per second, so the upstream program carries six
+  2 x rate values per second, so the original program carries six
   receivers at 192 ksps (2.30 M/s) but only three at 384 ksps. Measured on
   the development board: 2.37 million values per second at saturation,
   and no stream errors below it.
@@ -132,7 +132,7 @@ SPI (section 4) and is the authority at run time.
   read side and the `rx_pi_pio` state machine run on the Pi's clock. If
   the Pi's clock is running while the clear is asserted and released, the
   read-out can lock up for good until the gateware is reloaded
-  (`docs/fault-rx-lockup.md`). The driver therefore holds its RX clock
+  ([docs/fault-rx-lockup.md](../docs/fault-rx-lockup.md)). The driver therefore holds its RX clock
   still across every receiver-count command.
 
 ## 6. CN301 outputs and what keys the transmitter
@@ -174,7 +174,7 @@ state machine in `radio.v`:
   (FPGA output, registered on the Pi's clock).
 - With ready high, the rising clock edge that finds the shifter idle starts
   a word and carries no data; the next 32 rising edges carry 32 bits, most
-  significant first. The upstream PIO program uses its ready-polling edge
+  significant first. The original PIO program uses its ready-polling edge
   as that start edge, then pulls one 32-bit word and shifts it out.
 - Word format: I in bits 31..16 and Q in bits 15..0, each signed 16-bit.
   The gateware stores four bytes per word, in order I high, I low, Q high,
@@ -192,7 +192,7 @@ state machine in `radio.v`:
   time (default 12 ms, address 0x17 bits 12..8) the radio returns to idle
   by itself. A hang time of 31 disables this and transmit then ends only
   when PTT is cleared. Software must never send 31 there.
-- Upstream PIO throughput: divider 8 (25 MHz), seven cycles per bit,
+- Original PIO throughput: divider 8 (25 MHz), seven cycles per bit,
   about 233 cycles per word: at most about 107 000 words per second, more
   than twice the 48 ksps needed. Measured on the development board with
   PTT clear: about 102 000 words per second while the FIFO fills (from

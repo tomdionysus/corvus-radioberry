@@ -44,7 +44,12 @@ void Server::on_packet(std::span<const std::uint8_t> packet, const Peer& from,
                 ++counters_.ignored;
                 return;
             }
-            if (*parse_start(packet)) {
+            const std::optional<bool> start = parse_start(packet);
+            if (!start) {
+                ++counters_.ignored;
+                return;
+            }
+            if (*start) {
                 if (session_.claim(owner(from), now)) {
                     start_locked(from);
                 }

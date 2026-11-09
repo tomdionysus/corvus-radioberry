@@ -255,22 +255,24 @@ private:
         Node n = Node::map();
 
         // This project's overlay puts an "sdr,radioberry" device on spi0
-        // chip select 0. The upstream overlay instead creates a root node
-        // "radioberry" and an spi0.0 device "radioberry_ctrl_spi".
+        // chip select 0. The original RadioBerry software's overlay instead
+        // creates a root node "radioberry" and an spi0.0 device
+        // "radioberry_ctrl_spi".
         const std::string spi_dir = "/sys/bus/spi/devices/spi0.0";
         const auto compatible = src_.read_file(spi_dir + "/of_node/compatible");
         const bool ours = compatible && compatible->find("sdr,radioberry") != std::string::npos;
         const auto modalias = file_trimmed(spi_dir + "/modalias");
-        const bool upstream = src_.exists("/proc/device-tree/radioberry") ||
+        const bool original = src_.exists("/proc/device-tree/radioberry") ||
                               modalias.value_or("") == "spi:radioberry_ctrl_spi";
 
         Node overlay = Node::map();
         overlay.set("active", ours);
-        overlay.set("upstream", upstream);
+        overlay.set("original", original);
         n.set("overlay", std::move(overlay));
-        if (upstream) {
+        if (original) {
             add(Severity::kBlocker, "boot.overlay",
-                "the upstream Radioberry overlay is installed; install this project's "
+                "the original RadioBerry software's overlay is installed; install this "
+                "project's "
                 "radioberry.dtbo and reboot");
         } else if (!ours) {
             add(Severity::kBlocker, "boot.overlay",
@@ -308,7 +310,7 @@ private:
                 spidev.push(d);
                 if (d == "spidev0.0") {
                     add(Severity::kBlocker, "boot.spidev",
-                        "spidev0.0 exists and conflicts with the Radioberry control SPI");
+                        "spidev0.0 exists and conflicts with the RadioBerry control SPI");
                 }
             }
         }
@@ -350,7 +352,10 @@ private:
                 }
                 const std::string fd_dir = "/proc/" + pid + "/fd";
                 for (const auto& fd : src_.list_dir(fd_dir)) {
-                    if (src_.read_link(fd_dir + "/" + fd).value_or("") == kDevicePath) {
+                    std::string link = fd_dir;
+                    link += '/';
+                    link += fd;
+                    if (src_.read_link(link).value_or("") == kDevicePath) {
                         Node h = Node::map();
                         h.set("pid", std::stol(pid));
                         h.set("command", file_trimmed("/proc/" + pid + "/comm"));
@@ -399,15 +404,14 @@ private:
         if (!installed_) {
             n.set("family", Node());
             n.set("fpga", Node());
-            n.set("upstream", Node());
+            n.set("source", Node());
             add(Severity::kWarning, "firmware.unknown",
-                "the installed gateware image is not a known upstream image");
+                "the installed gateware image is not one rbprobe knows");
             return n;
         }
         n.set("family", std::string(to_string(installed_->family)));
         n.set("fpga", std::string(to_string(installed_->fpga)));
-        n.set("upstream",
-              std::string(installed_->upstream_ref) + " " + std::string(installed_->upstream_path));
+        n.set("source", std::string(installed_->source) + " " + std::string(installed_->path));
         if (installed_->family != GatewareFamily::kRpi5Pio) {
             add(Severity::kBlocker, "firmware.family",
                 "the installed gateware is the " + std::string(to_string(installed_->family)) +
@@ -453,7 +457,9 @@ private:
             auto names = src_.list_dir(dir);
             std::sort(names.begin(), names.end());
             for (const auto& name : names) {
-                const std::string path = dir + "/" + name;
+                std::string path = dir;
+                path += '/';
+                path += name;
                 consider(path);
                 if (depth > 1) {
                     walk(path, depth - 1);
@@ -623,7 +629,7 @@ private:
 
         std::string board;
         if (adc && bias) {
-            board = "pa3gsb 5 W preamp: digital bias and telemetry";
+            board = "RadioBerry 5 W preamp: digital bias and telemetry";
         } else if (adc) {
             board = "PA with current and temperature telemetry, manual bias";
         } else if (bias) {
@@ -647,7 +653,9 @@ private:
         Node daemon = Node::map();
         Node path;
         Node version;
-        for (const char* candidate : {"/usr/local/bin/radioberryd", "/usr/bin/radioberryd"}) {
+        // `cmake --install` puts it in sbin; the bin directories are checked too.
+        for (const char* candidate : {"/usr/local/sbin/radioberryd", "/usr/sbin/radioberryd",
+                                      "/usr/local/bin/radioberryd", "/usr/bin/radioberryd"}) {
             if (src_.exists(candidate)) {
                 path = candidate;
                 if (auto r = src_.run({candidate, "--version"}); r && r->exit_status == 0) {
@@ -666,7 +674,7 @@ private:
         }
         if (src_.exists("/etc/init.d/radioberryd")) {
             add(Severity::kWarning, "software.legacy",
-                "the upstream init script /etc/init.d/radioberryd is installed");
+                "the original RadioBerry init script /etc/init.d/radioberryd is installed");
         }
 
         n.set("udp_ports", udp_ports());
@@ -697,7 +705,8 @@ private:
     }
 
     Node udp_ports() {
-        // Protocol 1 uses 1024; Protocol 2 uses 1024 to 1029 on the radio.
+        // Protocol 1 uses 1024; Protocol 2 uses 1024 to 1029 on the radio and
+        // sends DDC I/Q from 1035 onwards (1040 for the CL025's sixth DDC).
         Node list = Node::seq();
         std::set<std::pair<int, std::string>> seen;
         for (const char* table : {"udp", "udp6"}) {
@@ -721,7 +730,8 @@ private:
                 } catch (const std::exception&) {
                     continue;
                 }
-                if (port >= 1024 && port <= 1029 && seen.insert({port, table}).second) {
+                const bool ours = (port >= 1024 && port <= 1029) || (port >= 1035 && port <= 1040);
+                if (ours && seen.insert({port, table}).second) {
                     Node p = Node::map();
                     p.set("port", port);
                     p.set("family", std::string(table) == "udp" ? "ipv4" : "ipv6");

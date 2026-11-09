@@ -3,7 +3,12 @@
 
 #include <spdlog/spdlog.h>
 
+#include <functional>
+#include <string>
 #include <thread>
+#include <utility>
+
+#include "realtime.hpp"
 
 namespace radioberry::daemon {
 namespace {
@@ -16,6 +21,13 @@ p1::Identity identify(Device& device, const std::optional<std::array<std::uint8_
     id.version_minor = info.gateware_minor;
     id.receivers = info.receivers;
     return id;
+}
+
+// The device options with the hook that sets each device thread's
+// scheduling.
+DeviceOptions with_thread_hook(DeviceOptions options, std::function<void(const char*)> hook) {
+    options.on_thread_start = std::move(hook);
+    return options;
 }
 
 // Faults that break the transmit stream: the session drops MOX on them.
@@ -39,11 +51,17 @@ bool breaks_transmit(FaultKind kind) {
 
 }  // namespace
 
-Daemon::Daemon(Device& device, DaemonOptions options)
+Daemon::Daemon(Device& device, const DaemonOptions& options)
     : identity_(identify(device, options.mac)),
       session_([this] { service_.control().safe(); }, options.client_timeout),
       service_(
-          device, [this](const Fault& fault) { on_fault(fault); }, options.device),
+          device, [this](const Fault& fault) { on_fault(fault); },
+          with_thread_hook(options.device,
+                           [this](const char* role) {
+                               start_thread(
+                                   std::string(role) == "rx" ? "rb-rx-device" : "rb-tx-device",
+                                   kDevicePriority);
+                           })),
       policy_(service_.control(), session_, options.tx),
       network_(options.address, options.port),
       server_(
@@ -52,11 +70,40 @@ Daemon::Daemon(Device& device, DaemonOptions options)
               const DeviceSnapshot s = service_.snapshot();
               return p1::GatewareStatus{s.cw_or_ptt, s.external_cw_key};
           },
-          network_) {
+          network_),
+      p2_network_(options.address, options.port, identity_.receivers,
+                  [this](const Peer& to, std::span<const std::uint8_t> bytes) {
+                      network_.send(to, bytes);
+                  }),
+      p2_server_(
+          p2::Identity{identity_.mac, identity_.version_major, identity_.receivers},
+          service_.control(), service_.tx(), session_, policy_,
+          [this] {
+              const DeviceSnapshot s = service_.snapshot();
+              return p1::GatewareStatus{s.cw_or_ptt, s.external_cw_key};
+          },
+          p2_network_) {
     server_.set_frequency_ppm(options.frequency_ppm);
     server_.set_iq_convention(options.iq_convention);
+    p2_server_.set_frequency_ppm(options.frequency_ppm);
+    p2_server_.set_iq_convention(options.iq_convention);
+    p2_server_.set_rx_gain_db(options.p2_rx_gain_db);
     iq_standard_ = options.iq_convention == p1::IqConvention::Standard;
     frequency_ppm_ = options.frequency_ppm;
+    realtime_ = options.realtime;
+}
+
+void Daemon::start_thread(const char* name, int priority, bool rename) {
+    if (rename) {
+        name_thread(name);
+    }
+    if (!realtime_) {
+        return;
+    }
+    if (const auto failed = make_thread_realtime(name, priority);
+        failed && !realtime_failed_.exchange(true)) {
+        spdlog::warn("real-time scheduling not set: {}", *failed);
+    }
 }
 
 Daemon::~Daemon() = default;
@@ -76,14 +123,10 @@ void Daemon::on_fault(const Fault& fault) {
 
 void Daemon::on_packet(std::span<const std::uint8_t> packet, const Peer& from,
                        std::chrono::nanoseconds now) {
-    if (is_p2_discovery(packet)) {
-        // Protocol selection: only Protocol 1 is served, so a client that
-        // tries both settles on it.
-        if (!p2_discovery_logged_) {
-            spdlog::info("Protocol 2 discovery from {} not answered: not served yet",
-                         describe(from));
-            p2_discovery_logged_ = true;
-        }
+    // Protocol 2 shares the base port for discovery and General packets;
+    // Protocol 1 packets start EF FE.
+    if (!from.tcp && (is_p2_discovery(packet) || p2::is_general(packet))) {
+        p2_server_.on_packet(p2::kGeneralPort, packet, from, now);
         return;
     }
     server_.on_packet(packet, from, now);
@@ -93,12 +136,23 @@ bool Daemon::run(const std::atomic<bool>& stop) {
     const TxPolicyOptions& tx = policy_.options();
     spdlog::info("gateware {}.{}, {} receivers; Protocol 1 on port {}", identity_.version_major,
                  identity_.version_minor, identity_.receivers, port());
+    spdlog::info("Protocol 2 on ports {} to {} and {} to {}", p2_port(p2::kGeneralPort),
+                 p2_port(p2::kTxIqPort), p2_port(p2::kDdcPort0),
+                 p2_port(p2::kDdcPort0 + identity_.receivers - 1));
     if (iq_standard_) {
         spdlog::info("I/Q in the standard convention: I and Q swapped both ways");
     }
     if (frequency_ppm_ != 0) {
         spdlog::info("frequencies corrected for a radio error of {:+.2f} ppm", frequency_ppm_);
     }
+    if (realtime_) {
+        if (const auto failed = lock_memory()) {
+            spdlog::warn("{}", *failed);
+        }
+        spdlog::info("real-time: SCHED_FIFO {} for the device threads, {} for the network threads",
+                     kDevicePriority, kNetworkPriority);
+    }
+    start_thread("the Protocol 1 network thread", kNetworkPriority, false);
     if (tx.allow_tx) {
         spdlog::warn(
             "transmit allowed: drive ceiling {}, PA {}, watchdog {} s; no PA interlock is claimed",
@@ -110,17 +164,30 @@ bool Daemon::run(const std::atomic<bool>& stop) {
     if (!service_.start()) {
         return false;
     }
+    const Clock clock = steady_clock();
     std::atomic<bool> stop_rx{false};
     std::thread rx([&] {
+        start_thread("rb-rx-send", kNetworkPriority);
         while (!stop_rx) {
             service_.rx().wait(stop_rx);
             while (const RxBlock* block = service_.rx().front()) {
                 server_.on_rx(*block);
+                p2_server_.on_rx(*block);
                 service_.rx().pop();
             }
         }
     });
-    const Clock clock = steady_clock();
+    std::atomic<bool> stop_p2{false};
+    std::thread p2([&] {
+        start_thread("rb-p2-network", kNetworkPriority);
+        const auto p2_handler = [&](unsigned port, std::span<const std::uint8_t> packet,
+                                    const Peer& from) {
+            p2_server_.on_packet(port, packet, from, clock());
+        };
+        while (!stop_p2) {
+            p2_network_.poll(100, p2_handler);
+        }
+    });
     const auto handler = [&](std::span<const std::uint8_t> packet, const Peer& from) {
         on_packet(packet, from, clock());
     };
@@ -129,12 +196,23 @@ bool Daemon::run(const std::atomic<bool>& stop) {
     std::chrono::nanoseconds tx_started{};
     radioberry_stats tx_before{};
     std::uint64_t dropped_before = 0;
+    // Failed sends, reported at most every 10 s with the count since.
+    std::uint64_t send_failures_reported = 0;
+    std::chrono::nanoseconds send_failures_at{};
     while (!stop && !service_.failed()) {
         network_.poll(100, handler);
         const auto now = clock();
+        const std::uint64_t send_failures = network_.send_failures() + p2_network_.send_failures();
+        if (send_failures != send_failures_reported &&
+            now - send_failures_at >= std::chrono::seconds(10)) {
+            spdlog::warn("{} sends to clients failed", send_failures - send_failures_reported);
+            send_failures_reported = send_failures;
+            send_failures_at = now;
+        }
         session_.tick(now);
         policy_.tick(now);
         server_.tick();
+        p2_server_.tick();
         const bool transmitting = policy_.transmitting();
         if (transmitting != was_transmitting) {
             const DeviceSnapshot s = service_.snapshot();
@@ -157,6 +235,8 @@ bool Daemon::run(const std::atomic<bool>& stop) {
         }
     }
     const bool failed = service_.failed();
+    stop_p2 = true;
+    p2.join();
     stop_rx = true;
     service_.rx().wake();
     rx.join();

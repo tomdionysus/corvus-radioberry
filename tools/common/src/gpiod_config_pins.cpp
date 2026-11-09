@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
 // Hardware glue: drives the FPGA configuration lines with libgpiod 2. Not
-// unit tested; exercised on the development Pi by `rbprobe --identify`.
+// unit tested; exercised on the Pi by `rbprobe --identify` and `rbload`.
 #include <filesystem>
 #include <gpiod.hpp>
 #include <stdexcept>
@@ -28,7 +28,7 @@ std::filesystem::path find_rp1_chip() {
             if (chip.get_info().label() == "pinctrl-rp1") {
                 return entry.path();
             }
-        } catch (const std::exception&) {
+        } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch): not a usable chip
         }
     }
     throw std::runtime_error("no pinctrl-rp1 GPIO chip found");

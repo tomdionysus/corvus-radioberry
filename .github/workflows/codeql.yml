@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# CodeQL security analysis of the userspace C++ (daemon, tools, example),
+# built as in CI. The kernel module is not built here.
+name: CodeQL
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  schedule:
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    container:
+      image: debian:trixie
+    steps:
+      - name: Install packages
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential cmake pkg-config device-tree-compiler git ca-certificates \
+            libliquid-dev libgpiod-dev libi2c-dev libyaml-cpp-dev nlohmann-json3-dev \
+            libspdlog-dev libsystemd-dev catch2
+
+      - uses: actions/checkout@v4
+
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: c-cpp
+          build-mode: manual
+
+      - name: Build
+        run: |
+          cmake -S . -B build -DRADIOBERRY_BUILD_MODULE=OFF -DRADIOBERRY_BUILD_TESTS=OFF \
+            -DRADIOBERRY_BUILD_EXAMPLES=ON
+          cmake --build build -j "$(nproc)"
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:c-cpp"

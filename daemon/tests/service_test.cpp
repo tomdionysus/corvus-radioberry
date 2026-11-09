@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "device/service.hpp"
 
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <functional>
 #include <mutex>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -149,4 +151,26 @@ TEST_CASE("the service keeps running TX after an RX device error", "[service]") 
     REQUIRE(eventually([&] { return service.snapshot().tx_blocks == 1; }));
     service.stop();
     CHECK(faults.size() == 1);
+}
+
+TEST_CASE("each device thread reports its start", "[service]") {
+    FakeDevice device;
+    Faults faults;
+    DeviceOptions o = options();
+    std::mutex mutex;
+    std::vector<std::string> roles;
+    o.on_thread_start = [&](const char* role) {
+        const std::lock_guard lock(mutex);
+        roles.emplace_back(role);
+    };
+    DeviceService service(device, faults.sink(), o);
+    REQUIRE(service.start());
+    CHECK(eventually([&] {
+        const std::lock_guard lock(mutex);
+        return roles.size() == 2;
+    }));
+    service.stop();
+    const std::lock_guard lock(mutex);
+    std::sort(roles.begin(), roles.end());
+    CHECK(roles == std::vector<std::string>{"rx", "tx"});
 }

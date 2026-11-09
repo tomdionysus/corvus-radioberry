@@ -40,7 +40,7 @@ std::optional<fs::path> rp1_chip() {
             if (chip.get_info().label() == "pinctrl-rp1") {
                 return entry.path();
             }
-        } catch (const std::exception&) {
+        } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch): not a usable chip
         }
     }
     return std::nullopt;
@@ -113,6 +113,7 @@ std::optional<CommandResult> LiveSource::run(const std::vector<std::string>& arg
             dup2(null_fd, STDERR_FILENO);
         }
         std::vector<char*> args;
+        args.reserve(argv.size() + 1);
         for (const auto& a : argv) {
             args.push_back(const_cast<char*>(a.c_str()));
         }

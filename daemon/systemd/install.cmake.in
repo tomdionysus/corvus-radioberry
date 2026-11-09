@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# Run by `cmake --install` after the service files are in place. The config
+# file is installed only where there is none, so local settings survive.
+# Into a live root (no DESTDIR), the system user is created and udev and
+# systemd reread their configuration; nothing is enabled or started.
+
+set(_config_dir "$ENV{DESTDIR}@RADIOBERRY_CONFIG_DIR@")
+if(EXISTS "${_config_dir}/config.yaml")
+    message(STATUS "Kept: ${_config_dir}/config.yaml")
+else()
+    file(INSTALL "@CMAKE_CURRENT_SOURCE_DIR@/systemd/config.yaml" DESTINATION "${_config_dir}")
+endif()
+
+if("$ENV{DESTDIR}" STREQUAL "")
+    foreach(_step
+            "systemd-sysusers|@RADIOBERRY_SYSUSERS_DIR@/radioberry.conf"
+            "udevadm|control|--reload-rules"
+            "udevadm|trigger|--action=add|--subsystem-match=misc|--sysname-match=radioberry"
+            "systemctl|daemon-reload")
+        string(REPLACE "|" ";" _command "${_step}")
+        execute_process(COMMAND ${_command} RESULT_VARIABLE _result ERROR_VARIABLE _error)
+        if(NOT _result EQUAL 0)
+            string(REPLACE ";" " " _shown "${_command}")
+            message(WARNING "${_shown}: ${_result} ${_error}")
+        endif()
+    endforeach()
+endif()

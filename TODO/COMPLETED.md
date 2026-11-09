@@ -3,8 +3,120 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-09: v0.2.0 released. Release check on the development Pi with
+  the final build installed: `ft8rx` over `radioberryd` decoded FT8 on
+  40 m (15 messages in four slots on each protocol) and 20 m (84 over
+  Protocol 1, 100 over Protocol 2), no packets lost; `rbprobe` exits 0.
+- 2026-11-09: Kernel and C++ checks. `checkpatch.pl` (no errors or
+  warnings) and `sparse` (silent) over the driver, and clang-tidy over the
+  userspace C++ (fails on any warning), all in CI. Driver: `usleep_range()`
+  for short waits, `ARRAY_SIZE`. Debug-kernel session (6.18.60 with KASAN,
+  lockdep, DMA API, kmemleak, UBSAN, booted once with tryboot): no reports
+  from the driver; `rbdrivertest` passed; kmemleak found `rp1-pio` leaking
+  64 bytes per transfer in flight at stream teardown
+  (`docs/kernel-debug.md`).
+  Chasing a CI hang found and fixed two bugs: Protocol 2 Receiver Specific
+  overtaking General was dropped (no DDC stream), and the probe clients'
+  poll() was unbounded.
+- 2026-11-09: `rbload` (`tools/rbload/`): loads a gateware image through
+  the passive serial lines with the driver unloaded, refusing unknown
+  images and other families unless `--force`, and an image for the other
+  FPGA always. On the development Pi: refused with the driver loaded
+  (exit 2); CL025 image configured (exit 0, 4.7 s); CL016 image CONF_DONE
+  low (exit 1); upstream GPIO-mode image refused (exit 2); the driver then
+  loaded with `load_gateware=0` read gateware 75.3 and `rbcat` streamed
+  at 48000.9 frames per second.
+- 2026-11-09: `p1probe` and `p2probe` (`tools/protoprobe/`): discovery,
+  receive measurement (rate, sequence, levels) and zero-drive MOX over
+  Protocol 1 and 2. Unit tests against a scripted radio; end-to-end tests
+  against `radioberryd` with the fake device (MOX reaches the device only
+  with transmit allowed; a busy radio is reported). Against the live
+  daemon, receive only: P1 two receivers at 192 ksps and three at
+  384 ksps, P2 six DDCs at 48 ksps and three at 192 ksps, each at the
+  expected rate with no sequence breaks. `radioberryd` used 0.56 s of CPU
+  in 10.6 s while serving three receivers at 384 ksps.
+- 2026-11-09: Documentation restructured. README holds only the overview,
+  status and installation (with the `apt install` line); usage moved to
+  `docs/driver.md`, `docs/daemon.md` and `docs/tools.md`, licensing to
+  `docs/licensing.md`, layout and CI to `CONTRIBUTING.md`. The design is
+  `docs/design.md` (from the plan); the reference-project survey was
+  removed. Dates, names and callsigns removed from the docs. Installed
+  config lists every option with a description, transmit and PA off.
+- 2026-11-09: `radioberry.service` (`daemon/systemd/`): the unit runs
+  `radioberryd --config /etc/radioberry/config.yaml` as the `radioberry`
+  system user with CAP_SYS_NICE and CAP_IPC_LOCK only, bound to
+  `dev-radioberry.device`, restarted on failure; a sysusers.d entry, a
+  udev rule (`/dev/radioberry` root:radioberry 0660, tagged for systemd)
+  and the config file (installed only where absent), all installed by
+  `cmake --install`, which also creates the user and reloads udev and
+  systemd but enables nothing. `--config` reads a YAML file of options
+  (`daemon/src/options.cpp`); under systemd the log goes to the journal.
+  `rbprobe` finds the daemon in sbin and lists the Protocol 2 DDC ports.
+  Acceptance on the development board: `rbprobe` exits 0 ("radio can
+  run: yes") with the service active; the daemon ran as `radioberry`
+  with only those two capabilities, all its threads at SCHED_FIFO, and
+  delivered loopback RX at p99 0.89 ms.
+- 2026-11-09: Real-time setup for `radioberryd` (`daemon/src/realtime.cpp`):
+  SCHED_FIFO 20 for the two device threads and 10 for the network
+  threads, below the driver's kernel thread (50); memory locked;
+  `--no-realtime`; UDP sockets marked DSCP EF and SO_PRIORITY 6. Socket
+  buffers stay at 1 MiB; no CPU pinning, as nothing measured called for
+  it. RX packet jitter measured and recorded in `docs/platform.md`: with
+  four busy loops and the client at SCHED_FIFO 30, lateness p99 4.70 ms
+  and maximum 9.8 ms without real-time, 0.88 ms and 3.0 ms with it (idle:
+  0.89 and 3.9 ms). Over Wi-Fi p99 is 91 to 110 ms, all of it from the
+  Pi's background scans (open item).
+- 2026-11-09: Protocol 2 TX underruns. The driver counts an underrun
+  when its ring is empty with PTT set and no DMA in flight, which happens
+  whenever the gateware's TX FIFO has room, not only when it runs dry.
+  piHPSDR sends no TX samples while receiving in Protocol 2, so the FIFO
+  started each transmission empty and held only the TX buffer latency
+  (address 0x17), never full: about 94 counted underruns per second (1 300
+  in a 13.9 s FT8 transmission). The Protocol 2 server now sets 0x17 when
+  a stream starts, 100 ms latency (more than the 85 ms FIFO) and 20 ms PTT
+  hang (`daemon/src/p2/server.cpp`). Acceptance on the development board,
+  piHPSDR in Protocol 2: 13.9 s FT8 transmissions at 47 811 and 47 829
+  samples per second, 8 underruns each, 0 blocks dropped; with the
+  driver's `debug` at 1 the 8 were logged 6 to 73 ms after PTT on, while
+  the FIFO filled, and none after; a 10.7 s transmission logged 0.
+- 2026-11-09: First FT8 contacts over Protocol 2, operated by the owner
+  on 40 m: piHPSDR (Protocol 2) and WSJT-X on the Pi, `radioberryd
+  --frequency-ppm 22.9 --allow-tx --allow-pa --drive-ceiling 150`, drive
+  79 to 115, two contacts. PSK Reporter: 17 reports in the first
+  three CQ slots, -10 to -25 dB, 15 of them at 7 076 472 to 7 076 494 Hz.
+  Each FT8 transmission 12.4 to 13.9 s at 47 850 to 47 998 samples per
+  second to the gateware, 0 TX blocks dropped, no faults, and about 94
+  driver TX underruns per second (Protocol 1 transmissions logged none;
+  see the open item).
+- 2026-11-09: Protocol 2 in `radioberryd` (`daemon/src/p2/`): discovery
+  (board 6, the gateware's version and receiver count), General, Receiver
+  and Transmitter Specific, High Priority both ways, DDC I/Q from ports
+  1035 onwards, Mic/Line silence and High Priority status paced by the
+  radio's sample clock, TX I/Q at 192 ksps decimated to 48 ksps with
+  liquid-dsp (`daemon/src/dsp/decimator.cpp`), DDCs below the gateware's
+  rate decimated likewise, step attenuation taken off the LNA gain
+  (`--p2-rx-gain`), the shared session, transmit policy and fail-safes,
+  a TX I/Q sequence gap a stream fault. Protocol 1 unchanged apart from
+  the base-port dispatch. `ft8rx --protocol 2`. Acceptance on the
+  development board, receive only: `ft8rx --protocol 2` on 40 m decoded 5
+  messages in 4 slots (13 083 packets, 0 lost), and `--protocol 1`
+  afterwards 5 in 3 slots (20 529 packets, 0 lost); piHPSDR (installed
+  build, Protocol 2 only, loopback network namespace) discovered the
+  radio as a Hermes-Lite 2, started two receivers at 48 ksps and showed
+  the 20 m spectrum, with 0 sequence errors in its log. A 35 s capture of
+  that run: DDC0 and DDC1 201.7 packets/s each (48 000 samples/s),
+  Mic/Line 750/s, status 20/s, no sequence breaks in any stream either
+  way. The same piHPSDR over Protocol 1 showed the same spectrum lines at
+  about 8 kHz spacing. Transmit tested against the fake device only.
+- 2026-11-09: `radioberryd` logs the drive actually in use: PTT on logs
+  the drive at that moment, and every later change of the effective drive
+  while transmitting is logged, with the client's request when the
+  ceiling capped it ("drive 64 (client asked for 144, ceiling 64)"). PA
+  changes were already logged. Acceptance: unit test in
+  `daemon/tests/tx_policy_test.cpp` against captured log output
+  (`daemon/src/tx_policy.cpp`).
 - 2026-11-09: First complete FT8 contact through `radioberryd`, operated
-  by the owner on 40 m: piHPSDR and WSJT-X on the Pi, the Radioberry
+  by the owner on 40 m: piHPSDR and WSJT-X on the Pi, the RadioBerry
   driving an external 25 W amplifier (the owner's calibration), with a
   station about 2 000 km away. The daemon logged every transmission of
   the exchange on its FT8 slot, 13.9 s each, 47 900 to 48 200 samples
@@ -27,7 +139,7 @@ result, and where it lives.
   7.074321 MHz. piHPSDR's own transmit chain is the right way round for
   this stream (a TUNE carrier measured 984 Hz above the dial, image
   -77 dBc). piHPSDR's HL2 drive needs its per-band PA calibration
-  lowered (about 45 to 50) on this Radioberry; see the HL2 drive item.
+  lowered (about 45 to 50) on this RadioBerry; see the HL2 drive item.
 - 2026-11-08: Hardware validation, transmit into a 50 ohm dummy load with
   the PA enabled, output measured by the owner on an inline meter (50 W
   scale), on the owner's go-ahead for each step: a 1 kHz tone at half of
@@ -84,8 +196,7 @@ result, and where it lives.
   `asan` presets turn it on so the gate builds and tests it). Receive-only
   Protocol 1: one receiver at 48 ksps, decimated to 3200 sps with
   liquid-dsp (unity-gain Kaiser low-pass at 1600 Hz, 1501 taps), decoded
-  per UTC slot with Corvus HF's port of ft8_lib (the owner's code,
-  licensed here as GPL-2.0-or-later; ft8_lib's message code vendored with
+  per UTC slot with a C++ port of ft8_lib (GPL-2.0-or-later; ft8_lib's message code vendored with
   its MIT licence). `ft8_tests`: decimator passband and stopband, and
   synthesised FT8 at 48 ksps in noise decoded through the same chain (one
   message at -10 dB SNR with frequency, DT and SNR checked; three across
@@ -282,7 +393,7 @@ result, and where it lives.
   development board. CL016 built with seed 5 and shipped with a documented
   AD9866 TX output timing violation; untested. Upstream's free rpi-5
   images are 73.3 GPIO-mode gateware and are not used; `rbprobe`
-  classifies them. README credits PA3GSB's EUR 5 ready-to-run image.
+  classifies them. README links the upstream ready-to-run image.
 - 2026-11-08: Gateware interface notes, `gateware/README.md`: SPI command
   and reply words, RX nibble and metadata format, TX bit format and
   handshake, FIFO depths, CN301 output logic, jack inputs, post-load reset,
@@ -308,7 +419,7 @@ result, and where it lives.
   installed. The stock 6.18 `rp1-pio` lacks only `rp1_pio_sm_buffer_virt`
   of what the upstream driver uses.
 - 2026-11-08: Amplifier board identified and documented in `docs/pa.md`:
-  AURSINC Radioberry Preamp Board V2 (PA5W V2), manual bias (already set),
+  AURSINC RadioBerry Preamp Board V2 (PA5W V2), manual bias (already set),
   INA199A1 current sense, no I2C devices.
 - 2026-11-08: Upstream projects Radioberry-2.x and radioberry-p2 surveyed in
   `docs/history.md`. Repository created with GPL-2.0-or-later.

@@ -13,7 +13,7 @@ namespace {
 constexpr const char* kUsage =
     "usage: rbprobe [--json | --yaml] [--identify] [--gateware-dir DIR]...\n"
     "\n"
-    "Reports the state of a Raspberry Pi 5 with a Radioberry: host, boot\n"
+    "Reports the state of a Raspberry Pi 5 with a RadioBerry: host, boot\n"
     "configuration, driver, gateware, FPGA, PA board and software. Exits 0\n"
     "when the radio can run, 1 when it cannot, 2 on a usage error.\n"
     "\n"

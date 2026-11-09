@@ -2,9 +2,12 @@
 #include "options.hpp"
 
 #include <arpa/inet.h>
+#include <yaml-cpp/yaml.h>
 
+#include <algorithm>
 #include <charconv>
 #include <cstdio>
+#include <set>
 #include <stdexcept>
 
 namespace radioberry::daemon {
@@ -34,9 +37,81 @@ std::array<std::uint8_t, 6> mac(const std::string& text) {
     return m;
 }
 
+// Config keys that take a value, as their long options do.
+const std::set<std::string> kValueKeys = {"device",        "address",           "port",
+                                          "mac",           "client_timeout_ms", "frequency_ppm",
+                                          "iq_convention", "p2_rx_gain",        "drive_ceiling",
+                                          "tx_watchdog_s", "log_level"};
+
+// Config keys that are true or false.
+const std::set<std::string> kSwitchKeys = {"allow_tx", "allow_pa", "realtime"};
+
 }  // namespace
 
-Options parse_options(const std::vector<std::string>& args) {
+std::vector<std::string> config_args(const std::string& path) {
+    const auto fail = [&](const std::string& why) {
+        return std::invalid_argument("config " + path + ": " + why);
+    };
+    YAML::Node root;
+    try {
+        root = YAML::LoadFile(path);
+    } catch (const YAML::Exception& e) {
+        throw fail(e.what());
+    }
+    std::vector<std::string> out;
+    if (root.IsNull()) {
+        return out;
+    }
+    if (!root.IsMap()) {
+        throw fail("not a map of options");
+    }
+    for (const auto& entry : root) {
+        const std::string key = entry.first.as<std::string>();
+        const YAML::Node& value = entry.second;
+        if (!kValueKeys.contains(key) && !kSwitchKeys.contains(key)) {
+            throw fail("unknown key: " + key);
+        }
+        if (!value.IsScalar()) {
+            throw fail(key + ": not a single value");
+        }
+        std::string option = "--" + key;
+        std::replace(option.begin(), option.end(), '_', '-');
+        if (kValueKeys.contains(key)) {
+            out.push_back(option);
+            out.push_back(value.Scalar());
+            continue;
+        }
+        bool on = false;
+        if (!YAML::convert<bool>::decode(value, on)) {
+            throw fail(key + ": not true or false: " + value.Scalar());
+        }
+        if (key == "realtime") {
+            if (!on) {
+                out.emplace_back("--no-realtime");
+            }
+        } else if (on) {
+            out.push_back(option);
+        }
+    }
+    return out;
+}
+
+Options parse_options(const std::vector<std::string>& command_line) {
+    // The config file's options come first, so the command line's win.
+    std::vector<std::string> args;
+    std::vector<std::string> rest;
+    for (std::size_t i = 0; i < command_line.size(); ++i) {
+        if (command_line[i] != "--config") {
+            rest.push_back(command_line[i]);
+        } else if (i + 1 >= command_line.size()) {
+            throw std::invalid_argument("--config: needs a value");
+        } else {
+            const auto from_file = config_args(command_line[++i]);
+            args.insert(args.end(), from_file.begin(), from_file.end());
+        }
+    }
+    args.insert(args.end(), rest.begin(), rest.end());
+
     Options o;
     for (std::size_t i = 0; i < args.size(); ++i) {
         const std::string& a = args[i];
@@ -66,7 +141,7 @@ Options parse_options(const std::vector<std::string>& args) {
         } else if (a == "--client-timeout-ms") {
             o.daemon.client_timeout = std::chrono::milliseconds(number(a, value(), 3'600'000));
         } else if (a == "--frequency-ppm") {
-            const std::string text = value();
+            const std::string& text = value();
             std::size_t used = 0;
             double ppm = 0;
             try {
@@ -79,7 +154,7 @@ Options parse_options(const std::vector<std::string>& args) {
             }
             o.daemon.frequency_ppm = ppm;
         } else if (a == "--iq-convention") {
-            const std::string text = value();
+            const std::string& text = value();
             if (text == "hl2") {
                 o.daemon.iq_convention = p1::IqConvention::Hl2;
             } else if (text == "standard") {
@@ -87,6 +162,16 @@ Options parse_options(const std::vector<std::string>& args) {
             } else {
                 throw std::invalid_argument("--iq-convention: hl2 or standard: " + text);
             }
+        } else if (a == "--p2-rx-gain") {
+            const std::string& text = value();
+            int db = 0;
+            const auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), db);
+            if (ec != std::errc{} || end != text.data() + text.size() || db < -12 || db > 48) {
+                throw std::invalid_argument("--p2-rx-gain: a whole number from -12 to 48: " + text);
+            }
+            o.daemon.p2_rx_gain_db = db;
+        } else if (a == "--no-realtime") {
+            o.daemon.realtime = false;
         } else if (a == "--allow-tx") {
             o.daemon.tx.allow_tx = true;
         } else if (a == "--allow-pa") {
@@ -115,14 +200,19 @@ Options parse_options(const std::vector<std::string>& args) {
 std::string usage() {
     return "usage: radioberryd [options]\n"
            "\n"
-           "Serves the Radioberry to SDR clients over openHPSDR Protocol 1 (Hermes-Lite 2\n"
-           "dialect), UDP and TCP. It transmits only with --allow-tx, only for the client\n"
-           "that owns the radio, and only while that client holds MOX. It claims no PA\n"
+           "Serves the RadioBerry to SDR clients over openHPSDR Protocol 1 (Hermes-Lite 2\n"
+           "dialect, UDP and TCP) and Protocol 2 (UDP, on the Protocol 1 port and the\n"
+           "ports after it). It transmits only with --allow-tx, only for the client that\n"
+           "owns the radio, and only while that client holds MOX. It claims no PA\n"
            "interlock.\n"
            "\n"
+           "  --config PATH            read options from this YAML file first (keys are the\n"
+           "                           long options with _ for -; the command line wins)\n"
            "  --device PATH            radioberry.ko device (default /dev/radioberry)\n"
            "  --address IPV4           address to listen on (default all)\n"
-           "  --port N                 Protocol 1 port (default 1024)\n"
+           "  --port N                 Protocol 1 port and Protocol 2 base port (default\n"
+           "                           1024; Protocol 2 also takes N+1 to N+5 and N+11 to\n"
+           "                           N+16)\n"
            "  --mac XX:XX:XX:XX:XX:XX  MAC reported by discovery (default: the interface's)\n"
            "  --client-timeout-ms N    silence that ends a client's stream (default 3000)\n"
            "  --frequency-ppm P        the radio's frequency error, positive if it tunes high;\n"
@@ -130,6 +220,10 @@ std::string usage() {
            "  --iq-convention C        hl2 (default): I/Q as the Hermes-Lite 2 sends it, for\n"
            "                           HL2 software such as piHPSDR; standard: I and Q\n"
            "                           swapped both ways, for plain complex-baseband clients\n"
+           "  --p2-rx-gain DB          Protocol 2 LNA gain, -12 to 48 dB, less the client's\n"
+           "                           step attenuation (default 14)\n"
+           "  --no-realtime            no SCHED_FIFO threads or locked memory (default: both,\n"
+           "                           which need CAP_SYS_NICE and CAP_IPC_LOCK)\n"
            "  --allow-tx               let the owning client transmit (default: receive only)\n"
            "  --allow-pa               let the client enable the PA while transmitting\n"
            "  --drive-ceiling N        highest drive level sent, 0 to 255 (default 0)\n"

@@ -61,7 +61,10 @@ P1Receiver::P1Receiver(const std::string& host, std::uint16_t port) {
 
 P1Receiver::~P1Receiver() {
     if (started_) {
-        stop();
+        try {
+            stop();
+        } catch (...) {  // NOLINT(bugprone-empty-catch): the socket closes regardless
+        }
     }
     ::close(fd_);
 }

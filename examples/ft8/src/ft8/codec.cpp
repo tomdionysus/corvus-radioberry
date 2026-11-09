@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Copyright (C) 2026 T. Cully. From Corvus HF, licensed here as
+// Copyright (C) 2026 Tom Cully. Licensed under
 // GPL-2.0-or-later. Ported from kgoba/ft8_lib (MIT, Copyright (c) 2018
 // Karlis Goba); see src/ft8_lib/LICENSE.
 #include "codec.h"
@@ -185,14 +185,14 @@ Tones encode(const Payload& payload, const SyncPattern& sync) {
 }
 
 std::vector<std::complex<float>> synthesize(const Tones& tones, float f0_hz, float sample_rate) {
-    const int per_symbol = static_cast<int>(0.5f + sample_rate * kSymbolPeriod);
+    const int per_symbol = static_cast<int>(std::lround(sample_rate * kSymbolPeriod));
     const int samples = kSymbols * per_symbol;
     constexpr float bt = 2.0f;
     // pi * sqrt(2 / ln 2)
     constexpr float k = 5.336446f;
 
     // The Gaussian frequency pulse, three symbols long.
-    std::vector<float> pulse(3 * per_symbol);
+    std::vector<float> pulse(std::size_t{3} * static_cast<std::size_t>(per_symbol));
     for (int i = 0; i < 3 * per_symbol; ++i) {
         const float t = static_cast<float>(i) / static_cast<float>(per_symbol) - 1.5f;
         pulse[i] = (std::erf(k * bt * (t + 0.5f)) - std::erf(k * bt * (t - 0.5f))) / 2;

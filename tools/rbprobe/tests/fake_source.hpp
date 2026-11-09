@@ -41,8 +41,9 @@ inline const std::string kRpi4Image = "fake rpi-4 CL016 gateware";
 
 std::span<const KnownImage> test_catalog();
 
-// The development Pi as found on 2026-11-08: overlay active, wrong
-// (rpi-4 CL016) image installed, no driver, empty I2C bus, CL025 FPGA.
+// A Pi set up for the original RadioBerry software: its overlay and init
+// script, the wrong (rpi-4 CL016) image installed, no driver, an empty I2C
+// bus and a CL025 FPGA.
 FakeSource development_pi();
 
 // A machine where everything is in place and the radio can run.

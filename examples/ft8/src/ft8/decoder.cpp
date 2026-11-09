@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Copyright (C) 2026 T. Cully. From Corvus HF, licensed here as
+// Copyright (C) 2026 Tom Cully. Licensed under
 // GPL-2.0-or-later. Ported from kgoba/ft8_lib (MIT, Copyright (c) 2018
 // Karlis Goba); see src/ft8_lib/LICENSE.
 #include "decoder.h"
@@ -38,7 +38,7 @@ bool Decoder::valid_rate(float sample_rate) {
     return (size & (size - 1)) == 0;
 }
 
-Decoder::Decoder(Options options) : _options(std::move(options)) {
+Decoder::Decoder(Options options) : _options(options) {
     if (!valid_rate(_options.sample_rate)) _options.sample_rate = 3200;
 
     _block_size = static_cast<int>(std::lround(_options.sample_rate * kSymbolPeriod));
@@ -170,7 +170,7 @@ bool Decoder::_decode(const Candidate& candidate, Frame& frame) const {
     for (int k = 0; k < kDataSymbols; ++k) {
         const int symbol = k + (k < 29 ? 7 : 14);
         const int block = candidate.time_offset + symbol;
-        float* out = llr + 3 * k;
+        float* out = llr + static_cast<std::ptrdiff_t>(3) * k;
 
         if (block < 0 || block >= _blocks) {
             out[0] = out[1] = out[2] = 0;

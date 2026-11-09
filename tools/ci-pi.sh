@@ -10,13 +10,14 @@
 #   tools/ci-pi.sh                  run here (on the Pi)
 #   tools/ci-pi.sh --remote HOST    copy this working tree to HOST over SSH
 #                                   and run there; HOST is [user@]address
+#   tools/ci-pi.sh --local          run here even if RADIOBERRY_CI_HOST is set
 #
 # RADIOBERRY_CI_HOST may stand in for --remote HOST. The remote copy lives
 # in ~/radioberry-ci on the host and is reused between runs.
 set -eu
 
 usage() {
-    sed -n '4,15p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '4,16p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 remote=${RADIOBERRY_CI_HOST:-}
@@ -67,10 +68,49 @@ sh tools/check-format.sh
 step "SPDX headers"
 sh tools/check-spdx.sh
 
+kernel_sources="driver/kernel/radioberry.c driver/kernel/rb_logic.h driver/kernel/rb_pio.h
+    driver/include/radioberry_ioctl.h"
+kbuild=/lib/modules/$(uname -r)/build
+checkpatch=${CHECKPATCH:-$kbuild/scripts/checkpatch.pl}
+if [ -f "$checkpatch" ]; then
+    step "checkpatch"
+    # shellcheck disable=SC2086
+    perl "$checkpatch" --no-tree --file --quiet --show-types $kernel_sources
+    echo "checkpatch: ok"
+else
+    step "checkpatch: skipped, set CHECKPATCH to the kernel's scripts/checkpatch.pl"
+fi
+
+if command -v sparse >/dev/null && [ -f "$kbuild/Makefile" ]; then
+    step "sparse"
+    rm -rf build-sparse && mkdir -p build-sparse && cp driver/kernel/* build-sparse/
+    out=$(make -s -C "$kbuild" M="$top/build-sparse" RB_INCLUDE="$top/driver/include" C=2 \
+        modules 2>&1)
+    if [ -n "$out" ]; then
+        echo "$out"
+        exit 1
+    fi
+    echo "sparse: ok"
+else
+    step "sparse: skipped, needs sparse and the running kernel's headers"
+fi
+
 step "release build and tests"
 cmake --preset default >/dev/null
 cmake --build --preset default -j "$jobs"
 ctest --preset default
+
+if command -v run-clang-tidy-19 >/dev/null; then
+    step "clang-tidy"
+    # Sources only: the tests' Catch2 macros and the vendored ft8_lib are
+    # not held to it.
+    run-clang-tidy-19 -p build -j "$jobs" -quiet \
+        '^(?!.*ft8_lib)(?!.*/tests/).*/(daemon|tools|examples|driver)/.*\.cpp$' >build/clang-tidy.log 2>&1 ||
+        { grep -E "(warning|error):" build/clang-tidy.log | sort -u; exit 1; }
+    echo "clang-tidy: ok"
+else
+    step "clang-tidy: skipped, run-clang-tidy-19 not installed"
+fi
 
 step "ASan and UBSan build and tests"
 cmake --preset asan >/dev/null

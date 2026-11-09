@@ -1,7 +1,7 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
-# Builds the Radioberry PIO gateware (CL025 and CL016) from
+# Builds the RadioBerry PIO gateware (CL025 and CL016) from
 # gateware/source/ with Quartus Prime Lite, writes
 # gateware/rpi-5/<type>/radioberry.rbf and updates gateware/PROVENANCE.md.
 # See gateware/QUARTUS.md.
