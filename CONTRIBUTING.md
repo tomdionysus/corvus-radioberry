@@ -22,7 +22,9 @@ TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
   (`item/<section>-<short-slug>`), squash-merged into it. `main` receives
   `develop` only at version tags.
 - Build and test on the Pi, not on the workstation. The Pi's address and
-  access details are kept outside this repository.
+  access details are kept outside this repository. Besides the README's
+  packages, development needs `sudo apt install clang-format-19 lcov rsync`
+  (format check, coverage report, `ci-pi.sh --remote`).
 - `tools/ci-pi.sh` is the merge gate. On the Pi it runs the format check
   (`tools/check-format.sh`, clang-format 19), the SPDX check
   (`tools/check-spdx.sh`), the release, sanitizer and coverage builds with

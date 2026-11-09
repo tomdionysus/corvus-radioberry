@@ -62,17 +62,20 @@ On a Raspberry Pi 5 running Raspberry Pi OS (Debian 13 trixie, 64-bit,
 kernel 6.18 or newer), from the repository root:
 
 ```
-sudo apt install build-essential cmake device-tree-compiler \
-    linux-headers-rpi-2712 libliquid-dev libgpiod-dev libi2c-dev i2c-tools \
-    libyaml-cpp-dev nlohmann-json3-dev libspdlog-dev libsystemd-dev \
-    catch2 lcov clang-format-19 rsync
-cmake -S . -B build -DFPGATYPE=CL025   # or CL016
+sudo apt install build-essential cmake pkg-config device-tree-compiler \
+    linux-headers-rpi-2712 libliquid-dev libgpiod-dev libi2c-dev \
+    libyaml-cpp-dev nlohmann-json3-dev libspdlog-dev libsystemd-dev catch2
+
+cmake -S . -B build -DFPGATYPE=CL025
 cmake --build build -j
 ctest --test-dir build
 sudo cmake --install build
 ```
 
-Add to `/boot/firmware/config.txt`, then reboot (first install only):
+Note that if your radioberry has a CL016 chip, you should replace CL025 above.
+
+To enable the kernel driver, modify `/boot/firmware/config.txt` and add the following,
+then reboot (first install only):
 
 ```
 dtparam=i2c_arm=on
