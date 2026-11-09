@@ -71,10 +71,6 @@ std::vector<std::string> config_args(const std::string& path) {
         if (!kValueKeys.contains(key) && !kSwitchKeys.contains(key)) {
             throw fail("unknown key: " + key);
         }
-        if (value.IsNull()) {
-            // An empty value leaves the option at its default.
-            continue;
-        }
         if (!value.IsScalar()) {
             throw fail(key + ": not a single value");
         }

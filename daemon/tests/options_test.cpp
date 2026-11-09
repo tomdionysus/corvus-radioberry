@@ -156,13 +156,6 @@ TEST_CASE("radioberryd refuses a bad config file", "[options]") {
                     std::invalid_argument);
 }
 
-TEST_CASE("an empty config value leaves the default", "[options]") {
-    const Options o = parse_options({"--config", ConfigFile("mac:\nport: 1030\n").path});
-    CHECK_FALSE(o.daemon.mac);
-    CHECK(o.daemon.port == 1030);
-    CHECK_THROWS_AS(config_args(ConfigFile("colour:\n").path), std::invalid_argument);
-}
-
 TEST_CASE("the installed default config: radioberryd's defaults, drive ceiling 150", "[options]") {
     const Options o = parse_options({"--config", RADIOBERRY_DEFAULT_CONFIG});
     const Options d = parse_options({});
