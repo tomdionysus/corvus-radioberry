@@ -156,7 +156,8 @@ antenna or dummy load rated for its output first, then set
 ## AI
 
 This project was developed with the use of agentic engineering,
-specifically Claude.
+specifically Claude. If that's a problem for you, there are
+[guides for compiling the original driver](https://github.com/pa3gsb/Radioberry-2.x#building).
 
 ## Licensing
 
