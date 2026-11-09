@@ -17,10 +17,10 @@ Raspberry Pi OS kernel (6.18 and newer) with no out-of-tree kernel
 patches.
 
 The Radioberry and the upstream software this project builds on come from
-the Radioberry project (https://github.com/pa3gsb/Radioberry-2.x). A
-ready-to-run Raspberry Pi 5 image of the upstream software is sold at
-https://pa3gsb.gumroad.com/l/radioberry; buying it supports the
-Radioberry's author.
+the [Radioberry project](https://github.com/pa3gsb/Radioberry-2.x). A
+[ready-to-run Raspberry Pi 5 image](https://pa3gsb.gumroad.com/l/radioberry)
+of the upstream software is sold by the Radioberry's author; buying it
+supports their work.
 
 The code is C++20, with C only where the kernel or a shared ABI header
 requires it, tested with Catch2. All dependencies are Debian trixie
@@ -30,18 +30,18 @@ Documentation:
 
 | Document | Contents |
 |---|---|
-| `docs/platform.md` | supported hardware, the development Pi, kernel facts, real-time and jitter measurements |
-| `docs/pa.md` | the PA5W V2 amplifier board |
-| `docs/design.md` | architecture of the driver, daemon and probe |
-| `docs/driver.md` | kernel driver: device interface, sysfs, module parameters |
-| `docs/daemon.md` | `radioberryd`: options, service, Protocols 1 and 2, client notes |
-| `docs/tools.md` | `rbprobe`, `rbcat`, `rbctl` |
-| `docs/examples.md` | `ft8rx`, sample order, frequency calibration |
-| `docs/fault-rx-lockup.md` | the gateware's receive lock-up and the driver's workaround |
-| `gateware/README.md` | the gateware: interface the driver depends on |
-| `gateware/PROVENANCE.md`, `gateware/QUARTUS.md` | gateware source, build, timing, toolchain |
-| `docs/licensing.md` | licence and third-party works |
-| `CONTRIBUTING.md` | repository layout, CI, working conventions |
+| [docs/platform.md](docs/platform.md) | supported hardware, the development Pi, kernel facts, real-time and jitter measurements |
+| [docs/pa.md](docs/pa.md) | the PA5W V2 amplifier board |
+| [docs/design.md](docs/design.md) | architecture of the driver, daemon and probe |
+| [docs/driver.md](docs/driver.md) | kernel driver: device interface, sysfs, module parameters |
+| [docs/daemon.md](docs/daemon.md) | `radioberryd`: options, service, Protocols 1 and 2, client notes |
+| [docs/tools.md](docs/tools.md) | `rbprobe`, `rbcat`, `rbctl` |
+| [docs/examples.md](docs/examples.md) | `ft8rx`, sample order, frequency calibration |
+| [docs/fault-rx-lockup.md](docs/fault-rx-lockup.md) | the gateware's receive lock-up and the driver's workaround |
+| [gateware/README.md](gateware/README.md) | the gateware: interface the driver depends on |
+| [gateware/PROVENANCE.md](gateware/PROVENANCE.md), [gateware/QUARTUS.md](gateware/QUARTUS.md) | gateware source, build, timing, toolchain |
+| [docs/licensing.md](docs/licensing.md) | licence and third-party works |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | repository layout, CI, working conventions |
 
 ## Status
 
