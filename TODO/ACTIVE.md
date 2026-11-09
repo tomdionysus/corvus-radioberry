@@ -98,14 +98,22 @@ Nothing open.
       `radioberryd` maps HL2 drive to Radioberry codes. Until then piHPSDR
       is calibrated by hand (its per-band PA calibration, about 45 to 50).
 - [ ] Protocol 2 TX underruns: through piHPSDR in Protocol 2 the driver
-      counts about 94 TX underruns per second while transmitting (1 300
+      counted about 94 TX underruns per second while transmitting (1 300
       in a 13.9 s FT8 transmission), at 47 850 to 47 998 samples per
       second delivered and 0 blocks dropped; Protocol 1 transmissions
-      logged none. FT8 decoded widely regardless. Find whether the
-      gateware's FIFO is ever starved or only the driver's ring, and
-      remove the cause if it is the daemon's (Protocol 2 TX blocks are 60
-      samples against Protocol 1's 126). Acceptance: underruns no higher
-      than Protocol 1's in a 13.9 s FT8 transmission into the dummy load.
+      logged none. The driver counts one when its ring is empty with PTT
+      set and no DMA in flight, which happens whenever the gateware's TX
+      FIFO has room and takes samples at PIO speed, not only when the
+      FIFO runs dry. piHPSDR sends no TX samples while receiving in
+      Protocol 2 (none to port 1029 in a receive capture), so the FIFO
+      starts each transmission empty and settles at the gateware's TX
+      buffer latency (address 0x17; 20 ms by default, or what an earlier
+      client set; piHPSDR sends 40 ms in Protocol 1), never full. The
+      Protocol 2 server now sets 0x17 when a stream starts: 100 ms
+      latency, more than the 85 ms FIFO, and 20 ms hang. Acceptance: a
+      13.9 s FT8 transmission through piHPSDR in Protocol 2 into the dummy
+      load logs underruns no higher than Protocol 1's, and decodes as
+      before.
 - [ ] Real-time setup: thread priorities, CPU affinity, socket buffer
       sizes, `SO_PRIORITY`; RX packet jitter over Wi-Fi measured and
       recorded in `docs/platform.md`.

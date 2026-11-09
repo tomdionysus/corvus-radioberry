@@ -446,8 +446,15 @@ TEST_CASE("radioberryd serves a Protocol 2 client", "[daemon]") {
     CHECK(reply[11] == p2::kBoardHermesLite);
     CHECK(reply[20] == 6);
 
-    // As piHPSDR starts: General, DDC0 and DDC1 at 96 ksps, TX, run.
+    // As piHPSDR starts: General, then (once it has taken effect, as
+    // piHPSDR waits 100 ms) DDC0 and DDC1 at 96 ksps, TX, run. General
+    // arrives on the base port, read by the Protocol 1 thread, the rest on
+    // the Protocol 2 thread's ports.
     client.send(p2::kGeneralPort, general_packet(0));
+    for (int i = 0; i < 400 && !r.daemon.session().owner(); ++i) {
+        std::this_thread::sleep_for(5ms);
+    }
+    REQUIRE(r.daemon.session().owner());
     client.send(p2::kRxSpecificPort, rx_specific_packet(0, {{0, 96}, {1, 96}}));
     client.send(p2::kTxSpecificPort, tx_specific_packet(0));
     HighPriorityBytes h;

@@ -19,6 +19,15 @@ constexpr std::uint8_t kLnaGain = 0x0a;
 constexpr std::uint32_t kLnaGainMode = 0x40;  // bits 5..0 are the gain + 12 dB
 constexpr std::uint32_t kPaEnable = 1u << 19;
 constexpr std::uint32_t kDuplex = 1u << 2;
+// Address 0x17: PTT hang time (bits 12..8) and TX buffer latency (bits
+// 6..0), in ms. Protocol 2 clients send no TX samples while receiving, so
+// the gateware's TX FIFO is empty at key-up; a latency above the FIFO's
+// 85 ms fills it before the gateware reads, which gives the full cushion a
+// Protocol 1 client's continuous stream keeps (gateware/README.md section
+// 7). The hang time is the 20 ms piHPSDR sends in Protocol 1.
+constexpr std::uint8_t kTxTiming = 0x17;
+constexpr std::uint32_t kPttHangMs = 20;
+constexpr std::uint32_t kTxLatencyMs = 100;
 constexpr int kMinGainDb = -12;
 constexpr int kMaxGainDb = 48;
 constexpr float kFullScale24 = 8388608.0f;
@@ -346,6 +355,7 @@ void Server::start_locked() {
     status_sequence_ = 0;
     status_frames_ = 0;
     status_sent_.reset();
+    command_locked(kTxTiming, kPttHangMs << 8 | kTxLatencyMs);
     spdlog::info("Protocol 2 stream to {}", describe(client_));
 }
 
