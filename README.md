@@ -108,6 +108,18 @@ rbprobe
 | both gateware images | `/usr/local/share/radioberry/gateware/rpi-5/<type>/` |
 | ABI header | `/usr/local/include/radioberry_ioctl.h` |
 | `rbprobe`, `rbcat`, `rbctl` | `/usr/local/bin/` |
+| `radioberryd` | `/usr/local/sbin/` |
+| `radioberry.service`, sysusers.d entry, udev rule | `/usr/local/lib/systemd/system/`, `/usr/local/lib/sysusers.d/`, `/usr/local/lib/udev/rules.d/` |
+| daemon config, if there is none | `/etc/radioberry/config.yaml` |
+
+**Transmit ships enabled, the PA ships OFF.** The installed
+`/etc/radioberry/config.yaml` lets a client transmit (`allow_tx: true`,
+`drive_ceiling: 150`, `tx_watchdog_s: 120`) but does not pass on PA
+enable (`allow_pa: false`), for safety. To use the PA, connect an antenna
+or dummy load rated for its output, set `allow_pa: true` in that file and
+`sudo systemctl restart radioberry`. For receive only, set
+`allow_tx: false`. The service is not started at install:
+`sudo systemctl enable --now radioberry` starts it now and at boot.
 
 The module is built when headers for the running kernel are installed
 (`-DKERNEL_RELEASE=` picks another kernel, `-DRADIOBERRY_BUILD_MODULE=OFF`
@@ -196,8 +208,9 @@ to `build-coverage/coverage/html`.
   in the Hermes-Lite 2 dialect, on UDP and TCP port 1024, so clients that
   support the HL2 (piHPSDR and others) find it by discovery. It runs as
   `radioberry.service` (below), or by hand as root, for example
-  `radioberryd --frequency-ppm 22.9`. It receives only unless started
-  with `--allow-tx`; then the client that owns the radio may transmit
+  `radioberryd --frequency-ppm 22.9`. Run by hand it receives only unless
+  started with `--allow-tx` (the installed config sets it; see Build and
+  install); then the client that owns the radio may transmit
   while it holds MOX, the drive is capped by `--drive-ceiling N` (default
   0), PA enable is passed on only with `--allow-pa`, and `--tx-watchdog-s`
   (default 120) ends any transmission held longer. A client silent for 3 s
@@ -213,7 +226,8 @@ to `build-coverage/coverage/html`.
 - `cmake --install` installs `radioberry.service`, a sysusers.d entry for
   the `radioberry` system user (created at install), a udev rule giving
   `/dev/radioberry` to the `radioberry` group, and
-  `/etc/radioberry/config.yaml` if there is none. The service runs
+  `/etc/radioberry/config.yaml` if there is none (transmit allowed, PA
+  off). The service runs
   `radioberryd --config /etc/radioberry/config.yaml` as that user with
   CAP_SYS_NICE and CAP_IPC_LOCK only, logs to the journal
   (`journalctl -u radioberry`), stops when the driver goes and restarts

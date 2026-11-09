@@ -2,8 +2,9 @@
 #
 # radioberryd options, read with --config (radioberry.service passes this
 # file). Each key is a long option with _ for - (radioberryd --help); an
-# option given on the command line overrides it. Shown with the defaults.
-# radioberryd reads this at start: restart the service after a change.
+# option given on the command line overrides it. Commented keys show
+# radioberryd's own defaults. radioberryd reads this at start: restart the
+# service after a change.
 
 # device: /dev/radioberry
 # address: 0.0.0.0              # listen on every interface
@@ -16,8 +17,14 @@
 # realtime: true                # SCHED_FIFO threads and locked memory
 # log_level: info
 
-# Transmit: off unless set here. No PA interlock is claimed.
-# allow_tx: false
-# allow_pa: false
-# drive_ceiling: 0
-# tx_watchdog_s: 120
+# Transmit. The client that owns the radio may transmit while it holds MOX,
+# at the drive it asks for up to drive_ceiling (0 to 255), for at most
+# tx_watchdog_s seconds at a time. No PA interlock is claimed.
+allow_tx: true
+drive_ceiling: 150
+tx_watchdog_s: 120
+
+# The PA ships OFF for safety: with allow_pa false the PA enable a client
+# asks for is not passed on. Connect an antenna or dummy load rated for the
+# PA's output, then set allow_pa: true and restart the service.
+allow_pa: false

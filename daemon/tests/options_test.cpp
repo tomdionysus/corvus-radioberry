@@ -156,6 +156,17 @@ TEST_CASE("radioberryd refuses a bad config file", "[options]") {
                     std::invalid_argument);
 }
 
-TEST_CASE("the installed default config sets nothing", "[options]") {
-    CHECK(config_args(RADIOBERRY_DEFAULT_CONFIG).empty());
+TEST_CASE("the installed default config allows transmit with the PA off", "[options]") {
+    const Options o = parse_options({"--config", RADIOBERRY_DEFAULT_CONFIG});
+    CHECK(o.daemon.tx.allow_tx);
+    CHECK_FALSE(o.daemon.tx.allow_pa);
+    CHECK(o.daemon.tx.drive_ceiling == 150);
+    CHECK(o.daemon.tx.watchdog == 120s);
+    // Everything else is radioberryd's own default.
+    const Options d = parse_options({});
+    CHECK(o.device == d.device);
+    CHECK(o.daemon.port == d.daemon.port);
+    CHECK(o.daemon.frequency_ppm == d.daemon.frequency_ppm);
+    CHECK(o.daemon.realtime == d.daemon.realtime);
+    CHECK(o.log_level == d.log_level);
 }
