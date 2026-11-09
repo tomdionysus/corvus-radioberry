@@ -3,6 +3,12 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-09: First complete FT8 contact through `radioberryd`, operated
+  by the owner on 40 m: piHPSDR and WSJT-X on the Pi, the Radioberry
+  driving an external 25 W amplifier (the owner's calibration), with a
+  station about 2 000 km away. The daemon logged every transmission of
+  the exchange on its FT8 slot, 13.9 s each, 47 900 to 48 200 samples
+  per second, no underruns, no blocks dropped, no faults.
 - 2026-11-08: Hardware validation, FT8 on air through `radioberryd`,
   operated by the owner: piHPSDR (Protocol 1, HL2 type) with WSJT-X on
   the Pi, audio through PipeWire loopbacks, CAT and PTT through
