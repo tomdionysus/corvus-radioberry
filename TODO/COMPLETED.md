@@ -3,6 +3,16 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-09: Real-time setup for `radioberryd` (`daemon/src/realtime.cpp`):
+  SCHED_FIFO 20 for the two device threads and 10 for the network
+  threads, below the driver's kernel thread (50); memory locked;
+  `--no-realtime`; UDP sockets marked DSCP EF and SO_PRIORITY 6. Socket
+  buffers stay at 1 MiB; no CPU pinning, as nothing measured called for
+  it. RX packet jitter measured and recorded in `docs/platform.md`: with
+  four busy loops and the client at SCHED_FIFO 30, lateness p99 4.70 ms
+  and maximum 9.8 ms without real-time, 0.88 ms and 3.0 ms with it (idle:
+  0.89 and 3.9 ms). Over Wi-Fi p99 is 91 to 110 ms, all of it from the
+  Pi's background scans (open item).
 - 2026-11-09: Protocol 2 TX underruns. The driver counts an underrun
   when its ring is empty with PTT set and no DMA in flight, which happens
   whenever the gateware's TX FIFO has room, not only when it runs dry.

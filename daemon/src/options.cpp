@@ -95,6 +95,8 @@ Options parse_options(const std::vector<std::string>& args) {
                 throw std::invalid_argument("--p2-rx-gain: a whole number from -12 to 48: " + text);
             }
             o.daemon.p2_rx_gain_db = db;
+        } else if (a == "--no-realtime") {
+            o.daemon.realtime = false;
         } else if (a == "--allow-tx") {
             o.daemon.tx.allow_tx = true;
         } else if (a == "--allow-pa") {
@@ -143,6 +145,8 @@ std::string usage() {
            "                           swapped both ways, for plain complex-baseband clients\n"
            "  --p2-rx-gain DB          Protocol 2 LNA gain, -12 to 48 dB, less the client's\n"
            "                           step attenuation (default 14)\n"
+           "  --no-realtime            no SCHED_FIFO threads or locked memory (default: both,\n"
+           "                           which need CAP_SYS_NICE and CAP_IPC_LOCK)\n"
            "  --allow-tx               let the owning client transmit (default: receive only)\n"
            "  --allow-pa               let the client enable the PA while transmitting\n"
            "  --drive-ceiling N        highest drive level sent, 0 to 255 (default 0)\n"

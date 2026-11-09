@@ -23,6 +23,7 @@ TEST_CASE("radioberryd's defaults", "[options]") {
     CHECK(o.daemon.frequency_ppm == 0);
     CHECK(o.daemon.iq_convention == p1::IqConvention::Hl2);
     CHECK(o.daemon.p2_rx_gain_db == 14);
+    CHECK(o.daemon.realtime);
     CHECK_FALSE(o.help);
     CHECK_FALSE(o.version);
     CHECK(usage().find("--client-timeout-ms") != std::string::npos);
@@ -85,4 +86,5 @@ TEST_CASE("radioberryd's Protocol 2 gain", "[options]") {
     CHECK_THROWS_AS(parse_options({"--p2-rx-gain", "-13"}), std::invalid_argument);
     CHECK_THROWS_AS(parse_options({"--p2-rx-gain", "4.5"}), std::invalid_argument);
     CHECK(usage().find("--p2-rx-gain") != std::string::npos);
+    CHECK_FALSE(parse_options({"--no-realtime"}).daemon.realtime);
 }

@@ -154,6 +154,43 @@ No radioberry daemon or service is installed yet.
 - USB: nothing attached beyond the root hubs.
 - Power rails measured by the PMIC are nominal; no undervoltage flag.
 
+## Real-time behaviour and RX packet jitter
+
+Measured 2026-11-09 with `radioberryd` serving one receiver at 48 ksps
+over Protocol 1 to a receive-only test client (381 packets per second,
+one every 2.625 ms), 40 to 70 s per run. A packet's lateness is its
+arrival time less its ideal time from its sequence number, with the clock
+drift between the two machines fitted out; the earliest packet is 0.
+
+| Client, conditions | p50 | p99 | p99.9 | max | sequence breaks |
+|---|---|---|---|---|---|
+| On the Pi (loopback), idle | 0.50 ms | 0.89 ms | 0.90 ms | 3.9 ms | 0 |
+| On the Pi, 4 busy loops, client SCHED_FIFO 30, daemon `--no-realtime` | 2.03 ms | 4.70 ms | 7.00 ms | 9.8 ms | 0 |
+| On the Pi, 4 busy loops, client SCHED_FIFO 30, daemon real-time | 0.50 ms | 0.88 ms | 0.89 ms | 3.0 ms | 0 |
+| Laptop on the same Wi-Fi, Wi-Fi power save on | 0.74 ms | 90.9 ms | 123.6 ms | 128.3 ms | 3 |
+| Laptop, Wi-Fi power save off | 0.75 ms | 107.1 ms | 126.3 ms | 129.6 ms | 12 |
+| Laptop, daemon real-time with DSCP EF marking | 0.73 ms | 109.5 ms | 125.9 ms | 128.7 ms | 0 |
+
+- `radioberryd` runs its two device threads at SCHED_FIFO 20 and its
+  network threads at SCHED_FIFO 10, below the driver's kernel thread
+  (SCHED_FIFO 50), and locks its memory (about 107 MB); `--no-realtime`
+  turns both off. Under load this keeps delivery as on time as on an
+  idle Pi. The CPU affinity of the threads is left to the scheduler:
+  nothing measured called for pinning.
+- Over Wi-Fi the tail comes from the Pi's own background scans: while
+  associated it scans all 42 channels (2.4 and 5 GHz) every 33.7 s for
+  3.65 s, and each scan is a train of stalls of about 130 ms every 130 to
+  170 ms, matching the Pi's `iw event` scan log to within the clocks'
+  offset. Wi-Fi power save made no difference. Outside the scans the
+  Wi-Fi path adds about 0.25 ms at p50.
+- A stall of 130 ms exceeds the gateware's 85 ms TX FIFO, so a Protocol 2
+  client transmitting over this Wi-Fi would run the FIFO dry during a
+  scan; the clients used on air so far ran on the Pi itself.
+- UDP sockets carry DSCP EF (IP TOS 0xb8, as piHPSDR marks its own) and
+  SO_PRIORITY 6, so Wi-Fi sends them in its voice queue. One run with them
+  showed no stalls outside the scans and no sequence breaks, against 3 to
+  18 breaks in runs without; one run does not separate that from chance.
+
 ## Working practice on this machine
 
 - All builds run on the Pi itself over SSH; there is no cross toolchain.

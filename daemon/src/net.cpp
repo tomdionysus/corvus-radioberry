@@ -41,6 +41,8 @@ void set_int(int fd, int level, int name, int value) {
     ::setsockopt(fd, level, name, &value, sizeof value);
 }
 
+constexpr int kDscpEf = 0xb8;  // IP TOS byte: DSCP 46, expedited forwarding
+
 }  // namespace
 
 Network::Network(std::uint32_t address, std::uint16_t port) {
@@ -51,6 +53,10 @@ Network::Network(std::uint32_t address, std::uint16_t port) {
     set_int(udp_, SOL_SOCKET, SO_BROADCAST, 1);
     set_int(udp_, SOL_SOCKET, SO_SNDBUF, 1 << 20);
     set_int(udp_, SOL_SOCKET, SO_RCVBUF, 1 << 20);
+    // DSCP EF, as piHPSDR marks its own: Wi-Fi sends it in the voice
+    // queue. SO_PRIORITY 6 is the highest without CAP_NET_ADMIN.
+    set_int(udp_, IPPROTO_IP, IP_TOS, kDscpEf);
+    set_int(udp_, SOL_SOCKET, SO_PRIORITY, 6);
     sockaddr_in a = socket_address(address, port);
     if (::bind(udp_, reinterpret_cast<const sockaddr*>(&a), sizeof a) != 0) {
         const int e = errno;

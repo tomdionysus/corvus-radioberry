@@ -3,7 +3,12 @@
 
 #include <spdlog/spdlog.h>
 
+#include <functional>
+#include <string>
 #include <thread>
+#include <utility>
+
+#include "realtime.hpp"
 
 namespace radioberry::daemon {
 namespace {
@@ -26,6 +31,13 @@ p1::Identity identify(Device& device, const std::optional<std::array<std::uint8_
 // Real starvation ends transmission through the gateware's own PTT
 // hang-time watchdog, the TX watchdog, the client timeout and the other
 // faults here.
+// The device options with the hook that sets each device thread's
+// scheduling.
+DeviceOptions with_thread_hook(DeviceOptions options, std::function<void(const char*)> hook) {
+    options.on_thread_start = std::move(hook);
+    return options;
+}
+
 bool breaks_transmit(FaultKind kind) {
     switch (kind) {
         case FaultKind::TxInvalidBlock:
@@ -43,7 +55,13 @@ Daemon::Daemon(Device& device, DaemonOptions options)
     : identity_(identify(device, options.mac)),
       session_([this] { service_.control().safe(); }, options.client_timeout),
       service_(
-          device, [this](const Fault& fault) { on_fault(fault); }, options.device),
+          device, [this](const Fault& fault) { on_fault(fault); },
+          with_thread_hook(options.device,
+                           [this](const char* role) {
+                               start_thread(
+                                   std::string(role) == "rx" ? "rb-rx-device" : "rb-tx-device",
+                                   kDevicePriority);
+                           })),
       policy_(service_.control(), session_, options.tx),
       network_(options.address, options.port),
       server_(
@@ -72,6 +90,20 @@ Daemon::Daemon(Device& device, DaemonOptions options)
     p2_server_.set_rx_gain_db(options.p2_rx_gain_db);
     iq_standard_ = options.iq_convention == p1::IqConvention::Standard;
     frequency_ppm_ = options.frequency_ppm;
+    realtime_ = options.realtime;
+}
+
+void Daemon::start_thread(const char* name, int priority, bool rename) {
+    if (rename) {
+        name_thread(name);
+    }
+    if (!realtime_) {
+        return;
+    }
+    if (const auto failed = make_thread_realtime(name, priority);
+        failed && !realtime_failed_.exchange(true)) {
+        spdlog::warn("real-time scheduling not set: {}", *failed);
+    }
 }
 
 Daemon::~Daemon() = default;
@@ -113,6 +145,14 @@ bool Daemon::run(const std::atomic<bool>& stop) {
     if (frequency_ppm_ != 0) {
         spdlog::info("frequencies corrected for a radio error of {:+.2f} ppm", frequency_ppm_);
     }
+    if (realtime_) {
+        if (const auto failed = lock_memory()) {
+            spdlog::warn("{}", *failed);
+        }
+        spdlog::info("real-time: SCHED_FIFO {} for the device threads, {} for the network threads",
+                     kDevicePriority, kNetworkPriority);
+    }
+    start_thread("the Protocol 1 network thread", kNetworkPriority, false);
     if (tx.allow_tx) {
         spdlog::warn(
             "transmit allowed: drive ceiling {}, PA {}, watchdog {} s; no PA interlock is claimed",
@@ -127,6 +167,7 @@ bool Daemon::run(const std::atomic<bool>& stop) {
     const Clock clock = steady_clock();
     std::atomic<bool> stop_rx{false};
     std::thread rx([&] {
+        start_thread("rb-rx-send", kNetworkPriority);
         while (!stop_rx) {
             service_.rx().wait(stop_rx);
             while (const RxBlock* block = service_.rx().front()) {
@@ -138,6 +179,7 @@ bool Daemon::run(const std::atomic<bool>& stop) {
     });
     std::atomic<bool> stop_p2{false};
     std::thread p2([&] {
+        start_thread("rb-p2-network", kNetworkPriority);
         const auto p2_handler = [&](unsigned port, std::span<const std::uint8_t> packet,
                                     const Peer& from) {
             p2_server_.on_packet(port, packet, from, clock());

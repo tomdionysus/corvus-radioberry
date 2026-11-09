@@ -93,6 +93,7 @@ struct Running {
         o.mac = std::array<std::uint8_t, 6>{2, 0, 0, 0, 0, 9};
         o.device.wait_ms = 2;
         o.device.stall_after = 10s;
+        o.realtime = false;  // one test below turns it on
         return o;
     }
     Daemon daemon;
@@ -523,3 +524,16 @@ TEST_CASE("radioberryd serves a Protocol 2 client", "[daemon]") {
     const std::lock_guard lock(device.mutex);
     CHECK_FALSE(device.commands.back().can_transmit());
 }
+
+#if !defined(__SANITIZE_ADDRESS__)
+// Not under ASan: locking memory would try to lock its shadow mappings.
+TEST_CASE("radioberryd runs with real-time scheduling where allowed", "[daemon]") {
+    FakeDevice device;
+    device.idle_wait_ms = 1;
+    DaemonOptions o = Running::options();
+    o.realtime = true;
+    Running r(device, o);
+    std::this_thread::sleep_for(50ms);  // the threads start and set themselves
+    CHECK(r.finish());
+}
+#endif

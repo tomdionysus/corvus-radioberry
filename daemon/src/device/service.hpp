@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <thread>
 
@@ -25,6 +26,9 @@ struct DeviceOptions {
     int wait_ms = 10;
     // See TxPump; 0 is no limit.
     std::uint32_t tx_ring_limit_words = 0;
+    // Called first in each of the two device threads, with its role: "rx"
+    // or "tx". The daemon sets scheduling there.
+    std::function<void(const char* role)> on_thread_start;
 };
 
 // What the device layer has done and seen, for status reports and tests.
@@ -84,6 +88,7 @@ private:
     std::atomic<bool> stop_tx_{false};
     std::thread rx_thread_;
     std::thread tx_thread_;
+    std::function<void(const char*)> on_thread_start_;
     bool running_ = false;
 };
 

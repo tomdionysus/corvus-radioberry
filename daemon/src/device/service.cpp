@@ -11,7 +11,8 @@ DeviceService::DeviceService(Device& device, FaultSink sink, DeviceOptions optio
       monitor_(sink, options.stall_after),
       rx_pump_(device, control_, rx_ring_, monitor_, sink, std::move(clock),
                {options.stats_period, options.wait_ms}),
-      tx_pump_(device, tx_ring_, sink, options.wait_ms, options.tx_ring_limit_words) {}
+      tx_pump_(device, tx_ring_, sink, options.wait_ms, options.tx_ring_limit_words),
+      on_thread_start_(std::move(options.on_thread_start)) {}
 
 DeviceService::~DeviceService() { stop(); }
 
@@ -25,11 +26,17 @@ bool DeviceService::start() {
     stop_rx_ = false;
     stop_tx_ = false;
     rx_thread_ = std::thread([this] {
+        if (on_thread_start_) {
+            on_thread_start_("rx");
+        }
         while (!stop_rx_ && rx_pump_.step()) {
         }
         rx_pump_.flush_commands();
     });
     tx_thread_ = std::thread([this] {
+        if (on_thread_start_) {
+            on_thread_start_("tx");
+        }
         while (!stop_tx_ && tx_pump_.step(stop_tx_)) {
         }
     });

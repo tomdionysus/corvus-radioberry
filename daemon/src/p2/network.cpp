@@ -29,6 +29,8 @@ void set_int(int fd, int level, int name, int value) {
     ::setsockopt(fd, level, name, &value, sizeof value);
 }
 
+constexpr int kDscpEf = 0xb8;  // IP TOS byte: DSCP 46, expedited forwarding
+
 }  // namespace
 
 Network::Network(std::uint32_t address, std::uint16_t base, unsigned ddcs, SendBase send_base)
@@ -48,6 +50,8 @@ Network::Network(std::uint32_t address, std::uint16_t base, unsigned ddcs, SendB
         }
         set_int(fd, SOL_SOCKET, SO_SNDBUF, 1 << 20);
         set_int(fd, SOL_SOCKET, SO_RCVBUF, 1 << 20);
+        set_int(fd, IPPROTO_IP, IP_TOS, kDscpEf);  // as the Protocol 1 socket
+        set_int(fd, SOL_SOCKET, SO_PRIORITY, 6);
         sockaddr_in a = socket_address(address, want);
         if (::bind(fd, reinterpret_cast<const sockaddr*>(&a), sizeof a) != 0) {
             const int e = errno;

@@ -24,6 +24,7 @@ add_library(radioberryd_core STATIC
     src/p2/protocol2.cpp
     src/p2/server.cpp
     src/p2/network.cpp
+    src/realtime.cpp
     src/session.cpp
     src/tx_policy.cpp
     src/net.cpp
@@ -52,6 +53,7 @@ if(RADIOBERRY_BUILD_TESTS)
         tests/p2_server_test.cpp
         tests/session_test.cpp
         tests/tx_policy_test.cpp
+        tests/realtime_test.cpp
         tests/options_test.cpp
         tests/daemon_test.cpp)
     target_link_libraries(daemon_tests PRIVATE radioberryd_core Catch2::Catch2WithMain)

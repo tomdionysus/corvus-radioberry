@@ -30,8 +30,11 @@ struct DaemonOptions {
     p1::IqConvention iq_convention = p1::IqConvention::Hl2;
     // Protocol 2: the LNA gain with no step attenuation, dB (-12 to 48).
     int p2_rx_gain_db = 14;
+    // SCHED_FIFO for the stream and network threads and locked memory
+    // (realtime.hpp); without the privileges each is reported and skipped.
+    bool realtime = true;
     // The driver's TX ring is kept within 100 ms at 48 ksps.
-    DeviceOptions device{.tx_ring_limit_words = 4800};
+    DeviceOptions device{.tx_ring_limit_words = 4800, .on_thread_start = {}};
     TxPolicyOptions tx;
 };
 
@@ -68,6 +71,9 @@ public:
 
 private:
     void on_fault(const Fault& fault);
+    // Names the calling thread (unless it is the main thread) and, when
+    // real-time is on, sets its priority; the first failure is logged.
+    void start_thread(const char* name, int priority, bool rename = true);
     void on_packet(std::span<const std::uint8_t> packet, const Peer& from,
                    std::chrono::nanoseconds now);
 
@@ -81,6 +87,8 @@ private:
     p2::Server p2_server_;
     double frequency_ppm_ = 0;
     bool iq_standard_ = false;
+    bool realtime_ = true;
+    std::atomic<bool> realtime_failed_{false};
 };
 
 }  // namespace radioberry::daemon

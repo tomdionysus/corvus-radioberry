@@ -23,7 +23,7 @@ its date.
   HackRF (no spurs or image above a broadband floor about 46 dB down).
 - `ft8rx` (`examples/ft8`, optional): receive-only FT8 decoder over
   Protocol 1 or 2.
-- Next: real-time setup and the systemd service; the HL2 drive item and the Protocol 2 output checks
+- Next: the systemd service; the HL2 drive item and the Protocol 2 output checks
   wait for the owner's go-ahead to transmit.
 
 ## Standing decisions
@@ -96,9 +96,6 @@ Nothing open.
       output against gain code across the range, then decide whether
       `radioberryd` maps HL2 drive to Radioberry codes. Until then piHPSDR
       is calibrated by hand (its per-band PA calibration, about 45 to 50).
-- [ ] Real-time setup: thread priorities, CPU affinity, socket buffer
-      sizes, `SO_PRIORITY`; RX packet jitter over Wi-Fi measured and
-      recorded in `docs/platform.md`.
 - [ ] systemd unit `radioberry.service` as user `radioberry` with
       CAP_SYS_NICE and CAP_IPC_LOCK, udev rule, system user, config file
       `/etc/radioberry/config.yaml`, `--version`, spdlog to the journal,
@@ -106,6 +103,18 @@ Nothing open.
       the Pi.
 - [ ] Integration test: a fake client against the daemon on loopback for
       both protocols, with fault injection for every fail-safe path.
+
+## 4a. Development Pi
+
+- [ ] Wi-Fi background scans: while associated, the development Pi scans
+      every 33.7 s for 3.65 s, which stalls UDP to a Wi-Fi client for about
+      130 ms at a time (`docs/platform.md`); longer than the 85 ms TX FIFO,
+      so a Protocol 2 client transmitting over Wi-Fi would run it dry.
+      Stop the scans (for example by locking the connection to the access
+      point's BSSID, in the netplan configuration so it survives reboots),
+      with a rollback in place since Wi-Fi is the Pi's only link; owner's
+      decision. Acceptance: RX packet lateness to a Wi-Fi client under
+      10 ms at p99.9 over 60 s.
 
 ## 4. Protocol tools (`tools/`)
 
