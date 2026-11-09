@@ -9,7 +9,7 @@ on a Raspberry Pi 5:
 - `radioberryd`, a daemon speaking openHPSDR Protocol 1 and Protocol 2
 - signal processing with liquid-dsp
 - platform diagnostics
-- control of an AURSINC PA5W V2 amplifier board
+- control of an [AURSINC PA5W V2](https://www.aursinc.com/products/aursinc-radioberry-preamp-board-v2-output-1-5w-3w-for-hf-power-ampfier-10w-100w-pa-for-raspberry-pi-4-4b) amplifier board
 - FPGA gateware built from its GPL source
 
 Every component is built from this repository against the current
@@ -133,6 +133,25 @@ antenna or dummy load rated for its output first, then set
 | `-DRADIOBERRY_ABI_INCLUDE_DIR=/usr/local/include` | build the tools and daemon against the installed ABI header; configuration fails if its ABI version differs from the source tree's |
 | `-DRADIOBERRY_BUILD_TESTS=OFF` | skip the unit tests (and the need for Catch2) |
 | `-DRADIOBERRY_BUILD_EXAMPLES=ON` | build `ft8rx` |
+
+## Roadmap / Ongoing work
+
+- If someone out there could test this with a CL016 based Radioberry, that
+  would be great. The CL016 build has a timing issue on the AD9866 TX data
+  outputs that moves with the FPGA fitter seed, and no seed tried so far
+  meets it ([gateware/PROVENANCE.md](gateware/PROVENANCE.md)). I'd also
+  like to crack that.
+- There's also a bug in the gateware: the RX FIFO clear is not
+  synchronised and the read-out state machine has no reset, so the receive
+  stream can lock up at a receiver-count change
+  ([docs/fault-rx-lockup.md](docs/fault-rx-lockup.md)). I've worked around
+  this in the driver, but the real fix belongs in the gateware itself.
+- The AURSINC Radioberry Preamp Board I'm using is an inexpensive copy with
+  manual bias set on a pot. The
+  [original design](https://groups.google.com/g/radioberry/c/WQc_afuvViI)
+  has an MCP4662 digital potentiometer for the bias and a MAX11613 ADC for
+  current and temperature, both on I2C. If that board is available, it
+  would be good to get them integrated too.
 
 ## AI
 
