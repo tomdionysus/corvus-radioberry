@@ -43,6 +43,9 @@ const std::set<std::string> kValueKeys = {"device",        "address",           
                                           "iq_convention", "p2_rx_gain",        "drive_ceiling",
                                           "tx_watchdog_s", "log_level"};
 
+// Config keys that are true or false.
+const std::set<std::string> kSwitchKeys = {"allow_tx", "allow_pa", "realtime"};
+
 }  // namespace
 
 std::vector<std::string> config_args(const std::string& path) {
@@ -65,6 +68,13 @@ std::vector<std::string> config_args(const std::string& path) {
     for (const auto& entry : root) {
         const std::string key = entry.first.as<std::string>();
         const YAML::Node& value = entry.second;
+        if (!kValueKeys.contains(key) && !kSwitchKeys.contains(key)) {
+            throw fail("unknown key: " + key);
+        }
+        if (value.IsNull()) {
+            // An empty value leaves the option at its default.
+            continue;
+        }
         if (!value.IsScalar()) {
             throw fail(key + ": not a single value");
         }
@@ -74,9 +84,6 @@ std::vector<std::string> config_args(const std::string& path) {
             out.push_back(option);
             out.push_back(value.Scalar());
             continue;
-        }
-        if (key != "allow_tx" && key != "allow_pa" && key != "realtime") {
-            throw fail("unknown key: " + key);
         }
         bool on = false;
         if (!YAML::convert<bool>::decode(value, on)) {

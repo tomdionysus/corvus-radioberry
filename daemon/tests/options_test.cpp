@@ -156,17 +156,28 @@ TEST_CASE("radioberryd refuses a bad config file", "[options]") {
                     std::invalid_argument);
 }
 
-TEST_CASE("the installed default config allows transmit with the PA off", "[options]") {
+TEST_CASE("an empty config value leaves the default", "[options]") {
+    const Options o = parse_options({"--config", ConfigFile("mac:\nport: 1030\n").path});
+    CHECK_FALSE(o.daemon.mac);
+    CHECK(o.daemon.port == 1030);
+    CHECK_THROWS_AS(config_args(ConfigFile("colour:\n").path), std::invalid_argument);
+}
+
+TEST_CASE("the installed default config: radioberryd's defaults, drive ceiling 150", "[options]") {
     const Options o = parse_options({"--config", RADIOBERRY_DEFAULT_CONFIG});
-    CHECK(o.daemon.tx.allow_tx);
+    const Options d = parse_options({});
+    CHECK_FALSE(o.daemon.tx.allow_tx);
     CHECK_FALSE(o.daemon.tx.allow_pa);
     CHECK(o.daemon.tx.drive_ceiling == 150);
-    CHECK(o.daemon.tx.watchdog == 120s);
-    // Everything else is radioberryd's own default.
-    const Options d = parse_options({});
+    CHECK(o.daemon.tx.watchdog == d.daemon.tx.watchdog);
     CHECK(o.device == d.device);
+    CHECK(o.daemon.address == d.daemon.address);
     CHECK(o.daemon.port == d.daemon.port);
+    CHECK(o.daemon.mac == d.daemon.mac);
+    CHECK(o.daemon.client_timeout == d.daemon.client_timeout);
     CHECK(o.daemon.frequency_ppm == d.daemon.frequency_ppm);
+    CHECK(o.daemon.iq_convention == d.daemon.iq_convention);
+    CHECK(o.daemon.p2_rx_gain_db == d.daemon.p2_rx_gain_db);
     CHECK(o.daemon.realtime == d.daemon.realtime);
     CHECK(o.log_level == d.log_level);
 }
