@@ -68,6 +68,33 @@ sh tools/check-format.sh
 step "SPDX headers"
 sh tools/check-spdx.sh
 
+kernel_sources="driver/kernel/radioberry.c driver/kernel/rb_logic.h driver/kernel/rb_pio.h
+    driver/include/radioberry_ioctl.h"
+kbuild=/lib/modules/$(uname -r)/build
+checkpatch=${CHECKPATCH:-$kbuild/scripts/checkpatch.pl}
+if [ -f "$checkpatch" ]; then
+    step "checkpatch"
+    # shellcheck disable=SC2086
+    perl "$checkpatch" --no-tree --file --quiet --show-types $kernel_sources
+    echo "checkpatch: ok"
+else
+    step "checkpatch: skipped, set CHECKPATCH to the kernel's scripts/checkpatch.pl"
+fi
+
+if command -v sparse >/dev/null && [ -f "$kbuild/Makefile" ]; then
+    step "sparse"
+    rm -rf build-sparse && mkdir -p build-sparse && cp driver/kernel/* build-sparse/
+    out=$(make -s -C "$kbuild" M="$top/build-sparse" RB_INCLUDE="$top/driver/include" C=2 \
+        modules 2>&1)
+    if [ -n "$out" ]; then
+        echo "$out"
+        exit 1
+    fi
+    echo "sparse: ok"
+else
+    step "sparse: skipped, needs sparse and the running kernel's headers"
+fi
+
 step "release build and tests"
 cmake --preset default >/dev/null
 cmake --build --preset default -j "$jobs"

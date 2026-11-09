@@ -93,14 +93,14 @@ static const u16 rb_tx_instructions[] = {
 
 static const struct rb_pio_program rb_rx_program = {
 	.instructions = rb_rx_instructions,
-	.length = (u8)(sizeof(rb_rx_instructions) / sizeof(rb_rx_instructions[0])),
+	.length = (u8)ARRAY_SIZE(rb_rx_instructions),
 	.wrap_target = 0,
 	.wrap = 17,
 };
 
 static const struct rb_pio_program rb_tx_program = {
 	.instructions = rb_tx_instructions,
-	.length = (u8)(sizeof(rb_tx_instructions) / sizeof(rb_tx_instructions[0])),
+	.length = (u8)ARRAY_SIZE(rb_tx_instructions),
 	.wrap_target = 0,
 	.wrap = 8,
 };

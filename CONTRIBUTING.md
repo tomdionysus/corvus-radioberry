@@ -29,7 +29,10 @@ TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
 - [tools/ci-pi.sh](tools/ci-pi.sh) is the merge gate. On the Pi it runs
   the format check ([tools/check-format.sh](tools/check-format.sh),
   clang-format 19), the SPDX check
-  ([tools/check-spdx.sh](tools/check-spdx.sh)), the release, sanitizer
+  ([tools/check-spdx.sh](tools/check-spdx.sh)), the kernel's `checkpatch.pl`
+  over the driver (no errors or warnings; set `CHECKPATCH` if it is not in
+  the kernel build tree's `scripts/`), `sparse` over the driver through
+  kbuild (no output), the release, sanitizer
   and coverage builds with their tests, the driver hardware tests (skipped
   while another program holds `/dev/radioberry`), and the coverage
   summary; when the ABI header is installed it also builds the tools
@@ -64,7 +67,11 @@ TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
 - Every source file starts with `// SPDX-License-Identifier: GPL-2.0-or-later`
   (`/* ... */` in C and headers shared with the kernel). Code taken from
   a third-party work keeps its copyright and licence header beneath it.
-- [.clang-format](.clang-format) is authoritative.
+- [.clang-format](.clang-format) is authoritative for C++. The kernel module
+  and the ABI header follow kernel style, checked by `checkpatch.pl`.
+  Under `--strict` it also asks for `BIT()` and kernel types, which the
+  headers shared with userspace cannot use: `BIT()` is an `unsigned long`,
+  and the ABI header is userspace API.
 - Dependencies come only from Debian trixie packages. Adding one means
   adding it to the README's `apt install` line and
   [docs/licensing.md](docs/licensing.md).

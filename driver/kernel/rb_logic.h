@@ -11,6 +11,7 @@
 #define RB_LOGIC_H
 
 #ifdef __KERNEL__
+#include <linux/array_size.h>
 #include <linux/string.h>
 #include <linux/types.h>
 #else
@@ -22,6 +23,7 @@ typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 #endif
 
 #define RB_CMD_BYTES 6
@@ -40,7 +42,7 @@ typedef uint64_t u64;
 
 static inline u8 rb_cmd_addr(const u8 *tx) { return (u8)(tx[1] >> 1); }
 
-static inline bool rb_cmd_ptt(const u8 *tx) { return (tx[1] & 1u) != 0; }
+static inline bool rb_cmd_ptt(const u8 *tx) { return tx[1] & 1u; }
 
 static inline u32 rb_cmd_data(const u8 *tx)
 {

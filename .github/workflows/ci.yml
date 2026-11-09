@@ -29,7 +29,7 @@ jobs:
           apt-get install -y --no-install-recommends \
             build-essential cmake pkg-config device-tree-compiler git ca-certificates \
             libliquid-dev libgpiod-dev libi2c-dev libyaml-cpp-dev nlohmann-json3-dev \
-            libspdlog-dev libsystemd-dev catch2 lcov clang-format-19 python3 \
+            libspdlog-dev libsystemd-dev catch2 lcov clang-format-19 python3 perl \
             curl gnupg  # Codecov's uploader verifies its own signature
 
       - uses: actions/checkout@v4
@@ -39,7 +39,20 @@ jobs:
       - name: Trust the checkout
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      # checkpatch.pl and its data files from the Raspberry Pi kernel
+      # (rpi-6.18.y); sparse needs the Pi's kernel headers, so it runs on
+      # the Pi only.
+      - name: Fetch checkpatch
+        run: |
+          base=https://raw.githubusercontent.com/raspberrypi/linux/31a34885388835dce2460744d7961f2b9e7dc416/scripts
+          mkdir -p /opt/checkpatch
+          for f in checkpatch.pl spelling.txt const_structs.checkpatch; do
+            curl -fsSL "$base/$f" -o "/opt/checkpatch/$f"
+          done
+
       - name: Build and test
+        env:
+          CHECKPATCH: /opt/checkpatch/checkpatch.pl
         run: sh tools/ci-pi.sh --local
 
       - name: Upload coverage

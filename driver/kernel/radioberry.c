@@ -246,7 +246,7 @@ static int rb_wait_nstatus(struct rb_dev *rb, int level, unsigned int timeout_us
 	for (waited = 0; waited < timeout_us; waited += 10) {
 		if (gpiod_get_value_cansleep(rb->nstatus) == level)
 			return 0;
-		udelay(10);
+		usleep_range(10, 20);
 	}
 	return -ETIMEDOUT;
 }
@@ -360,8 +360,8 @@ static void rb_rx_dma_done(void *param)
 	spin_unlock_irqrestore(&rb->rx_lock, flags);
 
 	if (resyncs || dropped)
-		rb_debug(rb, "RX period of %u words: %llu resyncs, %llu words dropped\n", n, resyncs,
-			 dropped);
+		rb_debug(rb, "RX period of %u words: %llu resyncs, %llu words dropped\n", n,
+			 resyncs, dropped);
 	if (overruns)
 		rb_debug(rb, "RX ring full: %llu frames dropped\n", overruns);
 
@@ -432,8 +432,8 @@ static int rb_tx_submit(struct rb_dev *rb)
 		wake_up_interruptible(&rb->tx_wait);
 
 		atomic_inc(&s->inflight);
-		ret = rp1_pio_sm_xfer_data(rb->pio, s->sm, RP1_PIO_DIR_TO_SM, bytes, s->slot[idx], 0,
-					   rb_tx_dma_done, rb);
+		ret = rp1_pio_sm_xfer_data(rb->pio, s->sm, RP1_PIO_DIR_TO_SM, bytes, s->slot[idx],
+					   0, rb_tx_dma_done, rb);
 		if (ret) {
 			atomic_dec(&s->inflight);
 			dev_err_ratelimited(rb->dev, "TX DMA submit failed: %d; %u bytes dropped\n",
@@ -511,7 +511,7 @@ static int rb_worker(void *arg)
 		rb_check_stall(rb);
 		/* Back off on a submit error rather than spin on it. */
 		if (rb_rx_submit(rb) || rb_tx_submit(rb))
-			msleep(10);
+			usleep_range(10000, 11000);
 	}
 	return 0;
 }
@@ -1020,7 +1020,7 @@ static long rb_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 			held = rp1_pio_sm_set_enabled(rb->pio, &off) == 0;
 			if (held)
-				udelay(20);
+				usleep_range(20, 30);
 		}
 		ret = rb_command_locked(rb, c.tx, c.rx);
 		if (!ret) {
