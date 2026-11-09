@@ -3,6 +3,15 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-09: First FT8 contacts over Protocol 2, operated by the owner
+  on 40 m: piHPSDR (Protocol 2) and WSJT-X on the Pi, `radioberryd
+  --frequency-ppm 22.9 --allow-tx --allow-pa --drive-ceiling 150`, drive
+  79 to 115, two contacts. PSK Reporter: 17 reports in the first
+  three CQ slots, -10 to -25 dB, 15 of them at 7 076 472 to 7 076 494 Hz.
+  Each FT8 transmission 12.4 to 13.9 s at 47 850 to 47 998 samples per
+  second to the gateware, 0 TX blocks dropped, no faults, and about 94
+  driver TX underruns per second (Protocol 1 transmissions logged none;
+  see the open item).
 - 2026-11-09: Protocol 2 in `radioberryd` (`daemon/src/p2/`): discovery
   (board 6, the gateware's version and receiver count), General, Receiver
   and Transmitter Specific, High Priority both ways, DDC I/Q from ports

@@ -30,7 +30,7 @@ Debian trixie packages.
 | Gateware, CL016 | `gateware/` | ✗ | Built, not tested on a CL016 board; misses AD9866 TX output timing (`gateware/PROVENANCE.md`) |
 | Kernel driver `radioberry.ko`, overlay, ABI header | `driver/` | ✓ | Loads the gateware at boot; receive and transmit streams; sysfs `reload`, stall indicator, `debug` parameter |
 | Radio daemon `radioberryd`, Protocol 1 | `daemon/` | ✓ | Hermes-Lite 2 dialect, receive and transmit, UDP and TCP; transmit policy and fail-safes; frequency calibration; FT8 contacts on 40 m with piHPSDR and WSJT-X |
-| Radio daemon `radioberryd`, Protocol 2 | `daemon/` | ✓ | Receive verified with piHPSDR (Protocol 2) and `ft8rx`; transmit tested against the fake device only, not yet on air; no wideband, diversity, PureSignal or radio-side CW keyer |
+| Radio daemon `radioberryd`, Protocol 2 | `daemon/` | ✓ | Receive and transmit; FT8 contact on 40 m with piHPSDR (Protocol 2) and WSJT-X; TX underruns under investigation; no wideband, diversity, PureSignal or radio-side CW keyer |
 | `radioberryd` as a systemd service | `daemon/` | ✗ | Not started; run by hand for now |
 | Example FT8 client `ft8rx` | `examples/ft8/` | ✓ | Receive only over Protocol 1 or 2: decodes FT8, never transmits; optional build |
 | Gateware loader `rbload` | `tools/` | ✗ | Not started |

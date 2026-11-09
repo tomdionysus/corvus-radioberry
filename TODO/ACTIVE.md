@@ -12,8 +12,8 @@ its date.
   `docs/fault-rx-lockup.md`), `rbprobe`, `rbcat`, `rbctl`, the driver
   harness `rbdrivertest` and the CI gate `tools/ci-pi.sh`.
 - `radioberryd`: Protocol 1 (HL2 dialect) receive and transmit over UDP
-  and TCP, and Protocol 2 over UDP (receive verified on the radio,
-  transmit against the fake device only), one owning client, transmit
+  and TCP, and Protocol 2 over UDP (FT8 contact on 40 m through piHPSDR
+  in Protocol 2), one owning client, transmit
   only with `--allow-tx` through the transmit policy and fail-safes,
   frequency calibration (`--frequency-ppm`, +22.9 on the development
   board), I/Q convention option. Not yet a service: started by hand.
@@ -23,8 +23,9 @@ its date.
   HackRF (no spurs or image above a broadband floor about 46 dB down).
 - `ft8rx` (`examples/ft8`, optional): receive-only FT8 decoder over
   Protocol 1 or 2.
-- Next: real-time setup and the systemd service; the HL2 drive item and
-  Protocol 2 transmit on air wait for the owner's go-ahead to transmit.
+- Next: the Protocol 2 TX underruns, then real-time setup and the
+  systemd service; the HL2 drive item and the Protocol 2 output checks
+  wait for the owner's go-ahead to transmit.
 
 ## Standing decisions
 
@@ -96,6 +97,15 @@ Nothing open.
       output against gain code across the range, then decide whether
       `radioberryd` maps HL2 drive to Radioberry codes. Until then piHPSDR
       is calibrated by hand (its per-band PA calibration, about 45 to 50).
+- [ ] Protocol 2 TX underruns: through piHPSDR in Protocol 2 the driver
+      counts about 94 TX underruns per second while transmitting (1 300
+      in a 13.9 s FT8 transmission), at 47 850 to 47 998 samples per
+      second delivered and 0 blocks dropped; Protocol 1 transmissions
+      logged none. FT8 decoded widely regardless. Find whether the
+      gateware's FIFO is ever starved or only the driver's ring, and
+      remove the cause if it is the daemon's (Protocol 2 TX blocks are 60
+      samples against Protocol 1's 126). Acceptance: underruns no higher
+      than Protocol 1's in a 13.9 s FT8 transmission into the dummy load.
 - [ ] Real-time setup: thread priorities, CPU affinity, socket buffer
       sizes, `SO_PRIORITY`; RX packet jitter over Wi-Fi measured and
       recorded in `docs/platform.md`.
@@ -135,9 +145,10 @@ Nothing open.
 Transmit items each need the owner's go-ahead at the time.
 
 - [ ] SparkSDR and Quisk receive and tune via Protocol 1.
-- [ ] Transmit via Protocol 2 with piHPSDR into the dummy load, then on
-      air: output and spectrum as for Protocol 1 (TX I/Q decimated from
-      192 to 48 ksps in the daemon).
+- [ ] Protocol 2 transmit output: power into the dummy load against
+      Protocol 1 at the same piHPSDR settings, and the HackRF spectrum
+      against Protocol 1's (no spurs or image above a floor about 46 dB
+      down); TX I/Q is decimated from 192 to 48 ksps in the daemon.
 - [ ] corvus-protocol end-to-end run, logged in `docs/` (FT8 is done).
 - [ ] Two-tone linearity. A test client's two tones (700 and 1900 Hz)
       measured third-order products at -13 to -15 dBc at every drive from
