@@ -19,18 +19,22 @@ complete coverage; the kernel module's pure logic is compiled into a
 userspace test binary for the same purpose. All dependencies come from
 Debian trixie packages.
 
-## Status (2026-11-09, v0.1.0)
+## Status (2026-11-09, v0.1.1)
 
-| Component | Directory | State |
-|---|---|---|
-| Platform probe `rbprobe` | `tools/rbprobe/` | working |
-| Stream tool `rbcat` | `tools/rbcat/` | working |
-| Command tool `rbctl` | `tools/rbctl/` | working |
-| FPGA gateware, Hermes-Lite 2 Radioberry PIO variants 75.3 | `gateware/` | CL025 built and verified on hardware; its receive-stream lock-up (`docs/fault-rx-lockup.md`) is worked around by the driver; CL016 built, untested, misses AD9866 TX output timing (`gateware/PROVENANCE.md`) |
-| Kernel driver `radioberry.ko`, overlay, ABI header | `driver/` | working: loads the gateware at boot, receive streaming verified, TX path carried zero samples with PTT clear; sysfs `reload`, stall indicator, `debug` parameter |
-| Radio daemon `radioberryd` | `daemon/` | Protocol 1 (Hermes-Lite 2 dialect) receive and transmit over UDP and TCP, transmit policy and fail-safes, frequency calibration; verified on air with piHPSDR and WSJT-X (FT8 contacts on 40 m). Protocol 2, systemd service: not started |
-| Example FT8 client `ft8rx` | `examples/ft8/` | receive only (decodes FT8, never transmits); working, optional build |
-| Loader and protocol tools (`rbload`, `p1probe`, `p2probe`) | `tools/` | not started |
+| Component | Directory | Working | Notes |
+|---|---|---|---|
+| Platform probe `rbprobe` | `tools/rbprobe/` | ✓ | Reports host, boot, driver, gateware, FPGA, PA board and daemon state; text, JSON or YAML |
+| Stream tool `rbcat` | `tools/rbcat/` | ✓ | Receive streams and measurements without the daemon; zero TX samples with PTT clear |
+| Command tool `rbctl` | `tools/rbctl/` | ✓ | Single gateware commands; anything that can transmit needs `--allow-tx` |
+| Gateware, CL025 (HL2 Radioberry PIO variant 75.3) | `gateware/` | ✓ | Built from source and verified on hardware; its receive-stream lock-up (`docs/fault-rx-lockup.md`) is worked around by the driver |
+| Gateware, CL016 | `gateware/` | ✗ | Built, not tested on a CL016 board; misses AD9866 TX output timing (`gateware/PROVENANCE.md`) |
+| Kernel driver `radioberry.ko`, overlay, ABI header | `driver/` | ✓ | Loads the gateware at boot; receive and transmit streams; sysfs `reload`, stall indicator, `debug` parameter |
+| Radio daemon `radioberryd`, Protocol 1 | `daemon/` | ✓ | Hermes-Lite 2 dialect, receive and transmit, UDP and TCP; transmit policy and fail-safes; frequency calibration; FT8 contacts on 40 m with piHPSDR and WSJT-X |
+| Radio daemon `radioberryd`, Protocol 2 | `daemon/` | ✗ | Not started |
+| `radioberryd` as a systemd service | `daemon/` | ✗ | Not started; run by hand for now |
+| Example FT8 client `ft8rx` | `examples/ft8/` | ✓ | Receive only: decodes FT8, never transmits; optional build |
+| Gateware loader `rbload` | `tools/` | ✗ | Not started |
+| Protocol test clients `p1probe`, `p2probe` | `tools/` | ✗ | Not started |
 
 The design of the whole stack is in `docs/plan-v1.md`; the open work, in
 order, is in `TODO/ACTIVE.md`.
