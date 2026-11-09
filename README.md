@@ -30,7 +30,8 @@ The Radioberry and its original software come from the
 [Radioberry project](https://github.com/pa3gsb/Radioberry-2.x). A
 [ready-to-run Raspberry Pi 5 image](https://pa3gsb.gumroad.com/l/radioberry)
 of the original software is sold by the Radioberry's author; buying it
-supports their work.
+supports their work. Please consider buying it even if you don't use it:
+the Radioberry hardware is a work of art.
 
 The code is C++20, with C only where the kernel or a shared ABI header
 requires it, tested with Catch2. All dependencies are Debian trixie
