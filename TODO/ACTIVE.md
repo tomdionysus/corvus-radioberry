@@ -7,7 +7,7 @@ item is removed from here and recorded at the top of
 
 ## Where things stand
 
-- Released: v0.2.0.
+- Released: v0.3.0.
 - Working on the development Pi: the CL025 gateware (75.3, built from
   source), the driver (0.4.0; the PIO gateware's RX lock-up worked around,
   [docs/fault-rx-lockup.md](../docs/fault-rx-lockup.md)), `rbprobe`,

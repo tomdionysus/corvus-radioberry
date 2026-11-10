@@ -3,6 +3,15 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-10: v0.3.0 released: the first release as Debian packages
+  (`radioberry`, `radioberry-dkms`, `radioberry-dev`), and the README's
+  section for a Pi coming from the original software. Release check on
+  the development Pi with the packages built from the release tree
+  (differing from the tag only in the version strings and this entry)
+  installed over the Pi 4 branch build and rebooted: the packaged overlay
+  in place, driver 0.4.0 loaded by DKMS, `rbprobe` exits 0; `ft8rx` over
+  `radioberryd` on 20 m decoded 1 message in four slots over Protocol 1
+  (22532 packets, 0 lost) and 4 over Protocol 2 (12102 packets, 0 lost).
 - 2026-11-09: Debian packages `radioberry`, `radioberry-dkms` (driver
   built by DKMS), `radioberry-dev`, built by `tools/build-deb.sh`; the FPGA
   type is a debconf question; the overlay is copied to `/boot/firmware`
