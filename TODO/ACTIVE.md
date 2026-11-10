@@ -26,7 +26,8 @@ item is removed from here and recorded at the top of
   floor about 46 dB down).
 - `ft8rx` (`examples/ft8`, optional): receive-only FT8 decoder over
   Protocol 1 or 2.
-- Next: fuzzing the packet parsers and servers, and the integration
+- Next: `rbprobe` reporting an install of the original software
+  (section 4); fuzzing the packet parsers and servers, and the integration
   test's fault injection; the HL2 drive item and
   the Protocol 2 output checks wait for the board owner's go-ahead to
   transmit.
@@ -116,9 +117,34 @@ Nothing open.
       `p2probe` against the daemon and the fake device (streams, MOX
       allowed and refused, a busy radio); the fault injection is open.
 
-## 4. Protocol tools (`tools/`)
+## 4. Tools (`tools/`)
 
-Nothing open.
+- [ ] `rbprobe` reports an install of the original RadioBerry software. Its
+      installer is a shell script, so dpkg cannot see it, and both installs
+      use the same names (`radioberry.ko`, `radioberry.dtbo` and
+      `dtoverlay=radioberry`, `/dev/radioberry`, `radioberry.service`,
+      compatible `sdr,radioberry`); with both present, depmod loads ours
+      from `updates/dkms/`, whichever overlay was copied last is used
+      (theirs puts `sdr,radioberry` on a root platform node, so our driver
+      never binds and there is no device), and the unit in
+      `/etc/systemd/system` overrides ours and runs their daemon, as root,
+      against our driver with a different ioctl ABI. Signals, from
+      definitive to supporting: `/dev/radioberry` not a misc device (major
+      10) or `/sys/class/radioberry/` present; `/sys/module/radioberry/version`
+      and `modinfo` strings of the loaded module and of any `radioberry.ko`
+      on disk; the installed `radioberry.dtbo` differing from the packaged
+      copy under `/usr`, or decompiling to `sdr,radioberry` at `/`;
+      `/lib/modules/$(uname -r)/kernel/drivers/sdr/radioberry.ko`;
+      `/etc/systemd/system/radioberry.service` with
+      `ExecStart=/etc/init.d/radioberryd`, `/etc/init.d/radioberryd`,
+      `/usr/local/bin/radioberry`. Report it as a blocker named "the
+      original RadioBerry software", list the files found, and say what to
+      remove; remove nothing. `postinst` prints the same list. Add a
+      "Coming from the original software" section to
+      [docs/packaging.md](../docs/packaging.md). Acceptance: tests through
+      the fake source for each signal alone and combined, and no finding on
+      a Pi with only the packages installed (the development Pi, where the
+      original's unit, init script and overlay were moved aside by hand).
 
 ## 5. Gateware
 
