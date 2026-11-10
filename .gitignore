@@ -16,3 +16,17 @@ output_files/
 *.rpt
 *.summary
 *.qws
+
+# Debian package build
+debian/changelog
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/files
+debian/*.substvars
+debian/*.debhelper
+debian/*.debhelper.log
+debian/tmp/
+debian/radioberry/
+debian/radioberry-dkms/
+debian/radioberry-dev/
+obj-*/

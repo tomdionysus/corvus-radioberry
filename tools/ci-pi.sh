@@ -124,7 +124,10 @@ cmake --preset coverage >/dev/null
 cmake --build --preset coverage -j "$jobs"
 cmake --build --preset coverage --target coverage
 
+# cmake --install puts the header in /usr/local/include, radioberry-dev in
+# /usr/include.
 installed_abi=/usr/local/include/radioberry_ioctl.h
+[ -f "$installed_abi" ] || installed_abi=/usr/include/radioberry_ioctl.h
 if [ -f "$installed_abi" ]; then
     step "userspace against the installed ABI header"
     cmake -S . -B build-abi -DRADIOBERRY_ABI_INCLUDE_DIR="$(dirname "$installed_abi")" \

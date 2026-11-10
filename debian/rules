@@ -1,0 +1,38 @@
+#!/usr/bin/make -f
+# SPDX-License-Identifier: GPL-2.0-or-later
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+include /usr/share/dpkg/pkg-info.mk
+
+DKMS_SRC = debian/radioberry-dkms/usr/src/radioberry-$(DEB_VERSION_UPSTREAM)
+
+%:
+	dh $@ --buildsystem=cmake
+
+# The driver is built on the target by DKMS, and the gateware the driver
+# loads is linked by the install script for the FPGA the user chooses.
+# /boot/firmware is FAT, where dpkg cannot replace a file (it needs a hard
+# link), so the overlay is installed under /usr and copied by postinst.
+override_dh_auto_configure:
+	dh_auto_configure -- \
+		-DCMAKE_BUILD_TYPE=RelWithDebInfo \
+		-DFPGATYPE=CL025 \
+		-DRADIOBERRY_BUILD_MODULE=OFF \
+		-DRADIOBERRY_INSTALL_FIRMWARE=OFF \
+		-DRADIOBERRY_OVERLAY_DIR=/usr/share/radioberry/overlays \
+		-DRADIOBERRY_VERSION=v$(DEB_VERSION)
+
+override_dh_install:
+	dh_install
+	install -d $(DKMS_SRC)/include
+	install -m 644 driver/kernel/Kbuild driver/kernel/radioberry.c \
+		driver/kernel/rb_logic.h driver/kernel/rb_pio.h $(DKMS_SRC)/
+	install -m 644 driver/include/radioberry_ioctl.h $(DKMS_SRC)/include/
+
+override_dh_dkms:
+	dh_dkms -V $(DEB_VERSION_UPSTREAM)
+
+# Started by the install script only when /dev/radioberry exists: until the
+# overlay is enabled and the Pi rebooted, the device it binds to is absent.
+override_dh_installsystemd:
+	dh_installsystemd --no-start
