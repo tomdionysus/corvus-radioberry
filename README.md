@@ -129,6 +129,37 @@ otherwise. The service starts now and at every boot.
 | `radioberry.service`, sysusers.d entry, udev rule | `/usr/local/lib/systemd/system/`, `/usr/local/lib/sysusers.d/`, `/usr/local/lib/udev/rules.d/` |
 | daemon config, if there is none | `/etc/radioberry/config.yaml` |
 
+## Coming from the original software
+
+The original RadioBerry software and this one use the same names:
+`radioberry.ko`, `radioberry.dtbo` and `dtoverlay=radioberry`,
+`/dev/radioberry`, `radioberry.service` and the device-tree compatible
+`sdr,radioberry`. They cannot share a Pi, and a Pi that has had both ends
+up with a mix of files: depmod loads whichever module is found first,
+whichever overlay was copied last is the one used (the original's places
+`sdr,radioberry` on a platform node, so this driver never binds to it and
+there is no `/dev/radioberry`), and a unit in `/etc/systemd/system`
+overrides the packaged one and runs the original daemon, as root, against
+this driver's different ioctl interface.
+
+The original's install script places these files; remove them before
+installing this software, or after it if `rbprobe` reports the driver
+missing on a Pi that had the original:
+
+| File | Note |
+|---|---|
+| `/lib/modules/$(uname -r)/kernel/drivers/sdr/radioberry.ko` | one per kernel it was built for; run `sudo depmod` after removing it |
+| `/etc/systemd/system/radioberry.service` | `sudo systemctl disable --now radioberry` first |
+| `/etc/init.d/radioberryd` | started by that unit |
+| `/usr/local/bin/radioberry` | the original daemon |
+| `/usr/local/include/radioberry_ioctl.h` | the original's ioctl header; a different interface from this driver's |
+| `/boot/firmware/overlays/radioberry.dtbo` | replaced by this software's overlay on install; keep `dtoverlay=radioberry` in `config.txt` |
+| `/lib/firmware/radioberry.rbf` | replaced by this software's gateware on install |
+
+Then reboot, and `rbprobe` should exit 0. The `dtoverlay=radioberry` line
+the original's installer adds to `config.txt` serves both; add
+`dtparam=i2c_arm=on` as above.
+
 ## TX & PA
 
 **Transmit and the PA ship OFF, for safety.** The installed
