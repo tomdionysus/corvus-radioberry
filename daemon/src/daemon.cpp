@@ -126,6 +126,11 @@ void Daemon::on_fault(const Fault& fault) {
     }
 }
 
+void Daemon::update_run() {
+    const std::lock_guard lock(run_mutex_);
+    service_.control().set_run(server_.running() || p2_server_.running());
+}
+
 void Daemon::on_packet(std::span<const std::uint8_t> packet, const Peer& from,
                        std::chrono::nanoseconds now) {
     // Protocol 2 shares the base port for discovery and General packets;
@@ -133,11 +138,13 @@ void Daemon::on_packet(std::span<const std::uint8_t> packet, const Peer& from,
     if (!from.tcp && (is_p2_discovery(packet) || p2::is_general(packet))) {
         if (protocol2_) {
             p2_server_.on_packet(p2::kGeneralPort, packet, from, now);
+            update_run();
         }
         return;
     }
     if (protocol1_) {
         server_.on_packet(packet, from, now);
+        update_run();
     }
 }
 
@@ -214,6 +221,7 @@ bool Daemon::run(const std::atomic<bool>& stop) {
                                     const Peer& from) {
             if (protocol2_) {
                 p2_server_.on_packet(port, packet, from, clock());
+                update_run();
             }
         };
         while (!stop_p2) {
@@ -245,6 +253,7 @@ bool Daemon::run(const std::atomic<bool>& stop) {
         policy_.tick(now);
         server_.tick();
         p2_server_.tick();
+        update_run();  // a client timed out or lost the radio
         const bool transmitting = policy_.transmitting();
         if (transmitting != was_transmitting) {
             const DeviceSnapshot s = service_.snapshot();

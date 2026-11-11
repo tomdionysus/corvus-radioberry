@@ -94,7 +94,8 @@ RX parser and drain the same TX ring.
   inputs with pull-downs) through gpiolib; the driver maps the registers
   of their GPIO block, which must be `brcm,bcm2711-gpio`.
 - The thread clocks up to 256 RX words, then the pending TX words, then
-  sleeps 0.5 to 1 ms when the gateware had nothing.
+  sleeps 0.5 to 1 ms when the gateware had nothing. With run clear it
+  clocks no RX and sleeps until run is set or TX words arrive.
 - RX clock hold: a mutex the thread holds while clocking.
 - The RX bus (`rx_pi_pio.v`) advances on each rising clock edge; with more
   than 12 values in its FIFO it raises sample-ready for one clock, then
@@ -118,6 +119,8 @@ RX parser and drain the same TX ring.
 - TX: bounce-buffered DMA in periods of 256 samples, fed by the same
   thread.
 - RX clock hold: the RX state machine is stopped.
+- With run clear the RX state machine is stopped too; the periods in
+  flight wait for it and the thread sleeps.
 - Capacity: with PIO clock divider 2 (100 MHz from the 200 MHz RP1 clock,
   five PIO cycles per nibble) one value takes 42 PIO cycles, at most about
   2.38 million values per second.

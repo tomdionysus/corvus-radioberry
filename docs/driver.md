@@ -44,6 +44,11 @@ boards' trees.
   documents the ABI.
 - Closing the device sends the gateware a command that clears run, PTT,
   the TX permission bit, PA enable and drive.
+- Receive moves only while the last command sent had run set. With run
+  clear (from boot, while closed, and while `radioberryd` has no client
+  streaming) the RX clock stands still, so the bus and the driver's thread
+  are idle. When run is set again the stream restarts and the parser
+  settles to whole frames, as after a receiver-count change.
 
 ## Gateware loading and sysfs
 

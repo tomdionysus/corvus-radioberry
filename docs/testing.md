@@ -31,6 +31,14 @@ CPU at 1.5 GHz.
   overruns; the driver's thread took 38% of one core.
 - `ft8rx` decodes over both protocols with no packets lost; WSJT-X through
   piHPSDR transmits FT8, decoded on PSK Reporter.
+- Idle: with `/dev/radioberry` closed the driver's thread
+  took 0% of a core over 10 s; with `radioberryd` running and no client,
+  0.0% for the driver's thread and 0.2% for all the daemon's threads over
+  30 s (before RX was gated on run: a whole core for the thread from boot). 100 client
+  sessions, alternating `p1probe` and `p2probe` and one and two receivers,
+  all passed with no stalls; `ft8rx` afterwards decoded 87 and 86 messages
+  in four slots over Protocols 1 and 2 with no packets lost, and the
+  thread went back to 0%.
 - `rbbus` (the driver's bus code in userspace, `chrt -f 50`, 30 s per
   setting, `rbload` before each):
 

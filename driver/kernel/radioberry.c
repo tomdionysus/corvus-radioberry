@@ -5,7 +5,9 @@
  * Binds to the "sdr,radioberry" device on spi0 created by the radioberry
  * overlay. On probe it loads the gateware through passive serial, reads
  * the gateware identity over SPI, starts the RX and TX streams, and creates
- * /dev/radioberry (see include/radioberry_ioctl.h for the interface).
+ * /dev/radioberry (see include/radioberry_ioctl.h for the interface). RX
+ * moves only while the last command sent had run set; otherwise its clock
+ * stands still and the bus and the stream thread are idle.
  * Writing 1 to the sysfs attribute "reload" while the device is closed
  * stops the streams, reloads the gateware, re-reads its identity and
  * restarts the streams.
@@ -191,6 +193,12 @@ struct rb_transport {
 	/* Stops the RX clock (true) until rx_release(); false if not running. */
 	bool (*rx_hold)(struct rb_dev *rb);
 	void (*rx_release)(struct rb_dev *rb);
+	/*
+	 * Stops RX after rx_paused is set, returning once no RX is clocked;
+	 * restarts it after rx_paused is cleared. Safe while not running.
+	 */
+	void (*rx_pause)(struct rb_dev *rb);
+	void (*rx_resume)(struct rb_dev *rb);
 };
 
 struct rb_dev {
@@ -204,6 +212,12 @@ struct rb_dev {
 	u8 *spi_tx, *spi_rx;   /* DMA-safe command buffers */
 	bool ptt;
 	bool run; /* run bit of the last command sent */
+	/*
+	 * RX stopped because run is clear (written under cmd_lock): the RX
+	 * clock stands still, so the bus and the thread are idle while nothing
+	 * streams (rb_rx_gate()).
+	 */
+	bool rx_paused;
 
 	/* Stall detection, worker thread only. */
 	u64 rx_words_seen;
@@ -276,6 +290,40 @@ static int rb_command_locked(struct rb_dev *rb, const u8 *tx, u8 *rx)
 	return 0;
 }
 
+/*
+ * RX moves only while run is set. The gateware streams RX whatever run
+ * says, so with run clear (closed, or open with no client streaming) the
+ * driver stops the RX clock and the bus and the thread go idle. On resume
+ * the parser settles, as after a receiver-count change, since the words
+ * that follow the pause need not continue the frame in progress, and frames
+ * queued before the pause are dropped. settle_us: the command that set run
+ * also changed the receiver count, so the clock stays still that long for
+ * the gateware's RX FIFO clear (rx_clock_hold_us).
+ */
+static void rb_rx_gate(struct rb_dev *rb, unsigned int settle_us)
+{
+	unsigned long flags;
+
+	lockdep_assert_held(&rb->cmd_lock);
+	if (!READ_ONCE(rb->run) && !rb->rx_paused) {
+		WRITE_ONCE(rb->rx_paused, true);
+		rb->tp->rx_pause(rb);
+		rb_trace(rb, "RX paused: run clear\n");
+	} else if (READ_ONCE(rb->run) && rb->rx_paused) {
+		if (settle_us)
+			usleep_range(settle_us, settle_us + settle_us / 4);
+		spin_lock_irqsave(&rb->rx_lock, flags);
+		rb_rx_set_receivers(&rb->parser, rb->receivers);
+		rb_ring_reset(&rb->rx_ring);
+		rb->rx_overrun = false;
+		spin_unlock_irqrestore(&rb->rx_lock, flags);
+		WRITE_ONCE(rb->rx_paused, false);
+		rb->tp->rx_resume(rb);
+		wake_up(&rb->work_wait);
+		rb_trace(rb, "RX resumed: run set\n");
+	}
+}
+
 static int rb_command_safe(struct rb_dev *rb, u8 *rx)
 {
 	u8 tx[RB_CMD_BYTES];
@@ -284,6 +332,8 @@ static int rb_command_safe(struct rb_dev *rb, u8 *rx)
 	rb_cmd_safe(tx);
 	mutex_lock(&rb->cmd_lock);
 	ret = rb_command_locked(rb, tx, rx);
+	if (!ret)
+		rb_rx_gate(rb, 0);
 	mutex_unlock(&rb->cmd_lock);
 	return ret;
 }
@@ -720,10 +770,12 @@ static int rb_setup_stream(struct rb_dev *rb, struct rb_stream *s, bool tx)
 	return 0;
 }
 
+/* Starts TX, and RX unless it is paused (rb_rx_gate()), with the thread. */
 static int rb_start_streams(struct rb_dev *rb)
 {
 	struct rp1_pio_sm_set_enabled_args on = {
-		.mask = (u16)(BIT(rb->rx.sm) | BIT(rb->tx.sm)), .enable = 1,
+		.mask = (u16)((rb->rx_paused ? 0 : BIT(rb->rx.sm)) | BIT(rb->tx.sm)),
+		.enable = 1,
 	};
 	int ret;
 
@@ -831,6 +883,22 @@ static void rb_pio_rx_release(struct rb_dev *rb)
 	rp1_pio_sm_set_enabled(rb->pio, &on);
 }
 
+/*
+ * The RX state machine stops, so the clock stands still and nothing reaches
+ * the DMA; the periods in flight wait for it and the thread sleeps.
+ */
+static void rb_pio_rx_pause(struct rb_dev *rb)
+{
+	if (rb->pio && rb->rx.sm >= 0)
+		rb_pio_rx_hold(rb);
+}
+
+static void rb_pio_rx_resume(struct rb_dev *rb)
+{
+	if (rb->pio && rb->rx.sm >= 0)
+		rb_pio_rx_release(rb);
+}
+
 static const struct rb_transport rb_pio_transport = {
 	.name = "rp1-pio",
 	.rx_values_max = RB_PIO_RX_VALUES_MAX,
@@ -838,6 +906,8 @@ static const struct rb_transport rb_pio_transport = {
 	.down = rb_pio_down,
 	.rx_hold = rb_pio_rx_hold,
 	.rx_release = rb_pio_rx_release,
+	.rx_pause = rb_pio_rx_pause,
+	.rx_resume = rb_pio_rx_resume,
 };
 
 /* ---- CPU-clocked buses (Pi 4) --------------------------------------- */
@@ -878,24 +948,45 @@ static bool rb_bb_tx(struct rb_dev *rb)
 	return true;
 }
 
+/* While RX is paused: wake for TX words, for resume, or to stop. */
+static bool rb_bb_paused_wake(struct rb_dev *rb)
+{
+	unsigned long flags;
+	bool tx_data;
+
+	if (kthread_should_stop() || !READ_ONCE(rb->rx_paused))
+		return true;
+	spin_lock_irqsave(&rb->tx_lock, flags);
+	tx_data = rb_ring_used(&rb->tx_ring) != 0;
+	spin_unlock_irqrestore(&rb->tx_lock, flags);
+	return tx_data;
+}
+
 static int rb_bb_worker(void *arg)
 {
 	struct rb_dev *rb = arg;
 	unsigned int got;
-	bool tx_busy;
+	bool paused, tx_busy;
 
 	while (!kthread_should_stop()) {
 		mutex_lock(&rb->bb_lock);
-		got = rb_bb_rx_run(&rb->bb, rb->bb_rx_words, RB_BB_RX_BATCH, RB_BB_RX_MAX_IDLE);
+		/* Read under bb_lock: rb_bb_rx_pause() waits for this run. */
+		paused = READ_ONCE(rb->rx_paused);
+		got = paused ? 0 :
+			       rb_bb_rx_run(&rb->bb, rb->bb_rx_words, RB_BB_RX_BATCH,
+					    RB_BB_RX_MAX_IDLE);
 		tx_busy = rb_bb_tx(rb);
 		mutex_unlock(&rb->bb_lock);
 		if (got && rb_rx_consume(rb, rb->bb_rx_words, got))
 			wake_up_interruptible(&rb->rx_wait);
 		rb_check_stall(rb);
-		if (!got && !tx_busy)
-			usleep_range(RB_BB_IDLE_MIN_US, RB_BB_IDLE_MAX_US);
-		else
+		if (got || tx_busy)
 			cond_resched();
+		else if (paused)
+			wait_event_interruptible_timeout(rb->work_wait, rb_bb_paused_wake(rb),
+							 msecs_to_jiffies(100));
+		else
+			usleep_range(RB_BB_IDLE_MIN_US, RB_BB_IDLE_MAX_US);
 	}
 	return 0;
 }
@@ -1021,6 +1112,21 @@ static void rb_bb_rx_release(struct rb_dev *rb)
 	mutex_unlock(&rb->bb_lock);
 }
 
+/*
+ * The thread reads rx_paused under bb_lock before each run, so once the
+ * run in progress ends it clocks no more RX and sleeps.
+ */
+static void rb_bb_rx_pause(struct rb_dev *rb)
+{
+	mutex_lock(&rb->bb_lock);
+	mutex_unlock(&rb->bb_lock);
+}
+
+static void rb_bb_rx_resume(struct rb_dev *rb)
+{
+	wake_up(&rb->work_wait);
+}
+
 static const struct rb_transport rb_bb_transport = {
 	.name = "cpu",
 	.rx_values_max = 0,
@@ -1028,6 +1134,8 @@ static const struct rb_transport rb_bb_transport = {
 	.down = rb_bb_down,
 	.rx_hold = rb_bb_rx_hold,
 	.rx_release = rb_bb_rx_release,
+	.rx_pause = rb_bb_rx_pause,
+	.rx_resume = rb_bb_rx_resume,
 };
 
 /* The transport for this SoC, or NULL. */
@@ -1055,11 +1163,15 @@ static void rb_stop_streams(struct rb_dev *rb)
 	rb->tp->down(rb);
 }
 
-/* RX parsing for one receiver at 48 ksps, empty rings, zeroed statistics. */
+/*
+ * RX parsing for one receiver at 48 ksps, empty rings, zeroed statistics,
+ * and RX paused unless run is set (before the streams start).
+ */
 static void rb_reset_stream_state(struct rb_dev *rb)
 {
 	unsigned long flags;
 
+	WRITE_ONCE(rb->rx_paused, !READ_ONCE(rb->run));
 	spin_lock_irqsave(&rb->rx_lock, flags);
 	rb->receivers = 1;
 	rb->rate_code = 0;
@@ -1341,7 +1453,7 @@ static long rb_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		struct radioberry_command c;
 		unsigned int hold = READ_ONCE(rx_clock_hold_us);
 		unsigned int receivers, rate_code;
-		bool held = false;
+		bool count_change, held = false;
 
 		if (copy_from_user(&c, uarg, sizeof(c)))
 			return -EFAULT;
@@ -1353,10 +1465,13 @@ static long rb_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		 * change clears the gateware's RX FIFO, whose read side runs on the
 		 * clock this driver's RX state machine drives. With the state
 		 * machine stopped that clock is still while the clear is asserted
-		 * and released.
+		 * and released. While RX is paused the clock is already still; a
+		 * command that also sets run keeps it so for the hold time
+		 * (rb_rx_gate()).
 		 */
-		if (hold && rb_cmd_general(c.tx, &receivers, &rate_code) &&
-		    receivers != READ_ONCE(rb->receivers)) {
+		count_change = rb_cmd_general(c.tx, &receivers, &rate_code) &&
+			       receivers != READ_ONCE(rb->receivers);
+		if (hold && count_change && !rb->rx_paused) {
 			held = rb->tp->rx_hold(rb);
 			if (held)
 				usleep_range(20, 30);
@@ -1371,6 +1486,8 @@ static long rb_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			rb->tp->rx_release(rb);
 			rb_trace(rb, "RX clock held for the receiver-count change\n");
 		}
+		if (!ret)
+			rb_rx_gate(rb, count_change ? hold : 0);
 		mutex_unlock(&rb->cmd_lock);
 		if (ret)
 			return ret;

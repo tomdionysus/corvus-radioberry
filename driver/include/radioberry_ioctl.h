@@ -4,7 +4,10 @@
  *
  * read()  returns whole RX frames. A frame is one sample period for every
  *         active receiver: I0 Q0 I1 Q1 ... each a 24-bit big-endian two's
- *         complement value, so 6 bytes per receiver. A read shorter than
+ *         complement value, so 6 bytes per receiver. RX moves only while
+ *         the last command sent had RADIOBERRY_CMD_RUN set (from driver
+ *         0.5): with run clear, as after open, the RX bus and the driver's
+ *         streaming are idle and nothing arrives. A read shorter than
  *         one frame fails with EINVAL; otherwise it returns as many whole
  *         frames as fit. Blocks unless O_NONBLOCK. poll() reports POLLIN
  *         when at least one frame is queued and POLLERR after an RX

@@ -34,7 +34,7 @@ TEST_CASE("registers go out once each, latest value, in order of first set", "[c
     REQUIRE(first);
     CHECK(first->address == 0x02);
     CHECK(first->data == 14074000);
-    CHECK(first->flags == Command::kRun);
+    CHECK(first->flags == 0);  // run is clear until set_run(true)
     CHECK_FALSE(first->ptt);
     const auto second = control.next();
     REQUIRE(second);
@@ -67,6 +67,8 @@ TEST_CASE("registers refuse transmit bits and a disabled TX watchdog", "[control
 
 TEST_CASE("the transmit bits and run are stamped on every command", "[control]") {
     Control control;
+    CHECK_FALSE(control.run());
+    control.set_run(true);
     CHECK(control.run());
     control.set_transmit({true, true, true});
     CHECK(control.transmit() == TransmitState{true, true, true});
@@ -100,6 +102,7 @@ TEST_CASE("the transmit bits and run are stamped on every command", "[control]")
 
 TEST_CASE("safe clears the transmit bits and sends 0x09 first, hazards cleared", "[control]") {
     Control control;
+    control.set_run(true);
     control.set(reg(0x02, 14074000));
     control.next();
     control.set(reg(0x00, 0x08));

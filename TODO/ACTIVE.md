@@ -26,7 +26,7 @@ item is removed from here and recorded at the top of
   floor about 46 dB down).
 - `ft8rx` (`examples/ft8`, optional): receive-only FT8 decoder over
   Protocol 1 or 2.
-- Next: the RX stream with no client (section 3); `rbprobe`
+- Next: `rbprobe`
   reporting an install of the original software (section 4); fuzzing the packet parsers and servers, and the integration test's
   fault injection; the HL2 drive item and
   the Protocol 2 output checks wait for the board owner's go-ahead to
@@ -103,14 +103,6 @@ Nothing open.
 
 ## 3. Daemon (`daemon/`)
 
-- [ ] The RX stream with no client: `radioberryd` keeps the gateware
-      streaming and reads it with no client connected, and on a Pi 4 the
-      driver's CPU transport thread then holds a whole core. Stop the RX
-      stream while no client is streaming and start it on the first
-      client's start, without slowing that start. Acceptance: on a Pi 4
-      with no client, the driver's thread idle and the daemon's threads
-      under 1% of a core; `ft8rx` over both protocols afterwards, 0
-      packets lost.
 - [ ] HL2 drive compatibility: the HL2 gateware takes 0x09's top four
       bits as AD9866 TX gain codes 0 to 15, the RadioBerry build maps the
       whole byte to codes 0 to 39 (`ad9866ctrl.v`), and the PA hat is not

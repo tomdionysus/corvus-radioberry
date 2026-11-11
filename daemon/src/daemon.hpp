@@ -5,6 +5,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <mutex>
 #include <optional>
 #include <span>
 
@@ -80,6 +81,10 @@ private:
     void start_thread(const char* name, int priority, bool rename = true);
     void on_packet(std::span<const std::uint8_t> packet, const Peer& from,
                    std::chrono::nanoseconds now);
+    // Run is set while a client of either protocol streams and clear
+    // otherwise, so the driver moves RX only for a client. Called after
+    // anything that can start or stop a client, from either network thread.
+    void update_run();
 
     p1::Identity identity_;
     Session session_;
@@ -95,6 +100,7 @@ private:
     bool protocol1_ = true;
     bool protocol2_ = true;
     std::atomic<bool> realtime_failed_{false};
+    std::mutex run_mutex_;  // update_run(): one reading of both servers at a time
 };
 
 }  // namespace radioberry::daemon

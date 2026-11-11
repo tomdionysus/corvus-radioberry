@@ -48,6 +48,7 @@ otherwise ("no /dev/radioberry", or "/dev/radioberry is busy" while
 | non-blocking writes fill the TX ring and it drains at 48 ksps | zero samples fill the ring to EAGAIN with PTT clear, then drain at 48 000 words a second (within 512) with no underruns |
 | unknown ioctls fail with ENOTTY | an unknown ioctl number |
 | after close the gateware reports no transmit state | closing sends the safe command: PTT clear in the statistics and in the gateware's reply |
+| RX is idle while run is clear and resumes whole when it is set | no RX words for 300 ms after open and after a run-clear command (with a receiver-count change meanwhile); with run set again, three-receiver frames whole, more than 12 000 in 300 ms, no resyncs or dropped words, no stall |
 | the daemon's device layer streams through the driver | `radioberryd`'s device layer for one second: 47 000 to 49 000 frames, no sequence gaps, no dropped blocks, no faults, TX zeros written with PTT clear |
 | the RX stream never stalled during the run | runs last: sysfs `rx_stalled` is 0 and `rx_stalls` did not change, so no [receive lock-up](fault-rx-lockup.md) happened during the run |
 

@@ -12,7 +12,13 @@ result, and where it lives.
   client, `rb-rx-send` went from 7.6% of a core (70 219 `sched_yield`
   calls in 5 s) to 1.4% (none), and the delivery thread now starts
   before the device, so `rx-queue-full` at start went from 10 of 10
-  starts to 0 of 10.
+  starts to 0 of 10. The driver moves RX only while run is set, and
+  `radioberryd` sets run only while a client streams: on a Pi 4 with no
+  client the driver's thread went from a whole core to 0% and the
+  daemon's threads to 0.2%; 100 client sessions over both protocols
+  passed, `rbdrivertest` (with a new pause and resume test) passed, and
+  `ft8rx` decoded over both protocols with no packets lost
+  (`docs/testing.md`).
   CI on the Pi 5 (release, ASan and UBSan, coverage 98.9% of lines) and
   on GitHub passed on the merged tree.
 - 2026-11-11: Raspberry Pi 4 on hardware (branch `item/platform-rpi4`):
