@@ -392,6 +392,22 @@ TEST_CASE("radioberryd transmits for the owner when allowed", "[daemon]") {
     CHECK_FALSE(device.commands.back().can_transmit());
 }
 
+TEST_CASE("a driver that carries fewer RX values runs as before", "[daemon]") {
+    FakeDevice device;
+    device.idle_wait_ms = 1;
+    device.info_.rx_values_max = 192000;  // the Pi 4's CPU transport
+    Running r(device);
+    CHECK(r.daemon.identity().rx_values_max == 192000);
+    // A discovery reply shows run() went past the start-up log.
+    const sockaddr_in to = loopback(r.daemon.port());
+    Socket client(SOCK_DGRAM);
+    const auto discovery = discovery_packet();
+    ::sendto(client.fd, discovery.data(), discovery.size(), 0,
+             reinterpret_cast<const sockaddr*>(&to), sizeof to);
+    CHECK(receive(client.fd).size() == 60);
+    CHECK(r.finish());
+}
+
 TEST_CASE("driver TX underruns do not drop MOX", "[daemon]") {
     FakeDevice device;
     device.idle_wait_ms = 1;
