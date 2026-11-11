@@ -41,7 +41,8 @@ sudo apt update && sudo apt install radioberry
 Then enable the driver, configure and start the service: the
 [Quickstart](docs/quickstart.md) has the steps. Updates arrive with
 `sudo apt upgrade`. To build from source instead, see
-[Building from source](docs/building.md).
+[Building from source](docs/building.md). Supported and tested kernels:
+[docs/kernels.md](docs/kernels.md).
 
 ## Getting started
 

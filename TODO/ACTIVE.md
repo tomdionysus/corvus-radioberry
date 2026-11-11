@@ -7,9 +7,10 @@ item is removed from here and recorded at the top of
 
 ## Where things stand
 
-- Released: v0.4.0 (Raspberry Pi 4 and 5).
+- Released: v0.4.1 (Raspberry Pi 4 and 5, Linux 6.12 and 6.18,
+  [docs/kernels.md](../docs/kernels.md)).
 - Working on the development Pi: the CL025 gateware (75.3, built from
-  source), the driver (0.4.0, the release's version; the PIO gateware's RX lock-up worked around,
+  source), the driver (0.4.1, the release's version; the PIO gateware's RX lock-up worked around,
   [docs/fault-rx-lockup.md](../docs/fault-rx-lockup.md)), `rbprobe`,
   `rbcat`, `rbctl`, `rbload`, `p1probe`, `p2probe`, the driver harness
   `rbdrivertest` and the CI gate [tools/ci-pi.sh](../tools/ci-pi.sh).

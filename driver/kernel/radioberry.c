@@ -16,8 +16,9 @@
  * of the driver is shared:
  *
  * - Pi 5 (BCM2712): two RP1 PIO state machines, built only on the stock
- *   rp1-pio kernel API. Stream DMA uses rp1-pio's bounce buffers: up to
- *   RB_DMA_SLOTS periods are in flight per direction and a FIFO-priority
+ *   rp1-pio kernel API. RX DMA writes the driver's own coherent buffers,
+ *   TX DMA reads rp1-pio's bounce buffers: up to RB_DMA_SLOTS periods
+ *   are in flight per direction and a FIFO-priority
  *   kernel thread refills them, so the state machines never wait for a
  *   restart.
  * - Pi 4 (BCM2711), which has no PIO: a FIFO-priority kernel thread
