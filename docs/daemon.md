@@ -61,8 +61,14 @@ One figure corrects every band.
 - These faults drop MOX, which stays dropped until the client releases
   it: an invalid TX block, a full RX queue, a device error, a full TX
   queue, a gap in the host sequence (Protocol 1 host packets, Protocol 2
-  TX I/Q), and the TX watchdog. TX underruns, RX resyncs, overruns and
-  stalls are logged and do not drop MOX.
+  TX I/Q), and the TX watchdog. RX resyncs, overruns and stalls are
+  logged and do not drop MOX. Driver TX underruns are logged at debug
+  level only: the driver counts one each time its short ring empties
+  between client bursts while the gateware's FIFO still holds samples.
+- TX buffer: each Protocol 1 stream starts with a 40 ms TX buffer
+  latency and the gateware's 12 ms PTT hang time (address 0x17); a
+  client's lower latency is raised to 40 ms. Protocol 2 streams use
+  100 ms and 20 ms.
 - No PA interlock is claimed.
 
 ## Protocol 2

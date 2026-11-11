@@ -108,6 +108,11 @@ TEST_CASE("a started client receives packets until it stops", "[server]") {
     CHECK(rig.server.running());
     REQUIRE(rig.server.client());
     CHECK(*rig.server.client() == kA);
+    // Starting sets the PTT hang time and the TX buffer latency.
+    const auto timing = rig.drain();
+    REQUIRE(timing.size() == 1);
+    CHECK(timing[0].address == 0x17);
+    CHECK(timing[0].data == (12u << 8 | 40));
     rig.status = {true, true};
     rig.rx_packet();
     rig.rx_packet();
@@ -236,6 +241,7 @@ TEST_CASE("a slower bus, as on a Pi 4, runs fewer receivers", "[server]") {
 TEST_CASE("without --allow-tx nothing transmits", "[server]") {
     Rig rig;
     rig.packet(start_packet(1), kA);
+    REQUIRE(rig.drain().size() == 1);  // the TX timing set at start
     // MOX, drive 255 with PA enable and VNA, and a disabled TX watchdog.
     rig.packet(
         host_packet(0, {0x13, 0xffu << 24 | 1u << 23 | 1u << 19 | 1u << 18}, {0x2e, 31u << 8 | 20}),
@@ -249,14 +255,17 @@ TEST_CASE("without --allow-tx nothing transmits", "[server]") {
     CHECK(commands[0].address == 0x09);
     CHECK(commands[0].data == 1u << 18);
     CHECK_FALSE(commands[0].ptt);
-    CHECK_FALSE(rig.control.value(0x17));
-    // A valid hang time afterwards is taken.
-    rig.packet(host_packet(2, {0x2e, 12u << 8 | 20}, {}), kA);
-    CHECK(rig.control.value(0x17) == (12u << 8 | 20));
+    CHECK(rig.control.value(0x17) == (12u << 8 | 40));  // the start value stands
+    // A valid hang time afterwards is taken, its latency raised to 40 ms.
+    rig.packet(host_packet(2, {0x2e, 10u << 8 | 20}, {}), kA);
+    CHECK(rig.control.value(0x17) == (10u << 8 | 40));
+    // A latency of 40 ms or more is taken as sent.
+    rig.packet(host_packet(3, {0x2e, 10u << 8 | 60}, {}), kA);
+    CHECK(rig.control.value(0x17) == (10u << 8 | 60));
     // MOX cleared, then set again: warned again (not observable here, but
     // the path runs).
-    rig.packet(host_packet(3, {}, {}), kA);
-    rig.packet(host_packet(4, {0x01, 0}, {}), kA);
+    rig.packet(host_packet(4, {}, {}), kA);
+    rig.packet(host_packet(5, {0x01, 0}, {}), kA);
     CHECK(rig.control.transmit() == TransmitState{});
 }
 

@@ -265,11 +265,13 @@ bool Daemon::run(const std::atomic<bool>& stop) {
             } else {
                 const double seconds = std::chrono::duration<double>(now - tx_started).count();
                 const auto words = driver.tx_words - tx_before.tx_words;
+                // Driver TX underruns are left out: they count every moment
+                // the driver's ring empties between client bursts, not the
+                // gateware's FIFO running dry (see breaks_transmit).
                 spdlog::info(
                     "transmission of {:.1f} s: {} samples to the gateware ({:.0f} per second), "
-                    "{} underruns, {} TX blocks dropped",
+                    "{} TX blocks dropped",
                     seconds, words, seconds > 0 ? static_cast<double>(words) / seconds : 0.0,
-                    driver.tx_underruns - tx_before.tx_underruns,
                     s.tx_blocks_dropped - dropped_before);
             }
             was_transmitting = transmitting;
