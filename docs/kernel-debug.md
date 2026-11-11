@@ -94,6 +94,11 @@ device is closed, when the gateware's run bit is clear and no receive
 data arrives to complete the transfers. The fix belongs in `rp1-pio`:
 free the records of terminated transfers, and free on its error paths.
 
+Driver 0.4.1 gives receive transfers its own DMA buffers
+([Kernels](kernels.md)). Under the same kernel it drew no KASAN, DMA API
+or UBSAN report, and kmemleak reported 4 records from
+`rp1_pio_sm_xfer_data()`, from transmit transfers in flight at teardown.
+
 ### The Pi 5 IOMMU driver sleeps under a spinlock
 
 During boot, before the driver loaded and again from the desktop

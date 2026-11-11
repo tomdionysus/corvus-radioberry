@@ -1,8 +1,8 @@
 # Requirements
 
 - Raspberry Pi 4 Model B or Raspberry Pi 5, running Raspberry Pi OS
-  (Debian 13 trixie, 64-bit) with its current kernel; each board's
-  minimum is in [Raspberry Pi 4](rpi4.md) and [Raspberry Pi 5](rpi5.md).
+  (Debian 13 trixie, 64-bit) with a 6.12 or 6.18 kernel; the tested
+  kernels are in [Kernels](kernels.md).
 - RadioBerry 2.x HAT: AD9866 front end, Intel Cyclone 10 LP 10CL025 or
   10CL016, 0 to 30 MHz.
 - Optional: the AURSINC "RadioBerry Preamp Board V2" (PCB marked PA5W V2)

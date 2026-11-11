@@ -79,9 +79,10 @@ reboot (the driver loads the gateware when it binds at boot).
 ### Upgrades and kernel updates
 
 An upgrade of `radioberry-dkms` builds the new module for every installed
-kernel; the module already loaded keeps running until the next reboot.
-`radioberry` restarts `radioberryd` after an upgrade. Reboot after an
-upgrade that changes the driver.
+kernel. `radioberry` then loads it in place of the running one (stopping
+`radioberryd` meanwhile) and restarts `radioberryd`. If the old module is
+in use by another program, the upgrade says so and the new one loads at
+the next reboot.
 
 A kernel update triggers DKMS to build the module for the new kernel,
 provided the new kernel's headers are installed (the

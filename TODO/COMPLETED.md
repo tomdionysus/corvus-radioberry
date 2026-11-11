@@ -3,6 +3,17 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-11: v0.4.1 released: the Pi 5 driver works on the 6.12
+  kernels as on 6.18 (receive buffers from the RP1 DMA controller passed
+  by DMA address, DMA request thresholds set by the driver;
+  `docs/kernels.md`), and a package upgrade loads the new driver in
+  place of the running one. Every `rpt-rpi-2712` and `rpt-rpi-v8` kernel
+  in the archive (6.12.25 to 6.18.60, 11 each) on both boards: DKMS built
+  the driver at kernel install, `rbprobe`, `ft8rx` on 40 m over both
+  protocols with no packets lost, `rbcat` clean, `rbdrivertest` passed;
+  one accepted anomaly (Pi 4, 6.12.75: one of 11 harness runs failed the
+  device-layer test with its test queue full). On the Pi 4, the README
+  install of 0.4.0 upgraded to 0.4.1 without a reboot or a warning.
 - 2026-11-11: v0.4.0 released: Raspberry Pi 4 support (the same packages
   and driver on the Pi 4 and Pi 5), `radioberryd --protocols`, true or
   false values for its switches, `i2c-dev` loaded at boot (a clean Pi

@@ -4,7 +4,7 @@
 [![codecov](https://codecov.io/gh/tomdionysus/corvus-radioberry/graph/badge.svg)](https://codecov.io/gh/tomdionysus/corvus-radioberry)
 [![CodeQL](https://github.com/tomdionysus/corvus-radioberry/actions/workflows/codeql.yml/badge.svg)](https://github.com/tomdionysus/corvus-radioberry/actions/workflows/codeql.yml)
 
-Version 0.4.0
+Version 0.4.1
 
 A self-contained software stack for the
 [RadioBerry 2.x HF transceiver HAT](https://github.com/pa3gsb/Radioberry-2.x/wiki)
@@ -41,7 +41,8 @@ sudo apt update && sudo apt install radioberry
 Then enable the driver, configure and start the service: the
 [Quickstart](docs/quickstart.md) has the steps. Updates arrive with
 `sudo apt upgrade`. To build from source instead, see
-[Building from source](docs/building.md).
+[Building from source](docs/building.md). Supported and tested kernels:
+[docs/kernels.md](docs/kernels.md).
 
 ## Getting started
 
