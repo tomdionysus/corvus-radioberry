@@ -42,13 +42,16 @@ target_link_libraries(radioberryd PRIVATE radioberryd_core radioberry_device Pkg
 install(TARGETS radioberryd RUNTIME DESTINATION ${CMAKE_INSTALL_SBINDIR})
 
 # The service: unit, udev rule (device group and systemd device unit),
-# system user, and the config file, which is never overwritten.
+# system user, i2c-dev loaded at boot, and the config file, which is never
+# overwritten.
 set(RADIOBERRY_SYSTEMD_UNIT_DIR "${CMAKE_INSTALL_PREFIX}/lib/systemd/system" CACHE PATH
     "Where radioberry.service is installed")
 set(RADIOBERRY_SYSUSERS_DIR "${CMAKE_INSTALL_PREFIX}/lib/sysusers.d" CACHE PATH
     "Where the radioberry system user's sysusers.d entry is installed")
 set(RADIOBERRY_UDEV_RULES_DIR "${CMAKE_INSTALL_PREFIX}/lib/udev/rules.d" CACHE PATH
     "Where the udev rule for /dev/radioberry is installed")
+set(RADIOBERRY_MODULES_LOAD_DIR "${CMAKE_INSTALL_PREFIX}/lib/modules-load.d" CACHE PATH
+    "Where the modules-load.d entry for i2c-dev is installed")
 set(RADIOBERRY_CONFIG_DIR "/etc/radioberry" CACHE PATH "Where config.yaml is installed")
 set(RADIOBERRYD ${CMAKE_INSTALL_FULL_SBINDIR}/radioberryd)
 set(RADIOBERRY_CONFIG_FILE ${RADIOBERRY_CONFIG_DIR}/config.yaml)
@@ -58,6 +61,8 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/radioberry.service
         DESTINATION ${RADIOBERRY_SYSTEMD_UNIT_DIR})
 install(FILES systemd/60-radioberry.rules DESTINATION ${RADIOBERRY_UDEV_RULES_DIR})
 install(FILES systemd/radioberry-sysusers.conf DESTINATION ${RADIOBERRY_SYSUSERS_DIR}
+        RENAME radioberry.conf)
+install(FILES systemd/radioberry-modules.conf DESTINATION ${RADIOBERRY_MODULES_LOAD_DIR}
         RENAME radioberry.conf)
 install(SCRIPT ${CMAKE_CURRENT_BINARY_DIR}/install-service.cmake)
 

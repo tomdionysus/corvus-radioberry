@@ -5,7 +5,9 @@ result, and where it lives.
 
 - 2026-11-11: v0.4.0 released: Raspberry Pi 4 support (the same packages
   and driver on the Pi 4 and Pi 5), `radioberryd --protocols`, true or
-  false values for its switches, and the documentation for GitHub Pages.
+  false values for its switches, `i2c-dev` loaded at boot (a clean Pi
+  had no `/dev/i2c-1` for `rbprobe`), and the documentation for GitHub
+  Pages.
   CI on the Pi 5 (release, ASan and UBSan, coverage 98.9% of lines) and
   on GitHub passed on the merged tree.
 - 2026-11-11: Raspberry Pi 4 on hardware (branch `item/platform-rpi4`):

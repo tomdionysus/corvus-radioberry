@@ -8,7 +8,7 @@ same packages serve both.
 
 | Package | Architecture | Contents |
 |---|---|---|
-| `radioberry` | arm64 | `radioberryd` and `radioberry.service`, `rbprobe`, `rbcat`, `rbctl`, `rbload`, `rbbus`, `p1probe`, `p2probe`, sysusers.d entry, udev rule, `/etc/radioberry/config.yaml`, both gateware images, the overlay |
+| `radioberry` | arm64 | `radioberryd` and `radioberry.service`, `rbprobe`, `rbcat`, `rbctl`, `rbload`, `rbbus`, `p1probe`, `p2probe`, sysusers.d entry, udev rule, modules-load.d entry for `i2c-dev`, `/etc/radioberry/config.yaml`, both gateware images, the overlay |
 | `radioberry-dkms` | all | the driver source, built by DKMS for every installed kernel |
 | `radioberry-dev` | all | `radioberry_ioctl.h` |
 | `radioberry-dbgsym` | arm64 | debug symbols for `radioberry` |
@@ -56,6 +56,7 @@ marking on the chip's package says which) and does the following:
 | tools | `/usr/bin/` |
 | `radioberryd` | `/usr/sbin/` |
 | unit, sysusers.d entry, udev rule | `/usr/lib/systemd/system/`, `/usr/lib/sysusers.d/`, `/usr/lib/udev/rules.d/` |
+| `i2c-dev` loaded at boot | `/usr/lib/modules-load.d/radioberry.conf` |
 | daemon config (conffile) | `/etc/radioberry/config.yaml` |
 
 The install does not edit `/boot/firmware/config.txt`. If it has no

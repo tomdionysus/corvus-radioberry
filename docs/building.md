@@ -44,6 +44,7 @@ To build the Debian packages instead, see [Debian packages](packaging.md).
 | `rbprobe`, `rbcat`, `rbctl`, `rbload`, `rbbus`, `p1probe`, `p2probe` | `/usr/local/bin/` |
 | `radioberryd` | `/usr/local/sbin/` |
 | `radioberry.service`, sysusers.d entry, udev rule | `/usr/local/lib/systemd/system/`, `/usr/local/lib/sysusers.d/`, `/usr/local/lib/udev/rules.d/` |
+| `i2c-dev` loaded at boot | `/usr/local/lib/modules-load.d/radioberry.conf` |
 | daemon config, if there is none | `/etc/radioberry/config.yaml` |
 
 After a kernel update, build and install again; the packages do this
