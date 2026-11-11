@@ -60,7 +60,7 @@ public:
 
     std::vector<Command> commands;
     std::uint8_t rate_code = 1;
-    std::uint8_t transport = 0;  // a driver before 0.5
+    std::uint8_t transport = 0;  // a driver up to release 0.3.0
     std::uint32_t rx_values_max = 0;
     bool fail_command = false;
 };
@@ -119,7 +119,7 @@ TEST_CASE("info and statistics without a command", "[rbctl]") {
     CHECK(j["statistics"]["commands"] == 0);
     CHECK(j["statistics"]["rx_overrun_flag"] == true);
     CHECK(j["statistics"]["ptt_flag"] == false);
-    // A driver before 0.5 reports neither.
+    // A driver up to release 0.3.0 reports neither.
     CHECK(j["info"]["transport"].is_null());
     CHECK(j["info"]["rx_values_max"].is_null());
 }

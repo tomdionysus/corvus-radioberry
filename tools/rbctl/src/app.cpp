@@ -113,7 +113,7 @@ Node info_node(const radioberry_info& i) {
     } else {
         n.set("rx_rate_ksps", Node());
     }
-    // Drivers before 0.5 report neither (0).
+    // Drivers up to release 0.3.0 report neither (0).
     switch (i.transport) {
         case 0:
             n.set("transport", Node());

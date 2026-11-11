@@ -337,7 +337,7 @@ TEST_CASE("a Pi 4 needs no RP1 PIO and has no PMIC", "[collect]") {
     CHECK(str(r, "driver.transport") == "cpu");
     CHECK(r.radio_can_run());
 
-    // A driver before 0.5 has no transport attribute.
+    // A driver up to release 0.3.0 has no transport attribute.
     FakeSource old = working_pi();
     old.files.erase("/sys/bus/spi/devices/spi0.0/transport");
     CHECK(collect(old, test_options()).root.at("driver.transport")->is_null());

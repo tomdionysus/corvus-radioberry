@@ -9,7 +9,7 @@ namespace radioberry::daemon {
 // What the Pi 5's PIO bus carries from the gateware: about 2.37 million
 // 24-bit values per second, measured (gateware/README.md section 5). The
 // driver reports its own figure (radioberry_info.rx_values_max), lower on a
-// Pi 4; drivers before 0.5 report 0, meaning this. One receiver at rate R
+// Pi 4; drivers up to release 0.3.0 report 0, meaning this. One receiver at rate R
 // needs 2R values per second.
 inline constexpr std::uint32_t kRxValuesPerSecondMax = 2'370'000;
 

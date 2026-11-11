@@ -78,8 +78,8 @@ static inline u32 rb_bb_lev(struct rb_bb_io *io)
 
 #include "rb_bitbang.h"
 
-#define RB_DRIVER_VERSION ((0u << 16) | (5u << 8) | 0u)
-#define RB_DRIVER_VERSION_STRING "0.5.0"
+#define RB_DRIVER_VERSION ((0u << 16) | (4u << 8) | 0u)
+#define RB_DRIVER_VERSION_STRING "0.4.0"
 
 #define RB_FIRMWARE_NAME "radioberry.rbf"
 #define RB_DMA_SLOTS 4

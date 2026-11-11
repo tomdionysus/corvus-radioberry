@@ -349,7 +349,7 @@ private:
         n.set("loaded", loaded_);
         const bool device = src_.exists(kDevicePath);
         n.set("device", device);
-        // "rp1-pio" (Pi 5) or "cpu" (Pi 4); absent before driver 0.5.
+        // "rp1-pio" (Pi 5) or "cpu" (Pi 4); absent up to release 0.3.0.
         n.set("transport", file_trimmed("/sys/bus/spi/devices/spi0.0/transport"));
 
         Node holders = Node::seq();
