@@ -29,6 +29,7 @@
  */
 
 #include <linux/delay.h>
+#include <linux/dma-mapping.h>
 #include <linux/firmware.h>
 #include <linux/fs.h>
 #include <linux/gpio/consumer.h>
@@ -39,7 +40,9 @@
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
+#include <linux/of_platform.h>
 #include <linux/pio_rp1.h>
+#include <linux/platform_device.h>
 #include <linux/poll.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
@@ -78,8 +81,8 @@ static inline u32 rb_bb_lev(struct rb_bb_io *io)
 
 #include "rb_bitbang.h"
 
-#define RB_DRIVER_VERSION ((0u << 16) | (4u << 8) | 0u)
-#define RB_DRIVER_VERSION_STRING "0.4.0"
+#define RB_DRIVER_VERSION ((0u << 16) | (4u << 8) | 1u)
+#define RB_DRIVER_VERSION_STRING "0.4.1"
 
 #define RB_FIRMWARE_NAME "radioberry.rbf"
 #define RB_DMA_SLOTS 4
@@ -132,6 +135,10 @@ MODULE_PARM_DESC(bb_settle_reads, "Pi 4: extra pin reads after each bus clock pu
 /* The PIO bus's RX ceiling, measured (gateware/README.md section 5). */
 #define RB_PIO_RX_VALUES_MAX 2370000
 
+/* rp1-pio's own values (drivers/misc/rp1-pio.c): FIFO depth, DMACTRL base. */
+#define RB_PIO_FIFO_DEPTH 8
+#define RB_PIO_DMACTRL_DEFAULT 0x80000100
+
 static unsigned int debug;
 module_param(debug, uint, 0644);
 MODULE_PARM_DESC(debug, "0: quiet; 1: rate-limited resyncs, overruns, underruns, commands; "
@@ -174,6 +181,7 @@ struct rb_stream {
 	int prog_offset;
 	bool prog_loaded;
 	u8 *slot[RB_DMA_SLOTS];
+	dma_addr_t slot_dma[RB_DMA_SLOTS]; /* RX: the slot's address for the RP1 DMA */
 	u32 slot_bytes[RB_DMA_SLOTS];
 	unsigned int submitted; /* free running slot counters */
 	unsigned int completed;
@@ -226,6 +234,7 @@ struct rb_dev {
 	u64 rx_stalls;
 
 	struct rp1_pio_client *pio;
+	struct device *pio_dma_dev; /* the RP1 DMA controller, a reference held */
 	struct rb_stream rx, tx;
 
 	/* Pi 4: CPU-clocked buses. bb_lock is held while the thread clocks. */
@@ -535,8 +544,13 @@ static int rb_rx_submit(struct rb_dev *rb)
 		idx = s->submitted % RB_DMA_SLOTS;
 		s->slot_bytes[idx] = READ_ONCE(rb->rx_period);
 		atomic_inc(&s->inflight);
+		/*
+		 * By DMA address, so the RP1 DMA writes the slot itself: given only
+		 * a buffer, rp1-pio before 6.18 receives into its own bounce buffer
+		 * and never copies it back.
+		 */
 		ret = rp1_pio_sm_xfer_data(rb->pio, s->sm, RP1_PIO_DIR_FROM_SM, s->slot_bytes[idx],
-					   s->slot[idx], 0, rb_rx_dma_done, rb);
+					   s->slot[idx], s->slot_dma[idx], rb_rx_dma_done, rb);
 		if (ret) {
 			atomic_dec(&s->inflight);
 			if (ret == -EBUSY)
@@ -711,6 +725,14 @@ static int rb_setup_stream(struct rb_dev *rb, struct rb_stream *s, bool tx)
 	struct rp1_pio_sm_set_enabled_args off = { 0 };
 	struct rp1_pio_sm_clear_fifos_args clear = { 0 };
 	struct rp1_pio_sm_init_args init = { 0 };
+	/*
+	 * DMA request levels that hold for any burst the RP1 DMA uses (up to
+	 * the FIFO depth): RX asks with the FIFO full, TX with it empty. With
+	 * 6.12's rp1-pio the levels did not match the bursts: each RX burst
+	 * returned the last word again in place of words not yet there, and
+	 * TX bursts overfilled the FIFO, losing about half the samples.
+	 */
+	struct rp1_pio_sm_set_dmactrl_args dmactrl = { 0 };
 	struct rb_sm_config cfg;
 	unsigned int i;
 	int ret;
@@ -724,7 +746,11 @@ static int rb_setup_stream(struct rb_dev *rb, struct rb_stream *s, bool tx)
 	rp1_pio_sm_set_enabled(rb->pio, &off);
 
 	for (i = 0; i < RB_DMA_SLOTS; i++) {
-		s->slot[i] = kzalloc(tx ? RB_TX_SLOT_BYTES : RB_RX_SLOT_BYTES, GFP_KERNEL);
+		if (tx)
+			s->slot[i] = kzalloc(RB_TX_SLOT_BYTES, GFP_KERNEL);
+		else
+			s->slot[i] = dma_alloc_coherent(rb->pio_dma_dev, RB_RX_SLOT_BYTES,
+							&s->slot_dma[i], GFP_KERNEL);
 		if (!s->slot[i])
 			return -ENOMEM;
 	}
@@ -767,6 +793,14 @@ static int rb_setup_stream(struct rb_dev *rb, struct rb_stream *s, bool tx)
 	}
 	clear.sm = (u16)s->sm;
 	rp1_pio_sm_clear_fifos(rb->pio, &clear);
+	dmactrl.sm = (u16)s->sm;
+	dmactrl.is_tx = tx;
+	dmactrl.ctrl = RB_PIO_DMACTRL_DEFAULT | (tx ? 0 : RB_PIO_FIFO_DEPTH);
+	ret = rp1_pio_sm_set_dmactrl(rb->pio, &dmactrl);
+	if (ret < 0) {
+		dev_err(rb->dev, "cannot set the %s DMA request level: %d\n", tx ? "TX" : "RX", ret);
+		return ret;
+	}
 	return 0;
 }
 
@@ -824,19 +858,47 @@ static void rb_pio_down(struct rb_dev *rb)
 		/*
 		 * Unclaims the state machines and frees their DMA. Transfers still in
 		 * flight are terminated without their callbacks; rp1-pio then leaks
-		 * its 64-byte record for each (docs/kernel-debug.md).
+		 * its 64-byte record for each TX one (RX transfers, given by DMA
+		 * address, have none; docs/kernel-debug.md).
 		 */
 		rp1_pio_close(rb->pio);
 		rb->pio = NULL;
 	}
 	for (i = 0; i < RB_DMA_SLOTS; i++) {
-		kfree(rb->rx.slot[i]);
+		if (rb->rx.slot[i])
+			dma_free_coherent(rb->pio_dma_dev, RB_RX_SLOT_BYTES, rb->rx.slot[i],
+					  rb->rx.slot_dma[i]);
 		kfree(rb->tx.slot[i]);
 		rb->rx.slot[i] = NULL;
 		rb->tx.slot[i] = NULL;
 	}
+	if (rb->pio_dma_dev) {
+		put_device(rb->pio_dma_dev);
+		rb->pio_dma_dev = NULL;
+	}
 	rb_stream_reset(&rb->rx);
 	rb_stream_reset(&rb->tx);
+}
+
+/*
+ * The RP1 DMA controller that serves the PIO (its first "dmas" entry), for
+ * RX slots it can write directly. Returns it with a reference held.
+ */
+static struct device *rb_pio_dma_device(void)
+{
+	struct device_node *pio_np, *dma_np;
+	struct platform_device *pdev;
+
+	pio_np = of_find_compatible_node(NULL, NULL, "raspberrypi,rp1-pio");
+	if (!pio_np)
+		return NULL;
+	dma_np = of_parse_phandle(pio_np, "dmas", 0);
+	of_node_put(pio_np);
+	if (!dma_np)
+		return NULL;
+	pdev = of_find_device_by_node(dma_np);
+	of_node_put(dma_np);
+	return pdev ? &pdev->dev : NULL;
 }
 
 /*
@@ -847,11 +909,17 @@ static int rb_pio_up(struct rb_dev *rb)
 {
 	int ret;
 
+	rb->pio_dma_dev = rb_pio_dma_device();
+	if (!rb->pio_dma_dev) {
+		dev_err(rb->dev, "cannot find the RP1 PIO's DMA controller\n");
+		return -ENODEV;
+	}
 	rb->pio = rp1_pio_open();
 	if (IS_ERR(rb->pio)) {
 		ret = PTR_ERR(rb->pio);
 		rb->pio = NULL;
 		dev_err(rb->dev, "cannot open the RP1 PIO: %d\n", ret);
+		rb_pio_down(rb);
 		return ret;
 	}
 	ret = rb_setup_stream(rb, &rb->rx, false);
