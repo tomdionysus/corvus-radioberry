@@ -41,6 +41,13 @@ fi
 
 #DEBHELPER#
 
+# dh_installsystemd --no-start adds no daemon-reload, so systemd would
+# keep the unit file it loaded before this one was unpacked (and warn on
+# the stop below).
+if [ "$1" = configure ] && [ -d /run/systemd/system ]; then
+    systemctl --system daemon-reload >/dev/null || true
+fi
+
 # An upgrade builds the new driver (radioberry-dkms is configured first)
 # but leaves the old one loaded: load the new one now, or say a reboot is
 # needed if the old one is in use.
@@ -63,13 +70,8 @@ if [ "$1" = configure ] && [ -e /sys/module/radioberry/version ]; then
     fi
 fi
 
-# dh_installsystemd --no-start adds no daemon-reload, so systemd would
-# keep the unit file it loaded before this one was unpacked.
 # radioberry.service binds to /dev/radioberry: start it now only if the
 # driver is already up; otherwise it starts at the next boot.
-if [ "$1" = configure ] && [ -d /run/systemd/system ]; then
-    systemctl --system daemon-reload >/dev/null || true
-    if [ -c /dev/radioberry ]; then
-        deb-systemd-invoke restart radioberry.service >/dev/null || true
-    fi
+if [ "$1" = configure ] && [ -d /run/systemd/system ] && [ -c /dev/radioberry ]; then
+    deb-systemd-invoke restart radioberry.service >/dev/null || true
 fi
