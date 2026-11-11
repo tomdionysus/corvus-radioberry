@@ -23,10 +23,11 @@ struct Options {
 Options parse_options(const std::vector<std::string>& args);
 
 // The options a config file stands for: each key is a long option with
-// `_` for `-` (`frequency_ppm: 1.5` is `--frequency-ppm 1.5`); `allow_tx`,
-// `allow_pa` and `realtime` are true or false. An empty file is no options.
-// Throws std::invalid_argument for an unreadable file, an unknown key, a
-// value that is not a scalar, or a switch that is not true or false.
+// `_` for `-` and the same value (`frequency_ppm: 1.5` is
+// `--frequency-ppm 1.5`, `allow_tx: true` is `--allow-tx true`);
+// `protocols` may also be a YAML list. An empty file is no options. Throws
+// std::invalid_argument for an unreadable file, an unknown key or a value
+// that is not a scalar; values are checked by parse_options.
 std::vector<std::string> config_args(const std::string& path);
 
 std::string usage();

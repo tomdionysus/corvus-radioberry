@@ -120,6 +120,7 @@ TEST_CASE("the service reports a stall and a failed start", "[service]") {
     {
         DeviceService service(device, faults.sink(), o);
         REQUIRE(service.start());
+        service.control().set_run(true);  // frames are expected only with run set
         REQUIRE(eventually([&] { return service.snapshot().stalled; }));
         CHECK(faults.size() == 1);
     }  // the destructor stops it

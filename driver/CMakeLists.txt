@@ -12,6 +12,7 @@ radioberry_add_kernel_module(radioberry
         ${CMAKE_CURRENT_SOURCE_DIR}/kernel/radioberry.c
         ${CMAKE_CURRENT_SOURCE_DIR}/kernel/rb_logic.h
         ${CMAKE_CURRENT_SOURCE_DIR}/kernel/rb_pio.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/kernel/rb_bitbang.h
         ${CMAKE_CURRENT_SOURCE_DIR}/include/radioberry_ioctl.h)
 
 find_program(DTC_EXECUTABLE dtc)
@@ -59,7 +60,7 @@ endif()
 install(FILES include/radioberry_ioctl.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 if(RADIOBERRY_BUILD_TESTS)
-    add_executable(driver_tests tests/logic_test.cpp tests/pio_test.cpp)
+    add_executable(driver_tests tests/logic_test.cpp tests/pio_test.cpp tests/bitbang_test.cpp)
     # The module's own logic is tested against the source tree's header.
     target_include_directories(driver_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/kernel ${CMAKE_CURRENT_SOURCE_DIR}/include)

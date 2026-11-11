@@ -5,6 +5,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <mutex>
 #include <optional>
 #include <span>
 
@@ -30,6 +31,10 @@ struct DaemonOptions {
     p1::IqConvention iq_convention = p1::IqConvention::Hl2;
     // Protocol 2: the LNA gain with no step attenuation, dB (-12 to 48).
     int p2_rx_gain_db = 14;
+    // The protocols served; a protocol that is off is not answered, not
+    // even its discovery.
+    bool protocol1 = true;
+    bool protocol2 = true;
     // SCHED_FIFO for the stream and network threads and locked memory
     // (realtime.hpp); without the privileges each is reported and skipped.
     bool realtime = true;
@@ -76,6 +81,10 @@ private:
     void start_thread(const char* name, int priority, bool rename = true);
     void on_packet(std::span<const std::uint8_t> packet, const Peer& from,
                    std::chrono::nanoseconds now);
+    // Run is set while a client of either protocol streams and clear
+    // otherwise, so the driver moves RX only for a client. Called after
+    // anything that can start or stop a client, from either network thread.
+    void update_run();
 
     p1::Identity identity_;
     Session session_;
@@ -88,7 +97,10 @@ private:
     double frequency_ppm_ = 0;
     bool iq_standard_ = false;
     bool realtime_ = true;
+    bool protocol1_ = true;
+    bool protocol2_ = true;
     std::atomic<bool> realtime_failed_{false};
+    std::mutex run_mutex_;  // update_run(): one reading of both servers at a time
 };
 
 }  // namespace radioberry::daemon

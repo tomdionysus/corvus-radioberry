@@ -8,6 +8,7 @@
 #include <map>
 #include <set>
 
+#include "radioberry/board.hpp"
 #include "radioberry/gateware_catalog.hpp"
 #include "radioberry/sha256.hpp"
 #include "text.hpp"
@@ -42,6 +43,7 @@ public:
 
     Report run() {
         kernel_ = trim(src_.read_file("/proc/sys/kernel/osrelease").value_or(""));
+        board_ = board_from_compatible(src_.read_file("/proc/device-tree/compatible").value_or(""));
         Report report;
         report.root = Node::map();
         report.root.set("host", host());
@@ -105,6 +107,11 @@ private:
     Node host() {
         Node n = Node::map();
         n.set("model", file_trimmed("/proc/device-tree/model"));
+        n.set("board", std::string(to_string(board_)));
+        if (board_ == Board::kOther) {
+            add(Severity::kBlocker, "host.board",
+                "not a Raspberry Pi 4 or 5 (BCM2711 or BCM2712); the driver supports only those");
+        }
 
         Node revision;
         if (auto raw = src_.read_file("/proc/device-tree/system/linux,revision")) {
@@ -289,9 +296,10 @@ private:
         spi.set("driver", bound);
         n.set("spi0_0", std::move(spi));
 
+        // Only a Pi 5 streams through the RP1 PIO.
         const bool pio = src_.exists("/sys/module/rp1_pio");
         n.set("rp1_pio_loaded", pio);
-        if (!pio) {
+        if (!pio && board_ == Board::kPi5) {
             add(Severity::kBlocker, "boot.rp1_pio", "the rp1_pio kernel module is not loaded");
         }
 
@@ -341,6 +349,8 @@ private:
         n.set("loaded", loaded_);
         const bool device = src_.exists(kDevicePath);
         n.set("device", device);
+        // "rp1-pio" (Pi 5) or "cpu" (Pi 4); absent up to release 0.3.0.
+        n.set("transport", file_trimmed("/sys/bus/spi/devices/spi0.0/transport"));
 
         Node holders = Node::seq();
         if (device) {
@@ -415,7 +425,7 @@ private:
         if (installed_->family != GatewareFamily::kRpi5Pio) {
             add(Severity::kBlocker, "firmware.family",
                 "the installed gateware is the " + std::string(to_string(installed_->family)) +
-                    " image; a Raspberry Pi 5 needs the rpi-5 PIO image");
+                    " image; the driver needs the rpi-5 PIO image (on a Pi 4 as well)");
         }
         return n;
     }
@@ -779,6 +789,7 @@ private:
     Source& src_;
     const Options& opt_;
     std::string kernel_;
+    Board board_ = Board::kOther;
     bool loaded_ = false;
     std::optional<KnownImage> installed_;
     std::optional<FpgaType> identified_;

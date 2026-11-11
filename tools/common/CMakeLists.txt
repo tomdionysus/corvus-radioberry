@@ -3,7 +3,8 @@ add_library(radioberry_common STATIC
     src/sha256.cpp
     src/gateware_catalog.cpp
     src/fpga_config.cpp
-    src/command.cpp)
+    src/command.cpp
+    src/board.cpp)
 target_include_directories(radioberry_common PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_BINARY_DIR}/generated)
@@ -26,6 +27,7 @@ if(RADIOBERRY_BUILD_TESTS)
         tests/gateware_catalog_test.cpp
         tests/fpga_config_test.cpp
         tests/command_test.cpp
+        tests/board_test.cpp
         tests/node_test.cpp
         tests/render_test.cpp)
     target_link_libraries(common_tests PRIVATE

@@ -137,6 +137,9 @@ TEST_CASE("radioberryd serves discovery and a UDP stream", "[daemon]") {
     CHECK(reply[9] == 75);
     CHECK(reply[21] == 3);
 
+    // No client streams yet: run is clear, so the driver moves no RX.
+    CHECK_FALSE(r.daemon.device().control().run());
+
     // Two receivers, then start.
     const auto config = host_packet(0, {0x00, 1u << 3 | 1u << 2}, {0x04, 14074000});
     ::sendto(client.fd, config.data(), config.size(), 0, reinterpret_cast<const sockaddr*>(&to),
@@ -148,10 +151,19 @@ TEST_CASE("radioberryd serves discovery and a UDP stream", "[daemon]") {
         std::this_thread::sleep_for(5ms);
     }
     REQUIRE(r.daemon.server().running());
+    for (int i = 0; i < 200 && !r.daemon.device().control().run(); ++i) {
+        std::this_thread::sleep_for(5ms);
+    }
+    CHECK(r.daemon.device().control().run());
     for (int i = 0; i < 200 && r.daemon.device().snapshot().receivers != 2; ++i) {
         std::this_thread::sleep_for(5ms);
     }
     REQUIRE(r.daemon.device().snapshot().receivers == 2);
+    {
+        const std::lock_guard lock(device.mutex);
+        REQUIRE_FALSE(device.commands.empty());
+        CHECK((device.commands.back().flags & Command::kRun) != 0);
+    }
 
     feed(device, 72 * 3);
     for (int i = 0; i < 3; ++i) {
@@ -168,6 +180,18 @@ TEST_CASE("radioberryd serves discovery and a UDP stream", "[daemon]") {
         std::this_thread::sleep_for(5ms);
     }
     CHECK_FALSE(r.daemon.server().running());
+    // The client stopped: run clear again, carried to the gateware.
+    bool run_cleared = false;
+    for (int i = 0; i < 200 && !run_cleared; ++i) {
+        {
+            const std::lock_guard lock(device.mutex);
+            run_cleared =
+                !device.commands.empty() && (device.commands.back().flags & Command::kRun) == 0;
+        }
+        std::this_thread::sleep_for(5ms);
+    }
+    CHECK(run_cleared);
+    CHECK_FALSE(r.daemon.device().control().run());
     CHECK(r.finish());
 
     const std::lock_guard lock(device.mutex);
@@ -179,6 +203,43 @@ TEST_CASE("radioberryd serves discovery and a UDP stream", "[daemon]") {
         tuned = tuned || (c.address == 0x02 && c.data == 14074000);
     }
     CHECK(tuned);
+}
+
+TEST_CASE("radioberryd answers only the protocols it serves", "[daemon]") {
+    for (const bool p1_on : {true, false}) {
+        FakeDevice device;
+        DaemonOptions o = Running::options();
+        o.protocol1 = p1_on;
+        o.protocol2 = !p1_on;
+        Running r(device, o);
+        const sockaddr_in to = loopback(r.daemon.port());
+        Socket client(SOCK_DGRAM);
+        timeout(client.fd, 300);
+        const auto p1 = discovery_packet();
+        ::sendto(client.fd, p1.data(), p1.size(), 0, reinterpret_cast<const sockaddr*>(&to),
+                 sizeof to);
+        const auto p1_reply = receive(client.fd);
+        const auto p2 = p2_discovery_packet();
+        ::sendto(client.fd, p2.data(), p2.size(), 0, reinterpret_cast<const sockaddr*>(&to),
+                 sizeof to);
+        const auto p2_reply = receive(client.fd);
+        if (p1_on) {
+            REQUIRE(p1_reply.size() == 60);
+            CHECK(p1_reply[0] == 0xef);
+            CHECK(p2_reply.empty());
+            // Packets to the other Protocol 2 ports are dropped too.
+            const sockaddr_in hp = loopback(r.daemon.p2_port(p2::kTxIqPort));
+            const std::vector<std::uint8_t> junk(64, 0);
+            ::sendto(client.fd, junk.data(), junk.size(), 0, reinterpret_cast<const sockaddr*>(&hp),
+                     sizeof hp);
+            CHECK(receive(client.fd).empty());
+        } else {
+            CHECK(p1_reply.empty());
+            REQUIRE(p2_reply.size() == 60);
+            CHECK(p2_reply[0] == 0);
+        }
+        CHECK(r.finish());
+    }
 }
 
 TEST_CASE("radioberryd serves discovery and a stream over TCP", "[daemon]") {

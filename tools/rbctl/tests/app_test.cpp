@@ -28,6 +28,8 @@ public:
         i.transmitters = 1;
         i.active_receivers = 2;
         i.rx_rate_code = rate_code;
+        i.transport = transport;
+        i.rx_values_max = rx_values_max;
         return i;
     }
     radioberry_stats stats() override {
@@ -58,6 +60,8 @@ public:
 
     std::vector<Command> commands;
     std::uint8_t rate_code = 1;
+    std::uint8_t transport = 0;  // a driver up to release 0.3.0
+    std::uint32_t rx_values_max = 0;
     bool fail_command = false;
 };
 
@@ -115,6 +119,30 @@ TEST_CASE("info and statistics without a command", "[rbctl]") {
     CHECK(j["statistics"]["commands"] == 0);
     CHECK(j["statistics"]["rx_overrun_flag"] == true);
     CHECK(j["statistics"]["ptt_flag"] == false);
+    // A driver up to release 0.3.0 reports neither.
+    CHECK(j["info"]["transport"].is_null());
+    CHECK(j["info"]["rx_values_max"].is_null());
+}
+
+TEST_CASE("info shows the driver's transport and RX limit", "[rbctl]") {
+    FakeDevice pi4;
+    pi4.transport = RADIOBERRY_TRANSPORT_CPU;
+    pi4.rx_values_max = 192000;
+    auto j = json(run({"--json"}, &pi4));
+    CHECK(j["info"]["transport"] == "cpu");
+    CHECK(j["info"]["rx_values_max"] == 192000);
+
+    FakeDevice pi5;
+    pi5.transport = RADIOBERRY_TRANSPORT_PIO;
+    pi5.rx_values_max = 2370000;
+    j = json(run({"--json"}, &pi5));
+    CHECK(j["info"]["transport"] == "rp1-pio");
+    CHECK(j["info"]["rx_values_max"] == 2370000);
+
+    FakeDevice odd;
+    odd.transport = 9;
+    j = json(run({"--json"}, &odd));
+    CHECK(j["info"]["transport"] == "unknown (9)");
 }
 
 TEST_CASE("an unknown rate code reads as null", "[rbctl]") {

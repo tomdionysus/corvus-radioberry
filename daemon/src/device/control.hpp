@@ -71,7 +71,9 @@ private:
     std::array<bool, kAddresses> queued_{};
     std::deque<std::uint8_t> queue_;
     TransmitState transmit_;
-    bool run_ = true;
+    // Clear until a client streams: the driver moves RX only while it is
+    // set (radioberry_ioctl.h).
+    bool run_ = false;
     // The transmit bits or run changed since the last command went out.
     bool bits_changed_ = false;
     std::optional<std::uint8_t> last_sent_;

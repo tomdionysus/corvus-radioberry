@@ -58,6 +58,9 @@ struct Identity {
     std::array<std::uint8_t, 6> mac{};
     std::uint8_t version_major = 0;  // the gateware's
     std::uint8_t receivers = 0;      // DDCs
+    // RX values per second the device carries (not reported; limits the
+    // DDCs run). 0: the Pi 5's, see device/capacity.hpp.
+    std::uint32_t rx_values_max = 0;
 };
 
 // The reply to discovery (60 bytes, 00 00 00 00 02; session.hpp,

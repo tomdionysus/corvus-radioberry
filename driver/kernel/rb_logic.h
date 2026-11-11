@@ -223,7 +223,7 @@ static inline bool rb_rx_feed(struct rb_rx_parser *p, u32 word)
 		p->expected = 0;
 	}
 
-	dst = &p->frame[p->expected * RB_VALUE_BYTES];
+	dst = &p->frame[(size_t)p->expected * RB_VALUE_BYTES];
 	dst[0] = (u8)(word >> 16);
 	dst[1] = (u8)(word >> 8);
 	dst[2] = (u8)word;

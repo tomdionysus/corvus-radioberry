@@ -8,6 +8,7 @@
 #include <thread>
 #include <utility>
 
+#include "device/capacity.hpp"
 #include "realtime.hpp"
 
 namespace radioberry::daemon {
@@ -20,6 +21,7 @@ p1::Identity identify(Device& device, const std::optional<std::array<std::uint8_
     id.version_major = info.gateware_major;
     id.version_minor = info.gateware_minor;
     id.receivers = info.receivers;
+    id.rx_values_max = info.rx_values_max;
     return id;
 }
 
@@ -76,7 +78,8 @@ Daemon::Daemon(Device& device, const DaemonOptions& options)
                       network_.send(to, bytes);
                   }),
       p2_server_(
-          p2::Identity{identity_.mac, identity_.version_major, identity_.receivers},
+          p2::Identity{identity_.mac, identity_.version_major, identity_.receivers,
+                       identity_.rx_values_max},
           service_.control(), service_.tx(), session_, policy_,
           [this] {
               const DeviceSnapshot s = service_.snapshot();
@@ -91,6 +94,8 @@ Daemon::Daemon(Device& device, const DaemonOptions& options)
     iq_standard_ = options.iq_convention == p1::IqConvention::Standard;
     frequency_ppm_ = options.frequency_ppm;
     realtime_ = options.realtime;
+    protocol1_ = options.protocol1;
+    protocol2_ = options.protocol2;
 }
 
 void Daemon::start_thread(const char* name, int priority, bool rename) {
@@ -121,24 +126,51 @@ void Daemon::on_fault(const Fault& fault) {
     }
 }
 
+void Daemon::update_run() {
+    const std::lock_guard lock(run_mutex_);
+    service_.control().set_run(server_.running() || p2_server_.running());
+}
+
 void Daemon::on_packet(std::span<const std::uint8_t> packet, const Peer& from,
                        std::chrono::nanoseconds now) {
     // Protocol 2 shares the base port for discovery and General packets;
     // Protocol 1 packets start EF FE.
     if (!from.tcp && (is_p2_discovery(packet) || p2::is_general(packet))) {
-        p2_server_.on_packet(p2::kGeneralPort, packet, from, now);
+        if (protocol2_) {
+            p2_server_.on_packet(p2::kGeneralPort, packet, from, now);
+            update_run();
+        }
         return;
     }
-    server_.on_packet(packet, from, now);
+    if (protocol1_) {
+        server_.on_packet(packet, from, now);
+        update_run();
+    }
 }
 
 bool Daemon::run(const std::atomic<bool>& stop) {
     const TxPolicyOptions& tx = policy_.options();
-    spdlog::info("gateware {}.{}, {} receivers; Protocol 1 on port {}", identity_.version_major,
-                 identity_.version_minor, identity_.receivers, port());
-    spdlog::info("Protocol 2 on ports {} to {} and {} to {}", p2_port(p2::kGeneralPort),
-                 p2_port(p2::kTxIqPort), p2_port(p2::kDdcPort0),
-                 p2_port(p2::kDdcPort0 + identity_.receivers - 1));
+    spdlog::info("gateware {}.{}, {} receivers", identity_.version_major, identity_.version_minor,
+                 identity_.receivers);
+    if (protocol1_) {
+        spdlog::info("Protocol 1 on port {}", port());
+    } else {
+        spdlog::info("Protocol 1 off");
+    }
+    if (protocol2_) {
+        spdlog::info("Protocol 2 on ports {} to {} and {} to {}", p2_port(p2::kGeneralPort),
+                     p2_port(p2::kTxIqPort), p2_port(p2::kDdcPort0),
+                     p2_port(p2::kDdcPort0 + identity_.receivers - 1));
+    } else {
+        spdlog::info("Protocol 2 off");
+    }
+    if (identity_.rx_values_max != 0 && identity_.rx_values_max < kRxValuesPerSecondMax) {
+        spdlog::info(
+            "the driver carries up to {} RX values per second: {} receiver(s) at 48 ksps, "
+            "{} at 192 ksps",
+            identity_.rx_values_max, max_receivers(0, identity_.receivers, identity_.rx_values_max),
+            max_receivers(2, identity_.receivers, identity_.rx_values_max));
+    }
     if (iq_standard_) {
         spdlog::info("I/Q in the standard convention: I and Q swapped both ways");
     }
@@ -161,10 +193,8 @@ bool Daemon::run(const std::atomic<bool>& stop) {
     } else {
         spdlog::info("transmit not allowed (--allow-tx): receive only");
     }
-    if (!service_.start()) {
-        return false;
-    }
-    const Clock clock = steady_clock();
+    // The RX delivery thread runs before the device does, so the first
+    // blocks find it draining the ring.
     std::atomic<bool> stop_rx{false};
     std::thread rx([&] {
         start_thread("rb-rx-send", kNetworkPriority);
@@ -177,12 +207,22 @@ bool Daemon::run(const std::atomic<bool>& stop) {
             }
         }
     });
+    if (!service_.start()) {
+        stop_rx = true;
+        service_.rx().wake();
+        rx.join();
+        return false;
+    }
+    const Clock clock = steady_clock();
     std::atomic<bool> stop_p2{false};
     std::thread p2([&] {
         start_thread("rb-p2-network", kNetworkPriority);
         const auto p2_handler = [&](unsigned port, std::span<const std::uint8_t> packet,
                                     const Peer& from) {
-            p2_server_.on_packet(port, packet, from, clock());
+            if (protocol2_) {
+                p2_server_.on_packet(port, packet, from, clock());
+                update_run();
+            }
         };
         while (!stop_p2) {
             p2_network_.poll(100, p2_handler);
@@ -213,6 +253,7 @@ bool Daemon::run(const std::atomic<bool>& stop) {
         policy_.tick(now);
         server_.tick();
         p2_server_.tick();
+        update_run();  // a client timed out or lost the radio
         const bool transmitting = policy_.transmitting();
         if (transmitting != was_transmitting) {
             const DeviceSnapshot s = service_.snapshot();
@@ -224,11 +265,13 @@ bool Daemon::run(const std::atomic<bool>& stop) {
             } else {
                 const double seconds = std::chrono::duration<double>(now - tx_started).count();
                 const auto words = driver.tx_words - tx_before.tx_words;
+                // Driver TX underruns are left out: they count every moment
+                // the driver's ring empties between client bursts, not the
+                // gateware's FIFO running dry (see breaks_transmit).
                 spdlog::info(
                     "transmission of {:.1f} s: {} samples to the gateware ({:.0f} per second), "
-                    "{} underruns, {} TX blocks dropped",
+                    "{} TX blocks dropped",
                     seconds, words, seconds > 0 ? static_cast<double>(words) / seconds : 0.0,
-                    driver.tx_underruns - tx_before.tx_underruns,
                     s.tx_blocks_dropped - dropped_before);
             }
             was_transmitting = transmitting;

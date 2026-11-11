@@ -69,7 +69,7 @@ step "SPDX headers"
 sh tools/check-spdx.sh
 
 kernel_sources="driver/kernel/radioberry.c driver/kernel/rb_logic.h driver/kernel/rb_pio.h
-    driver/include/radioberry_ioctl.h"
+    driver/kernel/rb_bitbang.h driver/include/radioberry_ioctl.h"
 kbuild=/lib/modules/$(uname -r)/build
 checkpatch=${CHECKPATCH:-$kbuild/scripts/checkpatch.pl}
 if [ -f "$checkpatch" ]; then
@@ -99,6 +99,14 @@ step "release build and tests"
 cmake --preset default >/dev/null
 cmake --build --preset default -j "$jobs"
 ctest --preset default
+
+if command -v dtmerge >/dev/null && [ -f build/driver/radioberry.dtbo ] &&
+    [ -f /boot/firmware/bcm2711-rpi-4-b.dtb ]; then
+    step "overlay on the Pi 4 and Pi 5 device trees"
+    sh tools/check-overlay.sh build/driver/radioberry.dtbo
+else
+    step "overlay check: skipped, needs dtmerge and the boards' trees in /boot/firmware"
+fi
 
 if command -v run-clang-tidy-19 >/dev/null; then
     step "clang-tidy"

@@ -15,7 +15,7 @@ sets MOX.
   packet with a host packet, which keeps the session.
 - Protocol 2 (`--protocol 2`): it uses DDC0 and sends High Priority every
   100 ms. Protocol 2 carries no LNA gain for this radio, so `--gain` is
-  refused and `radioberryd --p2-rx-gain` applies.
+  refused and the daemon's `p2_rx_gain` applies.
 
 ```
 ft8rx [--protocol 1|2] [--host 127.0.0.1] [--port 1024] [--dial 14074000]
@@ -26,9 +26,9 @@ The clock must be on UTC to within a second. Run it on the Pi against
 `radioberryd`, or from any machine with `--host`.
 
 The decoder is a C++ port of ft8_lib
-([examples/ft8/src/ft8/](../examples/ft8/src/ft8/), GPL-2.0-or-later);
+([examples/ft8/src/ft8/](https://github.com/tomdionysus/corvus-radioberry/blob/main/examples/ft8/src/ft8/), GPL-2.0-or-later);
 the message text code is ft8_lib's own C
-([examples/ft8/src/ft8_lib/](../examples/ft8/src/ft8_lib/), MIT).
+([examples/ft8/src/ft8_lib/](https://github.com/tomdionysus/corvus-radioberry/blob/main/examples/ft8/src/ft8_lib/), MIT).
 `ft8_tests` checks the decimator's passband and
 stopband and decodes messages synthesised at 48 ksps in noise through the
 same chain.
@@ -45,28 +45,15 @@ frequencies above the tuned frequency) that stream is the mirror image,
 in both directions:
 
 - Receive: `ft8rx` decodes FT8 only with each sample's second value taken
-  as I (7 messages in two slots that way, none in two slots the other
-  way), and the decoded frequencies then match PSK Reporter spots of the
-  same stations.
+  as I.
 - Transmit: a 1 kHz tone sent as I = cos, Q = sin goes out 1 kHz below the
   TX frequency.
 
-`radioberryd --iq-convention standard` swaps I and Q in both directions
-for plain complex-baseband clients; the default, `hl2`, passes samples
-through for HL2 software. `ft8rx` defaults to `--iq-order qi` for the
-default daemon; against `--iq-convention standard` use `--iq-order iq`.
+`iq_convention: standard` in the daemon's config swaps I and Q in both
+directions for plain complex-baseband clients; the default, `hl2`, passes
+samples through for HL2 software. `ft8rx` defaults to `--iq-order qi` for
+the default daemon; against `iq_convention: standard` use
+`--iq-order iq`.
 
-## Frequency calibration
-
-Compare decoded frequencies with the median of PSK Reporter spots for the
-same stations over the same ten minutes. On the development board every
-station read 161 to 163 Hz low on 40 m, about -23 ppm. With
-`radioberryd --frequency-ppm 22.9` the same comparison gave 0 to +1 Hz on
-40 m and -2 to 0 Hz on 30 m: one ppm figure corrects every band. Each
-board needs its own measurement.
-
-## Measured
-
-40 m on the development Pi against `radioberryd` over loopback: 6 slots,
-23 messages decoded (SNR -17 to +2 dB, DT -0.2 to 0.5 s), 37 078 packets,
-none lost.
+`ft8rx` also measures the radio's frequency error
+([Frequency calibration](daemon.md#frequency-calibration)).

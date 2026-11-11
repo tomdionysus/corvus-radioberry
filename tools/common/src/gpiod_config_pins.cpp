@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <thread>
 
+#include "radioberry/board.hpp"
 #include "radioberry/fpga_config.hpp"
 
 namespace radioberry {
@@ -17,27 +18,18 @@ using gpiod::line::value;
 
 value to_value(bool high) { return high ? value::ACTIVE : value::INACTIVE; }
 
-std::filesystem::path find_rp1_chip() {
-    for (const auto& entry : std::filesystem::directory_iterator("/dev")) {
-        const std::string name = entry.path().filename().string();
-        if (name.rfind("gpiochip", 0) != 0 || entry.is_symlink()) {
-            continue;
-        }
-        try {
-            gpiod::chip chip(entry.path());
-            if (chip.get_info().label() == "pinctrl-rp1") {
-                return entry.path();
-            }
-        } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch): not a usable chip
-        }
+std::filesystem::path header_chip_or_throw() {
+    auto path = find_header_gpio_chip();
+    if (!path) {
+        throw std::runtime_error("no pinctrl-rp1 or pinctrl-bcm2711 GPIO chip found");
     }
-    throw std::runtime_error("no pinctrl-rp1 GPIO chip found");
+    return *path;
 }
 
 class GpiodConfigPins final : public ConfigPins {
 public:
     GpiodConfigPins()
-        : chip_(find_rp1_chip()),
+        : chip_(header_chip_or_throw()),
           request_(
               chip_.prepare_request()
                   .set_consumer("radioberry-config")
@@ -73,6 +65,24 @@ private:
 };
 
 }  // namespace
+
+std::optional<std::filesystem::path> find_header_gpio_chip() {
+    std::error_code ec;
+    for (const auto& entry : std::filesystem::directory_iterator("/dev", ec)) {
+        const std::string name = entry.path().filename().string();
+        if (name.rfind("gpiochip", 0) != 0 || entry.is_symlink(ec)) {
+            continue;
+        }
+        try {
+            gpiod::chip chip(entry.path());
+            if (is_header_gpio_chip(chip.get_info().label())) {
+                return entry.path();
+            }
+        } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch): not a usable chip
+        }
+    }
+    return std::nullopt;
+}
 
 std::unique_ptr<ConfigPins> open_gpiod_config_pins() {
     try {

@@ -4,7 +4,10 @@
  *
  * read()  returns whole RX frames. A frame is one sample period for every
  *         active receiver: I0 Q0 I1 Q1 ... each a 24-bit big-endian two's
- *         complement value, so 6 bytes per receiver. A read shorter than
+ *         complement value, so 6 bytes per receiver. RX moves only while
+ *         the last command sent had RADIOBERRY_CMD_RUN set (from release
+ *         0.4.0): with run clear, as after open, the RX bus and the driver's
+ *         streaming are idle and nothing arrives. A read shorter than
  *         one frame fails with EINVAL; otherwise it returns as many whole
  *         frames as fit. Blocks unless O_NONBLOCK. poll() reports POLLIN
  *         when at least one frame is queued and POLLERR after an RX
@@ -46,9 +49,16 @@ struct radioberry_info {
 	__u8 transmitters;
 	__u8 active_receivers; /* receivers in the current RX frame */
 	__u8 rx_rate_code;     /* 0..3 = 48, 96, 192, 384 ksps */
-	__u8 reserved0;
-	__u32 reserved[4];
+	__u8 transport;        /* RADIOBERRY_TRANSPORT_*; 0 up to release 0.3.0 */
+	/* RX values per second the streams carry; 0 up to release 0.3.0,
+	 * whose driver carries 2 370 000.
+	 */
+	__u32 rx_values_max;
+	__u32 reserved[3];
 };
+
+#define RADIOBERRY_TRANSPORT_PIO 1 /* Raspberry Pi 5: RP1 PIO state machines */
+#define RADIOBERRY_TRANSPORT_CPU 2 /* Raspberry Pi 4: clocked by a kernel thread */
 
 /*
  * One gateware command. tx[0] holds RADIOBERRY_CMD_* flags, tx[1..5] the

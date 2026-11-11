@@ -29,6 +29,8 @@ TEST_CASE("radioberryd's defaults", "[options]") {
     CHECK(o.daemon.iq_convention == p1::IqConvention::Hl2);
     CHECK(o.daemon.p2_rx_gain_db == 14);
     CHECK(o.daemon.realtime);
+    CHECK(o.daemon.protocol1);
+    CHECK(o.daemon.protocol2);
     CHECK_FALSE(o.help);
     CHECK_FALSE(o.version);
     CHECK(usage().find("--client-timeout-ms") != std::string::npos);
@@ -94,6 +96,41 @@ TEST_CASE("radioberryd's Protocol 2 gain", "[options]") {
     CHECK_FALSE(parse_options({"--no-realtime"}).daemon.realtime);
 }
 
+TEST_CASE("radioberryd's true-or-false options take a value or stand alone", "[options]") {
+    Options o = parse_options({"--allow-tx", "true", "--allow-pa", "On", "--realtime", "false"});
+    CHECK(o.daemon.tx.allow_tx);
+    CHECK(o.daemon.tx.allow_pa);
+    CHECK_FALSE(o.daemon.realtime);
+    o = parse_options({"--allow-tx", "false", "--allow-pa", "no", "--realtime", "yes"});
+    CHECK_FALSE(o.daemon.tx.allow_tx);
+    CHECK_FALSE(o.daemon.tx.allow_pa);
+    CHECK(o.daemon.realtime);
+    // Alone, as older command lines give them: true.
+    o = parse_options({"--allow-tx", "--allow-pa", "--port", "1025", "--realtime"});
+    CHECK(o.daemon.tx.allow_tx);
+    CHECK(o.daemon.tx.allow_pa);
+    CHECK(o.daemon.realtime);
+    CHECK(o.daemon.port == 1025);
+    CHECK_THROWS_AS(parse_options({"--allow-tx", "maybe"}), std::invalid_argument);
+    CHECK(usage().find("--realtime BOOL") != std::string::npos);
+}
+
+TEST_CASE("radioberryd serves the protocols asked for", "[options]") {
+    Options o = parse_options({"--protocols", "1"});
+    CHECK(o.daemon.protocol1);
+    CHECK_FALSE(o.daemon.protocol2);
+    o = parse_options({"--protocols", "2"});
+    CHECK_FALSE(o.daemon.protocol1);
+    CHECK(o.daemon.protocol2);
+    o = parse_options({"--protocols", "2, 1"});
+    CHECK(o.daemon.protocol1);
+    CHECK(o.daemon.protocol2);
+    CHECK_THROWS_AS(parse_options({"--protocols", ""}), std::invalid_argument);
+    CHECK_THROWS_AS(parse_options({"--protocols", "3"}), std::invalid_argument);
+    CHECK_THROWS_AS(parse_options({"--protocols", "1,"}), std::invalid_argument);
+    CHECK_THROWS_AS(parse_options({"--protocols"}), std::invalid_argument);
+}
+
 namespace {
 
 // A config file with `text`, removed at the end of the scope.
@@ -139,6 +176,24 @@ TEST_CASE("radioberryd reads a config file, the command line winning", "[options
     CHECK(o.daemon.tx.drive_ceiling == 40);
     CHECK(o.daemon.port == 1024);
     CHECK(usage().find("--config") != std::string::npos);
+    // allow_tx: false in a file is overridden by a bare --allow-tx after it.
+    o = parse_options({"--config", ConfigFile("allow_tx: false\n").path, "--allow-tx"});
+    CHECK(o.daemon.tx.allow_tx);
+}
+
+TEST_CASE("radioberryd reads protocols from a config file", "[options]") {
+    Options o = parse_options({"--config", ConfigFile("protocols: 1\n").path});
+    CHECK(o.daemon.protocol1);
+    CHECK_FALSE(o.daemon.protocol2);
+    o = parse_options({"--config", ConfigFile("protocols: 2,1\n").path});
+    CHECK(o.daemon.protocol1);
+    CHECK(o.daemon.protocol2);
+    o = parse_options({"--config", ConfigFile("protocols: [2]\n").path});
+    CHECK_FALSE(o.daemon.protocol1);
+    CHECK(o.daemon.protocol2);
+    CHECK_THROWS_AS(config_args(ConfigFile("protocols: [[1]]\n").path), std::invalid_argument);
+    CHECK_THROWS_AS(parse_options({"--config", ConfigFile("protocols: [3]\n").path}),
+                    std::invalid_argument);
 }
 
 TEST_CASE("radioberryd refuses a bad config file", "[options]") {
@@ -149,7 +204,8 @@ TEST_CASE("radioberryd refuses a bad config file", "[options]") {
     CHECK_THROWS_AS(config_args(ConfigFile("- a list\n").path), std::invalid_argument);
     CHECK_THROWS_AS(config_args(ConfigFile("port: [1, 2]\n").path), std::invalid_argument);
     CHECK_THROWS_AS(config_args(ConfigFile("colour: blue\n").path), std::invalid_argument);
-    CHECK_THROWS_AS(config_args(ConfigFile("allow_tx: maybe\n").path), std::invalid_argument);
+    CHECK_THROWS_AS(parse_options({"--config", ConfigFile("allow_tx: maybe\n").path}),
+                    std::invalid_argument);
     CHECK_THROWS_AS(config_args(ConfigFile("port: [\n").path), std::invalid_argument);
     // Values go through the same checks as on the command line.
     CHECK_THROWS_AS(parse_options({"--config", ConfigFile("port: 70000\n").path}),
@@ -172,5 +228,7 @@ TEST_CASE("the installed default config: radioberryd's defaults, drive ceiling 1
     CHECK(o.daemon.iq_convention == d.daemon.iq_convention);
     CHECK(o.daemon.p2_rx_gain_db == d.daemon.p2_rx_gain_db);
     CHECK(o.daemon.realtime == d.daemon.realtime);
+    CHECK(o.daemon.protocol1 == d.daemon.protocol1);
+    CHECK(o.daemon.protocol2 == d.daemon.protocol2);
     CHECK(o.log_level == d.log_level);
 }

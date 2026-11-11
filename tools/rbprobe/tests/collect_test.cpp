@@ -303,6 +303,46 @@ TEST_CASE("missing and unknown firmware", "[collect]") {
     CHECK(has(r, "firmware.unknown", Severity::kWarning));
 }
 
+TEST_CASE("the board comes from the SoC", "[collect]") {
+    FakeSource pi5 = working_pi();
+    Report r = collect(pi5, test_options());
+    CHECK(str(r, "host.board") == "pi5");
+    CHECK_FALSE(has_id(r, "host.board"));
+
+    FakeSource other = working_pi();
+    other.files["/proc/device-tree/compatible"] =
+        std::string("raspberrypi,3-model-b\0brcm,bcm2837", 34) + '\0';
+    r = collect(other, test_options());
+    CHECK(str(r, "host.board") == "other");
+    CHECK(has(r, "host.board", Severity::kBlocker));
+    CHECK_FALSE(r.radio_can_run());
+
+    other.files.erase("/proc/device-tree/compatible");
+    r = collect(other, test_options());
+    CHECK(str(r, "host.board") == "other");
+    CHECK(has(r, "host.board", Severity::kBlocker));
+}
+
+TEST_CASE("a Pi 4 needs no RP1 PIO and has no PMIC", "[collect]") {
+    FakeSource pi = working_pi4();
+    const Report r = collect(pi, test_options());
+    CHECK(str(r, "host.board") == "pi4");
+    CHECK(str(r, "host.model") == "Raspberry Pi 4 Model B Rev 1.5");
+    CHECK(str(r, "host.kernel") == "6.18.60+rpt-rpi-v8");
+    CHECK(r.root.at("host.pmic")->is_null());
+    CHECK_FALSE(flag(r, "boot.rp1_pio_loaded"));
+    CHECK_FALSE(has_id(r, "boot.rp1_pio"));
+    CHECK(str(r, "driver.module_file") ==
+          "/lib/modules/6.18.60+rpt-rpi-v8/updates/dkms/radioberry.ko.xz");
+    CHECK(str(r, "driver.transport") == "cpu");
+    CHECK(r.radio_can_run());
+
+    // A driver up to release 0.3.0 has no transport attribute.
+    FakeSource old = working_pi();
+    old.files.erase("/sys/bus/spi/devices/spi0.0/transport");
+    CHECK(collect(old, test_options()).root.at("driver.transport")->is_null());
+}
+
 TEST_CASE("boot problems are blockers", "[collect]") {
     FakeSource pi = development_pi();
     pi.files.erase("/proc/device-tree/radioberry/compatible");

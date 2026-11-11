@@ -33,14 +33,16 @@ const Peer kB{0x0a000002, 50001, false};
 const Peer kTcp{0x0a000003, 50002, true};
 
 struct Rig {
-    explicit Rig(TxPolicyOptions o = {}) : policy(control, session, o) {}
+    explicit Rig(TxPolicyOptions o = {}, std::uint32_t rx_values_max = 0)
+        : values_max(rx_values_max), policy(control, session, o) {}
+    std::uint32_t values_max;  // the driver's RX limit; 0 the Pi 5's
     Control control;
     SpscRing<TxBlock> tx{2};
     FakeLink link;
     GatewareStatus status;
     Session session{[this] { control.safe(); }, 3s};
     TxPolicy policy;
-    Server server{Identity{{2, 0, 0, 0, 0, 1}, 75, 3, 6},
+    Server server{Identity{{2, 0, 0, 0, 0, 1}, 75, 3, 6, values_max},
                   control,
                   tx,
                   session,
@@ -106,6 +108,11 @@ TEST_CASE("a started client receives packets until it stops", "[server]") {
     CHECK(rig.server.running());
     REQUIRE(rig.server.client());
     CHECK(*rig.server.client() == kA);
+    // Starting sets the PTT hang time and the TX buffer latency.
+    const auto timing = rig.drain();
+    REQUIRE(timing.size() == 1);
+    CHECK(timing[0].address == 0x17);
+    CHECK(timing[0].data == (12u << 8 | 40));
     rig.status = {true, true};
     rig.rx_packet();
     rig.rx_packet();
@@ -214,9 +221,27 @@ TEST_CASE("receiver counts beyond the device are zero-filled", "[server]") {
     REQUIRE(rig.link.sent.size() == 1);
 }
 
+TEST_CASE("a slower bus, as on a Pi 4, runs fewer receivers", "[server]") {
+    Rig rig({}, 192000);
+    // Three receivers at 48 ksps: 192 000 values a second carry two.
+    rig.packet(host_packet(0, {0x00, 2u << 3 | 1u << 2}, {0x04, 7074000}), kA);
+    CHECK(rig.server.client_receivers() == 3);
+    CHECK(rig.server.device_receivers() == 2);
+    auto commands = rig.drain();
+    REQUIRE_FALSE(commands.empty());
+    CHECK(commands[0].data == (1u << 3 | 1u << 2));
+    // One at 192 ksps is more than it carries, but one always runs.
+    rig.packet(host_packet(1, {0x00, 2u << 24}, {0x04, 7074000}), kA);
+    CHECK(rig.server.device_receivers() == 1);
+    commands = rig.drain();
+    REQUIRE_FALSE(commands.empty());
+    CHECK(commands[0].data == 2u << 24);
+}
+
 TEST_CASE("without --allow-tx nothing transmits", "[server]") {
     Rig rig;
     rig.packet(start_packet(1), kA);
+    REQUIRE(rig.drain().size() == 1);  // the TX timing set at start
     // MOX, drive 255 with PA enable and VNA, and a disabled TX watchdog.
     rig.packet(
         host_packet(0, {0x13, 0xffu << 24 | 1u << 23 | 1u << 19 | 1u << 18}, {0x2e, 31u << 8 | 20}),
@@ -230,14 +255,17 @@ TEST_CASE("without --allow-tx nothing transmits", "[server]") {
     CHECK(commands[0].address == 0x09);
     CHECK(commands[0].data == 1u << 18);
     CHECK_FALSE(commands[0].ptt);
-    CHECK_FALSE(rig.control.value(0x17));
-    // A valid hang time afterwards is taken.
-    rig.packet(host_packet(2, {0x2e, 12u << 8 | 20}, {}), kA);
-    CHECK(rig.control.value(0x17) == (12u << 8 | 20));
+    CHECK(rig.control.value(0x17) == (12u << 8 | 40));  // the start value stands
+    // A valid hang time afterwards is taken, its latency raised to 40 ms.
+    rig.packet(host_packet(2, {0x2e, 10u << 8 | 20}, {}), kA);
+    CHECK(rig.control.value(0x17) == (10u << 8 | 40));
+    // A latency of 40 ms or more is taken as sent.
+    rig.packet(host_packet(3, {0x2e, 10u << 8 | 60}, {}), kA);
+    CHECK(rig.control.value(0x17) == (10u << 8 | 60));
     // MOX cleared, then set again: warned again (not observable here, but
     // the path runs).
-    rig.packet(host_packet(3, {}, {}), kA);
-    rig.packet(host_packet(4, {0x01, 0}, {}), kA);
+    rig.packet(host_packet(4, {}, {}), kA);
+    rig.packet(host_packet(5, {0x01, 0}, {}), kA);
     CHECK(rig.control.transmit() == TransmitState{});
 }
 

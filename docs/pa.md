@@ -6,8 +6,8 @@ RadioBerry. It connects through a header on the RadioBerry itself, not
 the Raspberry Pi's 40-pin header. It is a Hermes-Lite 2 style push-pull
 PA stage, manually biased, current-sensed by an INA199A1, and keyed by
 the RadioBerry's CN301 lines. The seller supports it only with the
-RadioBerry Juice USB board; its use on a Raspberry Pi is verified by this
-project only.
+RadioBerry Juice USB board; it works on a Raspberry Pi with this
+software.
 
 ## The board
 
@@ -45,7 +45,7 @@ CN301 pins are direct FPGA pins: 1 5V, 2 3V3, 3 ptt_out / exttr (FPGA
 (137), 8 envpa (136), 9 and 10 unused (135, 133), 13 PTT in (121), 14 key
 in (120), 15/16 FPGA SDA/SCL (119/115), 17/18 SDA/SCL from the Pi header,
 19/20 GND. What drives each output is in
-[gateware/README.md](../gateware/README.md) section 6.
+[gateware/README.md](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/README.md) section 6.
 
 The board's PTT, key and paddle inputs go to the FPGA's CN301 pins, not to
 the Pi, so they work whatever software runs.
@@ -54,18 +54,15 @@ the Pi, so they work whatever software runs.
 
 With no drive, raise BIAS1 and BIAS2 from minimum until PA_CUR shows the
 intended idle current, never exceeding 2.7 V on either trimmer. The
-target idle current for the AURSINC FETs is not published. The
-development board's bias is set.
+target idle current for the AURSINC FETs is not published.
 
 ## Software
 
 - `radioberryd` passes on a client's PA enable (command 0x09 bit 19, which
-  drives envpa) only with `--allow-pa`; the installed config has it off.
+  drives envpa) only with `allow_pa: true`; the installed config has it off.
 - There are no thermal or current interlocks: the board has no sensors
   the software can read. Protection is the operator, the trimmer ceiling,
   the drive ceiling and the transmit watchdog.
-- The first test of any new code path that can key the transmitter is
-  into a dummy load.
 
 ## Unknown
 

@@ -41,8 +41,13 @@ fi
 
 #DEBHELPER#
 
+# dh_installsystemd --no-start adds no daemon-reload, so systemd would
+# keep the unit file it loaded before this one was unpacked.
 # radioberry.service binds to /dev/radioberry: start it now only if the
 # driver is already up; otherwise it starts at the next boot.
-if [ "$1" = configure ] && [ -c /dev/radioberry ] && [ -d /run/systemd/system ]; then
-    deb-systemd-invoke restart radioberry.service >/dev/null || true
+if [ "$1" = configure ] && [ -d /run/systemd/system ]; then
+    systemctl --system daemon-reload >/dev/null || true
+    if [ -c /dev/radioberry ]; then
+        deb-systemd-invoke restart radioberry.service >/dev/null || true
+    fi
 fi

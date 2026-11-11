@@ -58,9 +58,9 @@ private:
     int fd_;
 };
 
-radioberry_command command(int fd, std::uint8_t address, std::uint32_t data) {
+radioberry_command command(int fd, std::uint8_t address, std::uint32_t data, bool run = true) {
     radioberry_command c{};
-    c.tx[0] = RADIOBERRY_CMD_RUN;
+    c.tx[0] = run ? RADIOBERRY_CMD_RUN : 0;
     c.tx[1] = static_cast<std::uint8_t>(address << 1);  // PTT clear
     c.tx[2] = static_cast<std::uint8_t>(data >> 24);
     c.tx[3] = static_cast<std::uint8_t>(data >> 16);
@@ -304,6 +304,51 @@ TEST_CASE("after close the gateware reports no transmit state", "[close]") {
     CHECK(reply.rx[4] == info(fd.get()).gateware_major);
 }
 
+TEST_CASE("RX is idle while run is clear and resumes whole when it is set", "[run]") {
+    // Opened with run clear (the safe command on the last close): nothing.
+    Fd fd;
+    REQUIRE(fd.get() >= 0);
+    std::this_thread::sleep_for(50ms);
+    const std::uint64_t idle_start = stats(fd.get()).rx_words;
+    std::this_thread::sleep_for(300ms);
+    CHECK(stats(fd.get()).rx_words == idle_start);
+
+    // Run set: frames flow.
+    configure(fd.get(), 0, 1);
+    drain_for(fd.get(), 6, 200ms);
+    const std::uint64_t streamed = stats(fd.get()).rx_words;
+    CHECK(streamed > idle_start);
+
+    // Run clear while open, and a receiver-count change meanwhile: the
+    // stream stops once the words in flight are in.
+    command(fd.get(), 0x00, (3u - 1u) << 3 | 1u << 2, false);
+    std::this_thread::sleep_for(50ms);
+    const std::uint64_t paused = stats(fd.get()).rx_words;
+    std::this_thread::sleep_for(300ms);
+    CHECK(stats(fd.get()).rx_words == paused);
+    CHECK(info(fd.get()).active_receivers == 3);
+
+    // Run set again: whole three-receiver frames, no resyncs or drops (the
+    // parser settles past the pause, counting what it skips as discarded).
+    const radioberry_stats before = stats(fd.get());
+    configure(fd.get(), 0, 3);
+    const std::size_t frame = 18;
+    std::vector<std::uint8_t> buf(frame * 100);
+    std::size_t total = 0;
+    for (const auto end = Clock::now() + 300ms; Clock::now() < end;) {
+        const ssize_t got = ::read(fd.get(), buf.data(), buf.size());
+        REQUIRE(got > 0);
+        CHECK(static_cast<std::size_t>(got) % frame == 0);
+        total += static_cast<std::size_t>(got);
+    }
+    const radioberry_stats after = stats(fd.get());
+    CHECK(after.rx_resyncs == before.rx_resyncs);
+    CHECK(after.rx_dropped_words == before.rx_dropped_words);
+    // 300 ms at 48 ksps is 14400 frames; allow for the restart.
+    CHECK(total / frame > 12000);
+    CHECK(sysfs("rx_stalled") == "0");
+}
+
 TEST_CASE("the daemon's device layer streams through the driver", "[service]") {
     namespace rd = radioberry::daemon;
     std::mutex mutex;
@@ -314,6 +359,7 @@ TEST_CASE("the daemon's device layer streams through the driver", "[service]") {
         faults.push_back(f);
     });
     REQUIRE(service.start());
+    service.control().set_run(true);
     service.control().set(radioberry::hl2::general(0, 1));
     service.control().set(radioberry::hl2::rx_frequency(0, 14074000));
     // Let the receiver-count command and the driver's settling pass.

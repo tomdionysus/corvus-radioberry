@@ -187,6 +187,10 @@ void Server::start_locked(const Peer& from) {
     packer_.reset();
     status_address_ = 0;
     pending_ack_.reset();
+    Command timing;
+    timing.address = kTxTiming;
+    timing.data = kPttHangMs << 8 | kMinTxLatencyMs;
+    control_.set(timing);
 }
 
 void Server::apply_locked(const HostCommand& c) {
@@ -197,7 +201,8 @@ void Server::apply_locked(const HostCommand& c) {
     if (c.address == Control::kGeneral) {
         const unsigned want = ((data >> 3) & 0x0fu) + 1;
         const unsigned rate = (data >> 24) & 0x03u;
-        const unsigned run = std::min(want, max_receivers(rate, identity_.receivers));
+        const unsigned run =
+            std::min(want, max_receivers(rate, identity_.receivers, identity_.rx_values_max));
         if (want != client_receivers_ || run != device_receivers_) {
             if (run < want) {
                 spdlog::warn("{} receivers at {} ksps asked for; running {}, the rest sent as zero",
@@ -217,6 +222,8 @@ void Server::apply_locked(const HostCommand& c) {
         policy_.set_cwx((data & kCwxEnable) != 0);
     } else if (is_frequency_address(c.address)) {
         data = corrected_frequency(data, frequency_ppm_);
+    } else if (c.address == kTxTiming && (data & kTxLatencyMask) < kMinTxLatencyMs) {
+        data = (data & ~kTxLatencyMask) | kMinTxLatencyMs;
     }
     if (control_.value(c.address) == data || refused_[c.address] == data) {
         return;

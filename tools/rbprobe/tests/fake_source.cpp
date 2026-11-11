@@ -118,6 +118,8 @@ FakeSource development_pi() {
     const std::string k = "6.18.60+rpt-rpi-2712";
     s.files["/proc/sys/kernel/osrelease"] = k + "\n";
     s.files["/proc/device-tree/model"] = std::string("Raspberry Pi 5 Model B Rev 1.0") + '\0';
+    s.files["/proc/device-tree/compatible"] =
+        std::string("raspberrypi,5-model-b\0brcm,bcm2712", 34) + '\0';
     s.files["/proc/device-tree/system/linux,revision"] = std::string("\x00\xd0\x41\x70", 4);
     s.files["/proc/device-tree/serial-number"] = std::string("0123456789abcdef") + '\0';
     s.files["/etc/os-release"] =
@@ -198,6 +200,7 @@ FakeSource working_pi() {
     s.files["/sys/bus/spi/devices/spi0.0/fpga_type"] = "10CL025\n";
     s.files["/sys/bus/spi/devices/spi0.0/receivers"] = "6\n";
     s.files["/sys/bus/spi/devices/spi0.0/transmitters"] = "1\n";
+    s.files["/sys/bus/spi/devices/spi0.0/transport"] = "rp1-pio\n";
     s.files.erase("/etc/init.d/radioberryd");
     s.files["/usr/local/sbin/radioberryd"] = "";
     s.commands[{"/usr/local/sbin/radioberryd", "--version"}] = {0, "radioberryd v0.1.0\n"};
@@ -218,6 +221,25 @@ FakeSource working_pi() {
         " 1: 00000000:0400 00000000:0000 07\n"
         " 2: 00000000:040B 00000000:0000 07\n"
         " 3: 00000000:0429 00000000:0000 07\n";
+    return s;
+}
+
+FakeSource working_pi4() {
+    FakeSource s = working_pi();
+    const std::string old_kernel = "6.18.60+rpt-rpi-2712";
+    const std::string k = "6.18.60+rpt-rpi-v8";
+    s.files.erase("/lib/modules/" + old_kernel + "/modules.dep");
+    s.dirs.erase("/lib/modules/" + old_kernel + "/build");
+    s.files["/proc/sys/kernel/osrelease"] = k + "\n";
+    s.dirs.insert("/lib/modules/" + k + "/build");
+    s.files["/lib/modules/" + k + "/modules.dep"] =
+        "updates/dkms/radioberry.ko.xz: kernel/drivers/misc/rp1-pio.ko.xz\n";
+    s.files["/proc/device-tree/model"] = std::string("Raspberry Pi 4 Model B Rev 1.5") + '\0';
+    s.files["/proc/device-tree/compatible"] =
+        std::string("raspberrypi,4-model-b\0brcm,bcm2711", 34) + '\0';
+    s.dirs.erase("/sys/module/rp1_pio");
+    s.commands.erase({"vcgencmd", "pmic_read_adc"});  // the Pi 4 has no PMIC ADC
+    s.files["/sys/bus/spi/devices/spi0.0/transport"] = "cpu\n";
     return s;
 }
 
