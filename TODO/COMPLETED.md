@@ -3,6 +3,11 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-11: v0.4.0 released: Raspberry Pi 4 support (the same packages
+  and driver on the Pi 4 and Pi 5), `radioberryd --protocols`, true or
+  false values for its switches, and the documentation for GitHub Pages.
+  CI on the Pi 5 (release, ASan and UBSan, coverage 98.9% of lines) and
+  on GitHub passed on the merged tree.
 - 2026-11-11: Raspberry Pi 4 on hardware (branch `item/platform-rpi4`):
   the same packages installed and DKMS built for `rpi-v8`; the README's
   build steps and `ctest` (319 tests) passed on the Pi 4; the CPU
