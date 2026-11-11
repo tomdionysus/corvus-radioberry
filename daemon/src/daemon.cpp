@@ -186,10 +186,8 @@ bool Daemon::run(const std::atomic<bool>& stop) {
     } else {
         spdlog::info("transmit not allowed (--allow-tx): receive only");
     }
-    if (!service_.start()) {
-        return false;
-    }
-    const Clock clock = steady_clock();
+    // The RX delivery thread runs before the device does, so the first
+    // blocks find it draining the ring.
     std::atomic<bool> stop_rx{false};
     std::thread rx([&] {
         start_thread("rb-rx-send", kNetworkPriority);
@@ -202,6 +200,13 @@ bool Daemon::run(const std::atomic<bool>& stop) {
             }
         }
     });
+    if (!service_.start()) {
+        stop_rx = true;
+        service_.rx().wake();
+        rx.join();
+        return false;
+    }
+    const Clock clock = steady_clock();
     std::atomic<bool> stop_p2{false};
     std::thread p2([&] {
         start_thread("rb-p2-network", kNetworkPriority);

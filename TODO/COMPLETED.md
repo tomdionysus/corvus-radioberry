@@ -7,7 +7,12 @@ result, and where it lives.
   and driver on the Pi 4 and Pi 5), `radioberryd --protocols`, true or
   false values for its switches, `i2c-dev` loaded at boot (a clean Pi
   had no `/dev/i2c-1` for `rbprobe`), and the documentation for GitHub
-  Pages.
+  Pages. The RX ring's consumer sleeps in a futex instead of
+  `std::atomic::wait`, which spins and yields first: on a Pi 4 with no
+  client, `rb-rx-send` went from 7.6% of a core (70 219 `sched_yield`
+  calls in 5 s) to 1.4% (none), and the delivery thread now starts
+  before the device, so `rx-queue-full` at start went from 10 of 10
+  starts to 0 of 10.
   CI on the Pi 5 (release, ASan and UBSan, coverage 98.9% of lines) and
   on GitHub passed on the merged tree.
 - 2026-11-11: Raspberry Pi 4 on hardware (branch `item/platform-rpi4`):

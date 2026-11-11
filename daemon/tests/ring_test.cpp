@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <stdexcept>
 #include <thread>
 
@@ -83,4 +84,54 @@ TEST_CASE("a ring's wait wakes on publish and on wake", "[ring]") {
     ring.wait(stop);
     stopper.join();
     CHECK(ring.front() == nullptr);
+}
+
+TEST_CASE("a ring's wait loses no wake-up between a sleeping consumer and a producer", "[ring]") {
+    // The producer publishes as the consumer goes to sleep, again and
+    // again; a lost wake-up leaves the consumer asleep with a slot waiting,
+    // and the watchdog below fails the test instead of hanging it.
+    constexpr int kItems = 200000;
+    SpscRing<int> ring(4);
+    std::atomic<bool> stop{false};
+    std::atomic<int> received{0};
+    std::thread consumer([&] {
+        int expected = 0;
+        while (expected < kItems) {
+            ring.wait(stop);
+            if (stop) {
+                return;
+            }
+            while (const int* slot = ring.front()) {
+                if (*slot != expected) {
+                    return;
+                }
+                ++expected;
+                ring.pop();
+            }
+            received = expected;
+        }
+    });
+    std::thread producer([&] {
+        for (int i = 0; i < kItems && !stop; ++i) {
+            int* slot = nullptr;
+            while ((slot = ring.acquire()) == nullptr && !stop) {
+                std::this_thread::yield();
+            }
+            if (slot == nullptr) {
+                return;
+            }
+            *slot = i;
+            ring.publish();
+        }
+    });
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(60);
+    while (received < kItems && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    const int got = received;
+    stop = true;
+    ring.wake();
+    producer.join();
+    consumer.join();
+    CHECK(got == kItems);
 }
