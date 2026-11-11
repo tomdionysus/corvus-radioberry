@@ -8,7 +8,7 @@ standing decision in [TODO/ACTIVE.md](TODO/ACTIVE.md) without saying so.
 ## Repository layout
 
 ```
-docs/      design, driver, driver tests, daemon, tools, platform, PA, examples, fault report, kernel debug, packaging, licensing
+docs/      design, driver, driver tests, daemon, tools, platform, PA, examples, fault report, kernel debug, packaging, building, status, quickstart, Pi 4, Pi 5, troubleshooting, reporting issues, original software, testing, licensing
 debian/    Debian packaging (built by tools/build-deb.sh)
 gateware/  gateware source, built bitfiles per FPGA, provenance, toolchain
 driver/    kernel module, device tree overlay, ABI header, logic tests
@@ -138,4 +138,4 @@ TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
   watchdog and a test that proves the fail-safe path clears it.
 - Reboots and configuration changes on the development Pi are allowed at
   any time; record anything persistent in
-  [docs/platform.md](docs/platform.md).
+  [docs/testing.md](docs/testing.md).

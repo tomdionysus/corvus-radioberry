@@ -181,6 +181,43 @@ TEST_CASE("radioberryd serves discovery and a UDP stream", "[daemon]") {
     CHECK(tuned);
 }
 
+TEST_CASE("radioberryd answers only the protocols it serves", "[daemon]") {
+    for (const bool p1_on : {true, false}) {
+        FakeDevice device;
+        DaemonOptions o = Running::options();
+        o.protocol1 = p1_on;
+        o.protocol2 = !p1_on;
+        Running r(device, o);
+        const sockaddr_in to = loopback(r.daemon.port());
+        Socket client(SOCK_DGRAM);
+        timeout(client.fd, 300);
+        const auto p1 = discovery_packet();
+        ::sendto(client.fd, p1.data(), p1.size(), 0, reinterpret_cast<const sockaddr*>(&to),
+                 sizeof to);
+        const auto p1_reply = receive(client.fd);
+        const auto p2 = p2_discovery_packet();
+        ::sendto(client.fd, p2.data(), p2.size(), 0, reinterpret_cast<const sockaddr*>(&to),
+                 sizeof to);
+        const auto p2_reply = receive(client.fd);
+        if (p1_on) {
+            REQUIRE(p1_reply.size() == 60);
+            CHECK(p1_reply[0] == 0xef);
+            CHECK(p2_reply.empty());
+            // Packets to the other Protocol 2 ports are dropped too.
+            const sockaddr_in hp = loopback(r.daemon.p2_port(p2::kTxIqPort));
+            const std::vector<std::uint8_t> junk(64, 0);
+            ::sendto(client.fd, junk.data(), junk.size(), 0, reinterpret_cast<const sockaddr*>(&hp),
+                     sizeof hp);
+            CHECK(receive(client.fd).empty());
+        } else {
+            CHECK(p1_reply.empty());
+            REQUIRE(p2_reply.size() == 60);
+            CHECK(p2_reply[0] == 0);
+        }
+        CHECK(r.finish());
+    }
+}
+
 TEST_CASE("radioberryd serves discovery and a stream over TCP", "[daemon]") {
     FakeDevice device;
     device.idle_wait_ms = 1;

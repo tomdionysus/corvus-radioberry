@@ -30,7 +30,7 @@ Depends:
  radioberry-dkms (= ${source:Version}),
  systemd,
  udev,
-Description: RadioBerry 2.x HF transceiver on the Raspberry Pi 5
+Description: RadioBerry 2.x HF transceiver on the Raspberry Pi 4 or 5
  radioberryd serves a RadioBerry 2.x HAT to SDR clients over openHPSDR
  Protocol 1 (Hermes-Lite 2 dialect) and Protocol 2, as
  radioberry.service. Transmit and the PA are off as installed; see
@@ -47,11 +47,12 @@ Depends:
  ${misc:Depends},
  dkms,
 Recommends:
- linux-headers-rpi-2712 | linux-headers-rpi-v8,
+ linux-headers-rpi-v8 | linux-headers-rpi-2712,
 Description: RadioBerry 2.x kernel driver (DKMS source)
- The radioberry.ko driver for the RadioBerry 2.x on the Raspberry Pi 5:
- loads the gateware, streams receive and transmit through the RP1 PIO,
- and gives userspace /dev/radioberry. DKMS builds it for each installed
+ The radioberry.ko driver for the RadioBerry 2.x on the Raspberry Pi 4
+ or 5: loads the gateware, streams receive and transmit through a
+ CPU-clocked kernel thread (Pi 4) or the RP1 PIO (Pi 5), and gives
+ userspace /dev/radioberry. DKMS builds it for each installed
  kernel and rebuilds it when the kernel is updated.
 
 Package: radioberry-dev

@@ -415,7 +415,8 @@ void Server::rx_specific_locked(const RxSpecific& r) {
         return;
     }
     const unsigned want = static_cast<unsigned>(highest) + 1;
-    const unsigned run = std::min(want, max_receivers(*top, identity_.receivers));
+    const unsigned run =
+        std::min(want, max_receivers(*top, identity_.receivers, identity_.rx_values_max));
     if (*top != device_rate_code_ || run != device_receivers_) {
         if (run < want) {
             spdlog::warn(

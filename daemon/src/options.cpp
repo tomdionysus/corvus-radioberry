@@ -5,8 +5,10 @@
 #include <yaml-cpp/yaml.h>
 
 #include <algorithm>
+#include <cctype>
 #include <charconv>
 #include <cstdio>
+#include <optional>
 #include <set>
 #include <stdexcept>
 
@@ -37,14 +39,52 @@ std::array<std::uint8_t, 6> mac(const std::string& text) {
     return m;
 }
 
-// Config keys that take a value, as their long options do.
-const std::set<std::string> kValueKeys = {"device",        "address",           "port",
-                                          "mac",           "client_timeout_ms", "frequency_ppm",
-                                          "iq_convention", "p2_rx_gain",        "drive_ceiling",
-                                          "tx_watchdog_s", "log_level"};
+// Config keys; each is its long option with `_` for `-`.
+const std::set<std::string> kKeys = {
+    "device",        "address",       "port",          "mac",           "client_timeout_ms",
+    "frequency_ppm", "iq_convention", "p2_rx_gain",    "protocols",     "realtime",
+    "allow_tx",      "allow_pa",      "drive_ceiling", "tx_watchdog_s", "log_level"};
 
-// Config keys that are true or false.
-const std::set<std::string> kSwitchKeys = {"allow_tx", "allow_pa", "realtime"};
+std::string lower(std::string text) {
+    std::transform(text.begin(), text.end(), text.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return text;
+}
+
+std::optional<bool> boolean(const std::string& text) {
+    const std::string t = lower(text);
+    if (t == "true" || t == "on" || t == "yes") {
+        return true;
+    }
+    if (t == "false" || t == "off" || t == "no") {
+        return false;
+    }
+    return std::nullopt;
+}
+
+// `1`, `2` or `1,2`, in any order.
+void protocols(const std::string& text, DaemonOptions& o) {
+    o.protocol1 = false;
+    o.protocol2 = false;
+    std::size_t start = 0;
+    while (start <= text.size()) {
+        const std::size_t comma = text.find(',', start);
+        std::string item = text.substr(start, comma == std::string::npos ? comma : comma - start);
+        item.erase(0, item.find_first_not_of(' '));
+        item.erase(item.find_last_not_of(' ') + 1);
+        if (item == "1") {
+            o.protocol1 = true;
+        } else if (item == "2") {
+            o.protocol2 = true;
+        } else {
+            throw std::invalid_argument("--protocols: 1, 2 or 1,2: " + text);
+        }
+        if (comma == std::string::npos) {
+            break;
+        }
+        start = comma + 1;
+    }
+}
 
 }  // namespace
 
@@ -68,30 +108,27 @@ std::vector<std::string> config_args(const std::string& path) {
     for (const auto& entry : root) {
         const std::string key = entry.first.as<std::string>();
         const YAML::Node& value = entry.second;
-        if (!kValueKeys.contains(key) && !kSwitchKeys.contains(key)) {
+        if (!kKeys.contains(key)) {
             throw fail("unknown key: " + key);
+        }
+        std::string option = "--" + key;
+        std::replace(option.begin(), option.end(), '_', '-');
+        out.push_back(option);
+        if (key == "protocols" && value.IsSequence()) {  // protocols: [1, 2]
+            std::string list;
+            for (const auto& item : value) {
+                if (!item.IsScalar()) {
+                    throw fail(key + ": not a list of protocols");
+                }
+                list += (list.empty() ? "" : ",") + item.Scalar();
+            }
+            out.push_back(list);
+            continue;
         }
         if (!value.IsScalar()) {
             throw fail(key + ": not a single value");
         }
-        std::string option = "--" + key;
-        std::replace(option.begin(), option.end(), '_', '-');
-        if (kValueKeys.contains(key)) {
-            out.push_back(option);
-            out.push_back(value.Scalar());
-            continue;
-        }
-        bool on = false;
-        if (!YAML::convert<bool>::decode(value, on)) {
-            throw fail(key + ": not true or false: " + value.Scalar());
-        }
-        if (key == "realtime") {
-            if (!on) {
-                out.emplace_back("--no-realtime");
-            }
-        } else if (on) {
-            out.push_back(option);
-        }
+        out.push_back(value.Scalar());
     }
     return out;
 }
@@ -120,6 +157,21 @@ Options parse_options(const std::vector<std::string>& command_line) {
                 throw std::invalid_argument(a + ": needs a value");
             }
             return args[++i];
+        };
+        // true or false; given alone, as older command lines do, true.
+        const auto flag = [&]() {
+            if (i + 1 >= args.size() || args[i + 1].starts_with("-")) {
+                return true;
+            }
+            const std::string& text = args[++i];
+            const auto b = boolean(text);
+            if (!b) {
+                std::string why = a;
+                why += ": true or false: ";
+                why += text;
+                throw std::invalid_argument(why);
+            }
+            return *b;
         };
         if (a == "-h" || a == "--help") {
             o.help = true;
@@ -170,12 +222,16 @@ Options parse_options(const std::vector<std::string>& command_line) {
                 throw std::invalid_argument("--p2-rx-gain: a whole number from -12 to 48: " + text);
             }
             o.daemon.p2_rx_gain_db = db;
-        } else if (a == "--no-realtime") {
+        } else if (a == "--protocols") {
+            protocols(value(), o.daemon);
+        } else if (a == "--realtime") {
+            o.daemon.realtime = flag();
+        } else if (a == "--no-realtime") {  // older spelling of --realtime false
             o.daemon.realtime = false;
         } else if (a == "--allow-tx") {
-            o.daemon.tx.allow_tx = true;
+            o.daemon.tx.allow_tx = flag();
         } else if (a == "--allow-pa") {
-            o.daemon.tx.allow_pa = true;
+            o.daemon.tx.allow_pa = flag();
         } else if (a == "--drive-ceiling") {
             o.daemon.tx.drive_ceiling = static_cast<std::uint8_t>(number(a, value(), 255));
         } else if (a == "--tx-watchdog-s") {
@@ -222,10 +278,12 @@ std::string usage() {
            "                           swapped both ways, for plain complex-baseband clients\n"
            "  --p2-rx-gain DB          Protocol 2 LNA gain, -12 to 48 dB, less the client's\n"
            "                           step attenuation (default 14)\n"
-           "  --no-realtime            no SCHED_FIFO threads or locked memory (default: both,\n"
-           "                           which need CAP_SYS_NICE and CAP_IPC_LOCK)\n"
-           "  --allow-tx               let the owning client transmit (default: receive only)\n"
-           "  --allow-pa               let the client enable the PA while transmitting\n"
+           "  --protocols LIST         protocols to serve: 1, 2 or 1,2 (default 1,2)\n"
+           "  --realtime BOOL          SCHED_FIFO threads and locked memory, which need\n"
+           "                           CAP_SYS_NICE and CAP_IPC_LOCK (default true)\n"
+           "  --allow-tx BOOL          let the owning client transmit (default false)\n"
+           "  --allow-pa BOOL          let the client enable the PA while transmitting\n"
+           "                           (default false)\n"
            "  --drive-ceiling N        highest drive level sent, 0 to 255 (default 0)\n"
            "  --tx-watchdog-s N        longest continuous MOX, seconds (default 120)\n"
            "  --log-level LEVEL        trace, debug, info, warn or error (default info)\n"

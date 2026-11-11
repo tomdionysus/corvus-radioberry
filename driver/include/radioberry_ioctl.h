@@ -46,9 +46,16 @@ struct radioberry_info {
 	__u8 transmitters;
 	__u8 active_receivers; /* receivers in the current RX frame */
 	__u8 rx_rate_code;     /* 0..3 = 48, 96, 192, 384 ksps */
-	__u8 reserved0;
-	__u32 reserved[4];
+	__u8 transport;        /* RADIOBERRY_TRANSPORT_*; 0 from drivers before 0.5 */
+	/* RX values per second the streams carry; 0 from drivers before 0.5,
+	 * which carry 2 370 000.
+	 */
+	__u32 rx_values_max;
+	__u32 reserved[3];
 };
+
+#define RADIOBERRY_TRANSPORT_PIO 1 /* Raspberry Pi 5: RP1 PIO state machines */
+#define RADIOBERRY_TRANSPORT_CPU 2 /* Raspberry Pi 4: clocked by a kernel thread */
 
 /*
  * One gateware command. tx[0] holds RADIOBERRY_CMD_* flags, tx[1..5] the

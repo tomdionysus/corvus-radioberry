@@ -1,24 +1,20 @@
 # Debian packages
 
-The `debian/` directory builds Debian packages for a Raspberry Pi 5 running
-Raspberry Pi OS (Debian 13 trixie, 64-bit). Tested on 2026-11-09 with
-Raspberry Pi OS trixie, kernel 6.18.60+rpt-rpi-2712: build, install,
-reinstall, remove, purge, FPGA reconfiguration, a reboot, and installation
-from a signed apt repository; after the reboot `rbprobe` exited 0 and a
-Protocol 1 receive test through `radioberryd` (two receivers, 192 ksps,
-10 s) lost no packets.
+The `debian/` directory builds Debian packages for a Raspberry Pi 4 or
+Raspberry Pi 5 running Raspberry Pi OS (Debian 13 trixie, 64-bit); the
+same packages serve both.
 
 ## Packages
 
 | Package | Architecture | Contents |
 |---|---|---|
-| `radioberry` | arm64 | `radioberryd` and `radioberry.service`, `rbprobe`, `rbcat`, `rbctl`, `rbload`, `p1probe`, `p2probe`, sysusers.d entry, udev rule, `/etc/radioberry/config.yaml`, both gateware images, the overlay |
+| `radioberry` | arm64 | `radioberryd` and `radioberry.service`, `rbprobe`, `rbcat`, `rbctl`, `rbload`, `rbbus`, `p1probe`, `p2probe`, sysusers.d entry, udev rule, `/etc/radioberry/config.yaml`, both gateware images, the overlay |
 | `radioberry-dkms` | all | the driver source, built by DKMS for every installed kernel |
 | `radioberry-dev` | all | `radioberry_ioctl.h` |
 | `radioberry-dbgsym` | arm64 | debug symbols for `radioberry` |
 
 `radioberry` depends on `radioberry-dkms` of the same version.
-`radioberry-dkms` recommends `linux-headers-rpi-2712 | linux-headers-rpi-v8`,
+`radioberry-dkms` recommends `linux-headers-rpi-v8 | linux-headers-rpi-2712`,
 which apt installs by default; DKMS needs the headers of each kernel it
 builds for.
 
@@ -33,7 +29,7 @@ tools/build-deb.sh
 ```
 
 `apt build-dep ./` installs the build dependencies listed in
-`debian/control`. [tools/build-deb.sh](../tools/build-deb.sh) writes
+`debian/control`. [tools/build-deb.sh](https://github.com/tomdionysus/corvus-radioberry/blob/main/tools/build-deb.sh) writes
 `debian/changelog`, runs `dpkg-buildpackage -us -uc -b` (unsigned, binary
 only) with the unit tests, and moves the packages to `build-deb/`.
 `DEB_BUILD_OPTIONS=nocheck tools/build-deb.sh` skips the tests.
@@ -73,8 +69,8 @@ dtoverlay=radioberry
 and reboot. `radioberry.service` is enabled at install and started then if
 `/dev/radioberry` exists, otherwise at the next boot. Check with `rbprobe`.
 
-Transmit and the PA are off in the installed `config.yaml`; see the
-README's TX & PA section.
+Transmit and the PA are off in the installed `config.yaml`
+([Quickstart](quickstart.md#3-configure)).
 
 To change the FPGA type later: `sudo dpkg-reconfigure radioberry`, then
 reboot (the driver loads the gateware when it binds at boot).
@@ -88,7 +84,8 @@ upgrade that changes the driver.
 
 A kernel update triggers DKMS to build the module for the new kernel,
 provided the new kernel's headers are installed (the
-`linux-headers-rpi-2712` metapackage follows the kernel).
+`linux-headers-rpi-v8` and `linux-headers-rpi-2712` metapackages follow
+the kernel).
 
 dpkg keeps a changed `/etc/radioberry/config.yaml` on upgrade and asks
 when the packaged default changed as well.
@@ -134,15 +131,14 @@ below use `reprepro`; `aptly` does the same job.
 Create the key on a machine you keep safe; it signs every update.
 
 ```
-gpg --quick-gen-key "RadioBerry archive key" ed25519 sign 2y
-gpg --list-keys "RadioBerry archive key"      # note the fingerprint
-gpg --export FINGERPRINT > radioberry-archive-keyring.gpg
+gpg --quick-gen-key "corvus-radioberry archive key" ed25519 sign 2y
+gpg --list-keys "corvus-radioberry archive key"   # note the fingerprint
 ```
 
 Keep the private key out of the published directory and backed up. Before
 the expiry date, extend it (`gpg --quick-set-expire FINGERPRINT 2y`) and
-publish the exported public key again; apt refuses a repository signed by
-an expired key.
+publish the sources file again with the re-exported key (step 5); apt
+refuses a repository signed by an expired key.
 
 ### 2. Repository configuration
 
@@ -154,12 +150,12 @@ mkdir -p repo/conf
 `repo/conf/distributions`:
 
 ```
-Origin: RadioBerry
-Label: RadioBerry
+Origin: corvus-radioberry
+Label: corvus-radioberry
 Codename: trixie
 Architectures: arm64
 Components: main
-Description: RadioBerry packages for Raspberry Pi OS
+Description: corvus-radioberry packages for Raspberry Pi OS
 SignWith: FINGERPRINT
 ```
 
@@ -169,8 +165,7 @@ go to a separate directory, `public/` below.
 ### 3. Adding packages
 
 ```
-reprepro --basedir repo --outdir public includedeb trixie build-deb/*.deb
-cp radioberry-archive-keyring.gpg public/
+reprepro --basedir repo --outdir ./public includedeb trixie build-deb/*.deb
 ```
 
 Run the same `includedeb` for each new build: reprepro keeps one version
@@ -185,32 +180,30 @@ Pages from a separate repository (a file there may be at most 100 MB;
 the largest package, `radioberry-dbgsym`, is about 7 MB). Publish only
 `public/`, never `repo/` or the private key.
 
-### 5. Using the repository
+### 5. The sources file
 
-On each Pi, with `https://example.org/radioberry` standing for where
-`public/` is served:
-
-```
-sudo install -d -m 755 /etc/apt/keyrings
-sudo curl -fsSLo /etc/apt/keyrings/radioberry.gpg \
-    https://example.org/radioberry/radioberry-archive-keyring.gpg
-```
-
-`/etc/apt/sources.list.d/radioberry.sources`:
+Put a `radioberry.sources` file in `public/`, with the public key inside
+it so users fetch one file. With `https://example.org/radioberry/`
+standing for where `public/` is served:
 
 ```
 Types: deb
 URIs: https://example.org/radioberry/
 Suites: trixie
 Components: main
-Signed-By: /etc/apt/keyrings/radioberry.gpg
+Signed-By:
+ -----BEGIN PGP PUBLIC KEY BLOCK-----
+ .
+ (the output of gpg --export --armor FINGERPRINT, each line indented by
+ one space, an empty line written as " .")
+ -----END PGP PUBLIC KEY BLOCK-----
 ```
 
-Then:
+On each Pi:
 
 ```
-sudo apt update
-sudo apt install radioberry
+sudo curl -fsSLo /etc/apt/sources.list.d/radioberry.sources https://example.org/radioberry/radioberry.sources
+sudo apt update && sudo apt install radioberry
 ```
 
 Later builds arrive with `sudo apt update && sudo apt upgrade`.

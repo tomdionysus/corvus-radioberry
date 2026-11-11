@@ -14,11 +14,11 @@
                            +-----------|------------+
                            | radioberry.ko (C)      |
                            |  probe, gateware load  |
-                           |  rx DMA, frame ring    |
-                           |  tx ring, DMA          |
+                           |  rx parser, frame ring |
+                           |  tx ring, transport    |
                            |  spi control, stats    |
                            +-----------|------------+
-                                       | rp1-pio, spi0, gpiod
+                                       | GPIO registers (Pi 4) or rp1-pio (Pi 5), spi0, gpiod
                            +-----------|------------------------+
                            | RadioBerry 2.x gateware (HL2 75.3) |
                            | AD9866, CN301 -> PA5W V2           |
@@ -43,46 +43,104 @@ These come from hardware and gateware this project does not change.
   sample-ready on GPIO 25), the TX wire format (1-bit serial on GPIO 5,
   clock GPIO 4, ready GPIO 12), the six-byte SPI command on `spi0` CE0,
   the Hermes-Lite command set, the FIFO depths, and the CN301 control
-  lines to the PA. Details: [gateware/README.md](../gateware/README.md).
+  lines to the PA. Details: [gateware/README.md](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/README.md).
 - FPGA configuration: passive serial over GPIO 13, 24 and 27, with 22 and
   26 read back. Volatile; reloaded on every driver probe.
-- Host: the RP1 has one PIO block of four state machines. Kernel clients
-  of the stock `rp1-pio` get bounce-buffered DMA, at most four buffers per
-  direction; cyclic DMA is only reachable through its character device.
+- Host: each board's limits are in Transports, below.
 - PA board: manual bias, nothing on I2C, no interlock. PTT, key and paddle
-  inputs go to the FPGA, not to the Pi ([docs/pa.md](pa.md)).
+  inputs go to the FPGA, not to the Pi ([PA5W V2](pa.md)).
 - Protocol 1 clients expect 48, 96, 192 or 384 ksps receive; Protocol 2
   clients send transmit I/Q at 192 ksps. The gateware takes 48 ksps.
 
 ## Driver
 
 - SPI driver bound to the overlay's `sdr,radioberry` device. The five
-  configuration lines are gpiod descriptors from the same node; the stream
-  pins are handed to the RP1 PIO at run time.
+  configuration lines are gpiod descriptors from the same node.
 - `probe()`: claim GPIO, load the gateware with `request_firmware`, verify
   CONF_DONE and nSTATUS, poll the identity over SPI until the gateware
-  leaves reset, then claim two PIO state machines and start their DMA. Any
-  failure unwinds completely.
-- RX: `rp1_pio_sm_xfer_data()` with four periods in flight, refilled by a
-  SCHED_FIFO kernel thread (the completion callback runs in softirq and
-  the call allocates). A period is one millisecond of samples at the
-  current rate and receiver count. The period callback parses words,
+  leaves reset, then start the board's transport (chosen from the SoC;
+  Transports, below). Any failure unwinds completely.
+- RX: the transport delivers `index << 24 | value` words. The parser
   checks the metadata nibble sequence, resynchronises on a miss and counts
   resyncs, dropped words and overruns. Whole frames go into a ring; an
   overrun drops whole frames and sets a flag. After a receiver-count
   change, old-layout words are discarded until two clean frames of the
   new layout arrive.
-- TX: bounce-buffered DMA in periods of 256 samples from a ring, fed by
-  the same thread. When the ring is empty the driver sends nothing and
-  counts an underrun if PTT is set; it never invents samples, so the
-  gateware's PTT hang-time watchdog ends transmit when samples stop.
+- TX: the transport drains a ring of samples. When the ring is empty the
+  driver sends nothing and counts an underrun if PTT is set; it never
+  invents samples, so the gateware's PTT hang-time watchdog ends transmit
+  when samples stop.
 - Control: one versioned ioctl carries the six command bytes out and the
   six reply bytes in, serialised by a mutex. Identity and statistics are
   separate read-only ioctls. A receiver-count change is sent with the RX
-  clock held still ([docs/fault-rx-lockup.md](fault-rx-lockup.md)).
+  clock held still ([receive lock-up](fault-rx-lockup.md)).
 - Pure logic (word parsing, resync, frame assembly, TX packing,
   statistics) lives in headers with no kernel dependencies and is compiled
   into a userspace test binary.
+
+## Transports
+
+The `rpi-v8` kernel boots on both boards and DKMS builds one module per
+kernel, so the module carries both transports and chooses at probe from
+the SoC compatible (`brcm,bcm2711` or `brcm,bcm2712`). Both feed the same
+RX parser and drain the same TX ring.
+
+### Raspberry Pi 4: CPU-clocked
+
+- A SCHED_FIFO kernel thread clocks both buses through the GPIO set,
+  clear and level registers
+  ([driver/kernel/rb_bitbang.h](https://github.com/tomdionysus/corvus-radioberry/blob/main/driver/kernel/rb_bitbang.h)).
+- The stream GPIOs come from the overlay (`rx-clk-gpios` and the rest,
+  inputs with pull-downs) through gpiolib; the driver maps the registers
+  of their GPIO block, which must be `brcm,bcm2711-gpio`.
+- The thread clocks up to 256 RX words, then the pending TX words, then
+  sleeps 0.5 to 1 ms when the gateware had nothing.
+- RX clock hold: a mutex the thread holds while clocking.
+- The RX bus (`rx_pi_pio.v`) advances on each rising clock edge; with more
+  than 12 values in its FIFO it raises sample-ready for one clock, then
+  gives the index nibble and six data nibbles. Pausing the clock pauses
+  the bus; the FIFO (1012 values) absorbs about 10 ms at one receiver at
+  48 ksps.
+- Not implemented, if more receivers or less CPU are wanted: SMI
+  programmed reads with DMA for RX (read strobe GPIO 6, SD10 to SD13 on
+  GPIO 18 to 21, SD17 on GPIO 25), which needs a Pi 4-only overlay because
+  any fragment naming the SMI block fails to merge onto the Pi 5 tree; or
+  DMA writing the GPIO set and clear registers paced by PWM or PCM, which
+  cannot react to TX ready.
+
+### Raspberry Pi 5: RP1 PIO
+
+- Two PIO state machines with DMA; the stream GPIOs belong to the RP1 PIO.
+- RX: `rp1_pio_sm_xfer_data()` with four periods in flight, refilled by a
+  SCHED_FIFO kernel thread (the completion callback runs in softirq and
+  the call allocates). A period is one millisecond of samples at the
+  current rate and receiver count.
+- TX: bounce-buffered DMA in periods of 256 samples, fed by the same
+  thread.
+- RX clock hold: the RX state machine is stopped.
+- Capacity: with PIO clock divider 2 (100 MHz from the 200 MHz RP1 clock,
+  five PIO cycles per nibble) one value takes 42 PIO cycles, at most about
+  2.38 million values per second.
+
+`rp1-pio` facts the driver depends on:
+
+- The RP1 has one PIO block of four state machines. Kernel clients get
+  bounce-buffered DMA, at most four buffers per direction; cyclic DMA is
+  only reachable through the character device.
+- `rp1_pio` is an in-tree module, loaded at boot, instance `pio0`. Its
+  kernel API is `include/linux/pio_rp1.h`, with argument structs in
+  `include/uapi/misc/rp1_pio_if.h`.
+- `rp1_pio_sm_xfer_data()` with `dma_addr` 0 never blocks, returns
+  `-EBUSY` when all buffers are in flight, allocates with `GFP_KERNEL`
+  (process context only), copies FROM_SM data into the caller's buffer
+  and calls the caller's callback from the DMA completion (softirq).
+- `rp1_pio_add_program()` takes programs written for offset 0; the RP1
+  firmware relocates jump targets to the load offset.
+- `rp1_pio_close()` disables and unclaims the client's state machines and
+  frees their DMA.
+- `rp1_pio_open()` returns `-EPROBE_DEFER` until an RP1 PIO device has
+  probed, which never happens on a Pi 4, so the transport is chosen before
+  it is called.
 
 ## Daemon
 
@@ -92,7 +150,7 @@ These come from hardware and gateware this project does not change.
   hands RX blocks to both protocol servers; the main thread serves
   Protocol 1 and runs the session and policy timers; a separate thread
   serves the Protocol 2 sockets. Real-time priorities are in
-  [docs/daemon.md](daemon.md).
+  [radioberryd](daemon.md#real-time).
 - Protocol code sets command registers; the RX device thread sends them
   between its reads, so it always knows the frame layout it reads, and
   stamps PTT, run and the TX permission bit onto each from one transmit
@@ -113,7 +171,7 @@ These come from hardware and gateware this project does not change.
   levers are the TX permission bit and the PTT bit in every command, and
   its own PTT hang-time watchdog, which is never disabled. A CW key on the
   jack drives the DAC regardless of software
-  ([gateware/README.md](../gateware/README.md)).
+  ([gateware/README.md](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/README.md)).
 
 ## Platform probe
 
@@ -130,7 +188,5 @@ is tested against an in-memory machine.
   (gcov and lcov); ASan and UBSan builds run the same tests.
 - The kernel module's glue is exercised by a userspace harness against
   `/dev/radioberry` on the Pi (`tools/driver-tests/`).
-- [tools/ci-pi.sh](../tools/ci-pi.sh) is the merge gate
-  ([CONTRIBUTING.md](../CONTRIBUTING.md)).
-- Every transmit test on hardware needs the board owner's go-ahead at the
-  time.
+- [tools/ci-pi.sh](https://github.com/tomdionysus/corvus-radioberry/blob/main/tools/ci-pi.sh) is the merge gate
+  ([CONTRIBUTING.md](https://github.com/tomdionysus/corvus-radioberry/blob/main/CONTRIBUTING.md)).

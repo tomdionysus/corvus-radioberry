@@ -1,20 +1,26 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- * RadioBerry 2.x on the Raspberry Pi 5.
+ * RadioBerry 2.x on the Raspberry Pi 5 and Raspberry Pi 4.
  *
  * Binds to the "sdr,radioberry" device on spi0 created by the radioberry
  * overlay. On probe it loads the gateware through passive serial, reads
- * the gateware identity over SPI, claims two RP1 PIO state machines for the
- * RX and TX streams and keeps their DMA running, and creates
+ * the gateware identity over SPI, starts the RX and TX streams, and creates
  * /dev/radioberry (see include/radioberry_ioctl.h for the interface).
  * Writing 1 to the sysfs attribute "reload" while the device is closed
  * stops the streams, reloads the gateware, re-reads its identity and
  * restarts the streams.
  *
- * Built only on the stock rp1-pio kernel API. Stream DMA uses rp1-pio's
- * bounce buffers: up to RB_DMA_SLOTS periods are in flight per direction
- * and a FIFO-priority kernel thread refills them, so the state machines
- * never wait for a restart.
+ * The streams have two transports, chosen at probe from the SoC; the rest
+ * of the driver is shared:
+ *
+ * - Pi 5 (BCM2712): two RP1 PIO state machines, built only on the stock
+ *   rp1-pio kernel API. Stream DMA uses rp1-pio's bounce buffers: up to
+ *   RB_DMA_SLOTS periods are in flight per direction and a FIFO-priority
+ *   kernel thread refills them, so the state machines never wait for a
+ *   restart.
+ * - Pi 4 (BCM2711), which has no PIO: a FIFO-priority kernel thread
+ *   clocks both buses through the GPIO block's set, clear and level
+ *   registers with the same handshakes (rb_bitbang.h), at a lower rate.
  *
  * The PIO programs and the overall design follow the original RadioBerry
  * Pi 5 driver, released into the public domain under the Unlicense.
@@ -24,10 +30,13 @@
 #include <linux/firmware.h>
 #include <linux/fs.h>
 #include <linux/gpio/consumer.h>
+#include <linux/io.h>
 #include <linux/kthread.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
+#include <linux/of.h>
+#include <linux/of_address.h>
 #include <linux/pio_rp1.h>
 #include <linux/poll.h>
 #include <linux/sched.h>
@@ -41,8 +50,34 @@
 #include "rb_logic.h"
 #include "rb_pio.h"
 
-#define RB_DRIVER_VERSION ((0u << 16) | (4u << 8) | 0u)
-#define RB_DRIVER_VERSION_STRING "0.4.0"
+/* BCM2711 GPIO block registers for the CPU-clocked buses. */
+#define RB_BCM2711_GPSET0 0x1c
+#define RB_BCM2711_GPCLR0 0x28
+#define RB_BCM2711_GPLEV0 0x34
+
+struct rb_bb_io {
+	void __iomem *base;
+};
+
+static inline void rb_bb_set(struct rb_bb_io *io, u32 mask)
+{
+	writel_relaxed(mask, io->base + RB_BCM2711_GPSET0);
+}
+
+static inline void rb_bb_clr(struct rb_bb_io *io, u32 mask)
+{
+	writel_relaxed(mask, io->base + RB_BCM2711_GPCLR0);
+}
+
+static inline u32 rb_bb_lev(struct rb_bb_io *io)
+{
+	return readl_relaxed(io->base + RB_BCM2711_GPLEV0);
+}
+
+#include "rb_bitbang.h"
+
+#define RB_DRIVER_VERSION ((0u << 16) | (5u << 8) | 0u)
+#define RB_DRIVER_VERSION_STRING "0.5.0"
 
 #define RB_FIRMWARE_NAME "radioberry.rbf"
 #define RB_DMA_SLOTS 4
@@ -70,6 +105,30 @@ MODULE_PARM_DESC(rx_ring_kib, "RX ring size in KiB, rounded up to a power of two
 static unsigned int tx_ring_kib = 64;
 module_param(tx_ring_kib, uint, 0444);
 MODULE_PARM_DESC(tx_ring_kib, "TX ring size in KiB, rounded up to a power of two (default 64)");
+
+/*
+ * Pi 4 (CPU-clocked buses) only. The RX limit is what the daemon lets
+ * clients ask for: two receivers at 48 ksps or one at 96. Above it the
+ * thread takes a whole core (docs/testing.md).
+ */
+#define RB_BB_RX_VALUES_MAX_DEFAULT 192000
+static unsigned int bb_rx_values_max = RB_BB_RX_VALUES_MAX_DEFAULT;
+module_param(bb_rx_values_max, uint, 0444);
+MODULE_PARM_DESC(bb_rx_values_max,
+		 "Pi 4: RX values per second offered to userspace (default 192000)");
+
+static unsigned int bb_settle_reads;
+module_param(bb_settle_reads, uint, 0444);
+MODULE_PARM_DESC(bb_settle_reads, "Pi 4: extra pin reads after each bus clock pulse (default 0)");
+
+#define RB_BB_RX_BATCH 256     /* words per RX run, at most 2048 clocks */
+#define RB_BB_RX_MAX_IDLE 64   /* idle clocks before the thread rests */
+#define RB_BB_TX_MAX_POLLS 64  /* polling edges per word before giving up */
+#define RB_BB_IDLE_MIN_US 500  /* rest with nothing to move: the gateware's */
+#define RB_BB_IDLE_MAX_US 1000 /* RX FIFO lasts 10 ms at 96 000 values/s */
+
+/* The PIO bus's RX ceiling, measured (gateware/README.md section 5). */
+#define RB_PIO_RX_VALUES_MAX 2370000
 
 static unsigned int debug;
 module_param(debug, uint, 0644);
@@ -119,9 +178,25 @@ struct rb_stream {
 	atomic_t inflight;
 };
 
+struct rb_dev;
+
+/* How the RX and TX streams reach the gateware. */
+struct rb_transport {
+	const char *name;
+	u32 rx_values_max; /* 0: bb_rx_values_max */
+	/* Starts both streams and their kernel thread; undoes itself on failure. */
+	int (*up)(struct rb_dev *rb);
+	/* Stops everything up() started. Safe to call when it is not running. */
+	void (*down)(struct rb_dev *rb);
+	/* Stops the RX clock (true) until rx_release(); false if not running. */
+	bool (*rx_hold)(struct rb_dev *rb);
+	void (*rx_release)(struct rb_dev *rb);
+};
+
 struct rb_dev {
 	struct spi_device *spi;
 	struct device *dev;
+	const struct rb_transport *tp;
 	struct gpio_desc *nconfig, *dclk, *data, *conf_done, *nstatus;
 	struct rb_identity id;
 
@@ -138,6 +213,16 @@ struct rb_dev {
 
 	struct rp1_pio_client *pio;
 	struct rb_stream rx, tx;
+
+	/* Pi 4: CPU-clocked buses. bb_lock is held while the thread clocks. */
+	struct rb_bb_io bbio;
+	struct rb_bb_bus bb;
+	struct mutex bb_lock;
+	struct gpio_desc *bb_rx_clk, *bb_tx_clk, *bb_tx_data, *bb_rx_ready, *bb_tx_ready;
+	struct gpio_descs *bb_rx_data;
+	u32 *bb_rx_words;
+	u32 *bb_tx_words;
+	unsigned int bb_tx_count, bb_tx_pos; /* words in bb_tx_words, words sent */
 
 	spinlock_t rx_lock; /* parser, rx ring, rx statistics */
 	struct rb_rx_parser parser;
@@ -324,13 +409,12 @@ static int rb_load_gateware(struct rb_dev *rb)
 
 /* ---- streams -------------------------------------------------------- */
 
-static void rb_rx_dma_done(void *param)
+/*
+ * Feeds RX words (index << 24 | value) from either transport to the parser
+ * and queues completed frames. Returns true if a reader should be woken.
+ */
+static bool rb_rx_consume(struct rb_dev *rb, const u32 *words, unsigned int n)
 {
-	struct rb_dev *rb = param;
-	struct rb_stream *s = &rb->rx;
-	unsigned int idx = s->completed++ % RB_DMA_SLOTS;
-	const u32 *words = (const u32 *)s->slot[idx];
-	unsigned int n = s->slot_bytes[idx] / 4;
 	unsigned int frame_bytes;
 	unsigned long flags;
 	bool queued = false;
@@ -364,9 +448,20 @@ static void rb_rx_dma_done(void *param)
 			 resyncs, dropped);
 	if (overruns)
 		rb_debug(rb, "RX ring full: %llu frames dropped\n", overruns);
+	return queued || rb->rx_overrun;
+}
+
+static void rb_rx_dma_done(void *param)
+{
+	struct rb_dev *rb = param;
+	struct rb_stream *s = &rb->rx;
+	unsigned int idx = s->completed++ % RB_DMA_SLOTS;
+	const u32 *words = (const u32 *)s->slot[idx];
+	unsigned int n = s->slot_bytes[idx] / 4;
+	bool wake = rb_rx_consume(rb, words, n);
 
 	atomic_dec(&s->inflight);
-	if (queued || rb->rx_overrun)
+	if (wake)
 		wake_up_interruptible(&rb->rx_wait);
 	wake_up(&rb->work_wait);
 }
@@ -658,7 +753,7 @@ static void rb_stream_reset(struct rb_stream *s)
 	atomic_set(&s->inflight, 0);
 }
 
-static void rb_stop_streams(struct rb_dev *rb)
+static void rb_pio_down(struct rb_dev *rb)
 {
 	struct rp1_pio_sm_set_enabled_args off = { 0 };
 	unsigned int i;
@@ -696,7 +791,7 @@ static void rb_stop_streams(struct rb_dev *rb)
  * Opens the RP1 PIO, claims and configures both state machines and starts
  * them with their kernel thread. Undoes everything on failure.
  */
-static int rb_streams_up(struct rb_dev *rb)
+static int rb_pio_up(struct rb_dev *rb)
 {
 	int ret;
 
@@ -713,12 +808,251 @@ static int rb_streams_up(struct rb_dev *rb)
 	if (!ret)
 		ret = rb_start_streams(rb);
 	if (ret) {
-		rb_stop_streams(rb);
+		rb_pio_down(rb);
 		return ret;
 	}
 	dev_info(rb->dev, "RX on PIO state machine %d (program at %d), TX on %d (program at %d)\n",
 		 rb->rx.sm, rb->rx.prog_offset, rb->tx.sm, rb->tx.prog_offset);
 	return 0;
+}
+
+/* Stops the RX state machine, so the RX clock stands still. */
+static bool rb_pio_rx_hold(struct rb_dev *rb)
+{
+	struct rp1_pio_sm_set_enabled_args off = { .mask = (u16)BIT(rb->rx.sm) };
+
+	return rb->pio && rp1_pio_sm_set_enabled(rb->pio, &off) == 0;
+}
+
+static void rb_pio_rx_release(struct rb_dev *rb)
+{
+	struct rp1_pio_sm_set_enabled_args on = { .mask = (u16)BIT(rb->rx.sm), .enable = 1 };
+
+	rp1_pio_sm_set_enabled(rb->pio, &on);
+}
+
+static const struct rb_transport rb_pio_transport = {
+	.name = "rp1-pio",
+	.rx_values_max = RB_PIO_RX_VALUES_MAX,
+	.up = rb_pio_up,
+	.down = rb_pio_down,
+	.rx_hold = rb_pio_rx_hold,
+	.rx_release = rb_pio_rx_release,
+};
+
+/* ---- CPU-clocked buses (Pi 4) --------------------------------------- */
+
+/* Moves TX words from the ring to the gateware; called with bb_lock held. */
+static bool rb_bb_tx(struct rb_dev *rb)
+{
+	unsigned long flags;
+	unsigned int sent;
+	bool underrun;
+	u32 bytes;
+
+	if (rb->bb_tx_pos == rb->bb_tx_count) {
+		spin_lock_irqsave(&rb->tx_lock, flags);
+		bytes = rb_ring_get(&rb->tx_ring, (u8 *)rb->bb_tx_words, RB_TX_SLOT_BYTES);
+		underrun = !bytes && rb->ptt && !rb->tx_starved;
+		if (underrun) {
+			rb->stats.tx_underruns++;
+			rb->tx_starved = true;
+		}
+		if (bytes)
+			rb->tx_starved = false;
+		spin_unlock_irqrestore(&rb->tx_lock, flags);
+		if (underrun)
+			rb_debug(rb, "TX underrun with PTT set\n");
+		if (!bytes)
+			return false;
+		wake_up_interruptible(&rb->tx_wait);
+		rb->bb_tx_count = bytes / 4;
+		rb->bb_tx_pos = 0;
+	}
+	sent = rb_bb_tx_run(&rb->bb, rb->bb_tx_words + rb->bb_tx_pos,
+			    rb->bb_tx_count - rb->bb_tx_pos, RB_BB_TX_MAX_POLLS);
+	rb->bb_tx_pos += sent;
+	spin_lock_irqsave(&rb->tx_lock, flags);
+	rb->stats.tx_words += sent;
+	spin_unlock_irqrestore(&rb->tx_lock, flags);
+	return true;
+}
+
+static int rb_bb_worker(void *arg)
+{
+	struct rb_dev *rb = arg;
+	unsigned int got;
+	bool tx_busy;
+
+	while (!kthread_should_stop()) {
+		mutex_lock(&rb->bb_lock);
+		got = rb_bb_rx_run(&rb->bb, rb->bb_rx_words, RB_BB_RX_BATCH, RB_BB_RX_MAX_IDLE);
+		tx_busy = rb_bb_tx(rb);
+		mutex_unlock(&rb->bb_lock);
+		if (got && rb_rx_consume(rb, rb->bb_rx_words, got))
+			wake_up_interruptible(&rb->rx_wait);
+		rb_check_stall(rb);
+		if (!got && !tx_busy)
+			usleep_range(RB_BB_IDLE_MIN_US, RB_BB_IDLE_MAX_US);
+		else
+			cond_resched();
+	}
+	return 0;
+}
+
+static void rb_bb_put_gpios(struct rb_dev *rb)
+{
+	struct gpio_desc **out[] = { &rb->bb_rx_clk, &rb->bb_tx_clk, &rb->bb_tx_data,
+				     &rb->bb_rx_ready, &rb->bb_tx_ready };
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(out); i++) {
+		if (!IS_ERR_OR_NULL(*out[i]))
+			gpiod_put(*out[i]);
+		*out[i] = NULL;
+	}
+	if (!IS_ERR_OR_NULL(rb->bb_rx_data))
+		gpiod_put_array(rb->bb_rx_data);
+	rb->bb_rx_data = NULL;
+}
+
+static void rb_bb_down(struct rb_dev *rb)
+{
+	if (rb->worker) {
+		kthread_stop(rb->worker);
+		rb->worker = NULL;
+	}
+	if (rb->bbio.base) {
+		rb_bb_clr(&rb->bbio, RB_BB_RX_CLK | RB_BB_TX_CLK | RB_BB_TX_DATA);
+		iounmap(rb->bbio.base);
+		rb->bbio.base = NULL;
+	}
+	rb_bb_put_gpios(rb);
+	kfree(rb->bb_rx_words);
+	kfree(rb->bb_tx_words);
+	rb->bb_rx_words = NULL;
+	rb->bb_tx_words = NULL;
+	rb->bb_tx_count = 0;
+	rb->bb_tx_pos = 0;
+}
+
+/*
+ * The stream pins as the overlay lists them, claimed through gpiolib (which
+ * sets their direction and the inputs' pull-downs), and the GPIO block's
+ * registers mapped for the clocking itself.
+ */
+static int rb_bb_up(struct rb_dev *rb)
+{
+	struct device_node *np;
+	int ret;
+
+	rb->bb_rx_clk = gpiod_get(rb->dev, "rx-clk", GPIOD_OUT_LOW);
+	rb->bb_tx_clk = gpiod_get(rb->dev, "tx-clk", GPIOD_OUT_LOW);
+	rb->bb_tx_data = gpiod_get(rb->dev, "tx-data", GPIOD_OUT_LOW);
+	rb->bb_rx_ready = gpiod_get(rb->dev, "rx-ready", GPIOD_IN);
+	rb->bb_tx_ready = gpiod_get(rb->dev, "tx-ready", GPIOD_IN);
+	rb->bb_rx_data = gpiod_get_array(rb->dev, "rx-data", GPIOD_IN);
+	if (IS_ERR(rb->bb_rx_clk) || IS_ERR(rb->bb_tx_clk) || IS_ERR(rb->bb_tx_data) ||
+	    IS_ERR(rb->bb_rx_ready) || IS_ERR(rb->bb_tx_ready) || IS_ERR(rb->bb_rx_data)) {
+		dev_err(rb->dev, "cannot claim the stream GPIOs (an older overlay?)\n");
+		ret = -ENODEV;
+		goto fail;
+	}
+	if (rb->bb_rx_data->ndescs != 4) {
+		dev_err(rb->dev, "rx-data-gpios needs 4 GPIOs, not %u\n", rb->bb_rx_data->ndescs);
+		ret = -EINVAL;
+		goto fail;
+	}
+
+	/* The set, clear and level registers of the block those GPIOs are on. */
+	np = of_parse_phandle(rb->dev->of_node, "rx-clk-gpios", 0);
+	if (!np || !of_device_is_compatible(np, "brcm,bcm2711-gpio")) {
+		of_node_put(np);
+		dev_err(rb->dev, "the stream GPIOs are not on the BCM2711 GPIO block\n");
+		ret = -ENODEV;
+		goto fail;
+	}
+	rb->bbio.base = of_iomap(np, 0);
+	of_node_put(np);
+	if (!rb->bbio.base) {
+		ret = -ENOMEM;
+		goto fail;
+	}
+
+	rb->bb_rx_words = kcalloc(RB_BB_RX_BATCH, sizeof(u32), GFP_KERNEL);
+	rb->bb_tx_words = kzalloc(RB_TX_SLOT_BYTES, GFP_KERNEL);
+	if (!rb->bb_rx_words || !rb->bb_tx_words) {
+		ret = -ENOMEM;
+		goto fail;
+	}
+	memset(&rb->bb, 0, sizeof(rb->bb));
+	rb->bb.io = &rb->bbio;
+	rb->bb.settle_reads = bb_settle_reads;
+	rb->bb_tx_count = 0;
+	rb->bb_tx_pos = 0;
+
+	rb->worker = kthread_run(rb_bb_worker, rb, "radioberry");
+	if (IS_ERR(rb->worker)) {
+		ret = PTR_ERR(rb->worker);
+		rb->worker = NULL;
+		goto fail;
+	}
+	sched_set_fifo(rb->worker);
+	dev_info(rb->dev, "RX and TX clocked by the CPU, up to %u RX values per second\n",
+		 bb_rx_values_max);
+	return 0;
+
+fail:
+	rb_bb_down(rb);
+	return ret;
+}
+
+/* Waits for the thread to finish its run; it clocks nothing until released. */
+static bool rb_bb_rx_hold(struct rb_dev *rb)
+{
+	if (!rb->worker)
+		return false;
+	mutex_lock(&rb->bb_lock);
+	return true;
+}
+
+static void rb_bb_rx_release(struct rb_dev *rb)
+{
+	mutex_unlock(&rb->bb_lock);
+}
+
+static const struct rb_transport rb_bb_transport = {
+	.name = "cpu",
+	.rx_values_max = 0,
+	.up = rb_bb_up,
+	.down = rb_bb_down,
+	.rx_hold = rb_bb_rx_hold,
+	.rx_release = rb_bb_rx_release,
+};
+
+/* The transport for this SoC, or NULL. */
+static const struct rb_transport *rb_select_transport(void)
+{
+	if (of_machine_is_compatible("brcm,bcm2712"))
+		return &rb_pio_transport;
+	if (of_machine_is_compatible("brcm,bcm2711"))
+		return &rb_bb_transport;
+	return NULL;
+}
+
+static u32 rb_rx_values_max(const struct rb_dev *rb)
+{
+	return rb->tp->rx_values_max ? rb->tp->rx_values_max : bb_rx_values_max;
+}
+
+static int rb_streams_up(struct rb_dev *rb)
+{
+	return rb->tp->up(rb);
+}
+
+static void rb_stop_streams(struct rb_dev *rb)
+{
+	rb->tp->down(rb);
 }
 
 /* RX parsing for one receiver at 48 ksps, empty rings, zeroed statistics. */
@@ -994,6 +1328,9 @@ static long rb_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		info.fpga_type = rb->id.fpga_type;
 		info.receivers = rb->id.receivers;
 		info.transmitters = rb->id.transmitters;
+		info.transport = rb->tp == &rb_bb_transport ? RADIOBERRY_TRANSPORT_CPU
+							     : RADIOBERRY_TRANSPORT_PIO;
+		info.rx_values_max = rb_rx_values_max(rb);
 		spin_lock_irqsave(&rb->rx_lock, flags);
 		info.active_receivers = (u8)rb->receivers;
 		info.rx_rate_code = (u8)rb->rate_code;
@@ -1018,11 +1355,9 @@ static long rb_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		 * machine stopped that clock is still while the clear is asserted
 		 * and released.
 		 */
-		if (hold && rb->pio && rb_cmd_general(c.tx, &receivers, &rate_code) &&
+		if (hold && rb_cmd_general(c.tx, &receivers, &rate_code) &&
 		    receivers != READ_ONCE(rb->receivers)) {
-			struct rp1_pio_sm_set_enabled_args off = { .mask = (u16)BIT(rb->rx.sm) };
-
-			held = rp1_pio_sm_set_enabled(rb->pio, &off) == 0;
+			held = rb->tp->rx_hold(rb);
 			if (held)
 				usleep_range(20, 30);
 		}
@@ -1032,11 +1367,8 @@ static long rb_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			rb_observe_command(rb, c.tx);
 		}
 		if (held) {
-			struct rp1_pio_sm_set_enabled_args on = { .mask = (u16)BIT(rb->rx.sm),
-								  .enable = 1 };
-
 			usleep_range(hold, hold + hold / 4);
-			rp1_pio_sm_set_enabled(rb->pio, &on);
+			rb->tp->rx_release(rb);
 			rb_trace(rb, "RX clock held for the receiver-count change\n");
 		}
 		mutex_unlock(&rb->cmd_lock);
@@ -1175,6 +1507,15 @@ static ssize_t rx_stalls_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(rx_stalls);
 
+/* How the streams reach the gateware: "rp1-pio" (Pi 5) or "cpu" (Pi 4). */
+static ssize_t transport_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct rb_dev *rb = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%s\n", rb->tp->name);
+}
+static DEVICE_ATTR_RO(transport);
+
 static struct attribute *rb_attrs[] = {
 	&dev_attr_gateware_version.attr,
 	&dev_attr_fpga_type.attr,
@@ -1183,6 +1524,7 @@ static struct attribute *rb_attrs[] = {
 	&dev_attr_reload.attr,
 	&dev_attr_rx_stalled.attr,
 	&dev_attr_rx_stalls.attr,
+	&dev_attr_transport.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(rb);
@@ -1248,10 +1590,15 @@ static int rb_probe(struct spi_device *spi)
 		return -ENOMEM;
 	rb->spi = spi;
 	rb->dev = &spi->dev;
+	rb->tp = rb_select_transport();
+	if (!rb->tp)
+		return dev_err_probe(rb->dev, -ENODEV,
+				     "not a Raspberry Pi 4 or 5 (BCM2711 or BCM2712)\n");
 	rb_stream_reset(&rb->rx);
 	rb_stream_reset(&rb->tx);
 	mutex_init(&rb->cmd_lock);
 	mutex_init(&rb->io_lock);
+	mutex_init(&rb->bb_lock);
 	spin_lock_init(&rb->rx_lock);
 	spin_lock_init(&rb->tx_lock);
 	init_waitqueue_head(&rb->rx_wait);
@@ -1349,7 +1696,7 @@ static struct spi_driver rb_driver = {
 };
 module_spi_driver(rb_driver);
 
-MODULE_DESCRIPTION("RadioBerry 2.x SDR on the Raspberry Pi 5 (RP1 PIO)");
+MODULE_DESCRIPTION("RadioBerry 2.x SDR on the Raspberry Pi 5 (RP1 PIO) and Pi 4");
 MODULE_LICENSE("GPL");
 MODULE_VERSION(RB_DRIVER_VERSION_STRING);
 MODULE_SOFTDEP("pre: rp1_pio");

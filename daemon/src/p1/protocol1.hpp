@@ -48,6 +48,9 @@ struct Identity {
     std::uint8_t version_major = 0;
     std::uint8_t version_minor = 0;
     std::uint8_t receivers = 0;
+    // RX values per second the device carries (not reported; limits the
+    // receivers run). 0: the Pi 5's, see device/capacity.hpp.
+    std::uint32_t rx_values_max = 0;
 };
 
 // The 60-byte HL2 discovery reply: status 0x02, or 0x03 while streaming;

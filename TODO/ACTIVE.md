@@ -7,9 +7,9 @@ item is removed from here and recorded at the top of
 
 ## Where things stand
 
-- Released: v0.3.0.
+- Released: v0.4.0 (Raspberry Pi 4 and 5).
 - Working on the development Pi: the CL025 gateware (75.3, built from
-  source), the driver (0.4.0; the PIO gateware's RX lock-up worked around,
+  source), the driver (0.5.0; the PIO gateware's RX lock-up worked around,
   [docs/fault-rx-lockup.md](../docs/fault-rx-lockup.md)), `rbprobe`,
   `rbcat`, `rbctl`, `rbload`, `p1probe`, `p2probe`, the driver harness
   `rbdrivertest` and the CI gate [tools/ci-pi.sh](../tools/ci-pi.sh).
@@ -26,9 +26,9 @@ item is removed from here and recorded at the top of
   floor about 46 dB down).
 - `ft8rx` (`examples/ft8`, optional): receive-only FT8 decoder over
   Protocol 1 or 2.
-- Next: `rbprobe` reporting an install of the original software
-  (section 4); fuzzing the packet parsers and servers, and the integration
-  test's fault injection; the HL2 drive item and
+- Next: the daemon's CPU use with no client (section 3); `rbprobe`
+  reporting an install of the original software (section 4); fuzzing the packet parsers and servers, and the integration test's
+  fault injection; the HL2 drive item and
   the Protocol 2 output checks wait for the board owner's go-ahead to
   transmit.
 
@@ -88,8 +88,9 @@ item is removed from here and recorded at the top of
   liquid-dsp; discovery advertises the gateware's receiver count (four
   DDCs on the CL016, six on the CL025), one DUC, 48 to 384 ksps, no
   wideband, diversity or audio.
-- RX capacity: at most about 2.37 million values per second over the PIO
-  bus (six receivers at 192 ksps, three at 384 ksps). The daemon refuses
+- RX capacity: at most about 2.37 million values per second over the Pi
+  5's PIO bus (six receivers at 192 ksps, three at 384 ksps), and 192 000
+  on a Pi 4 (the driver's `bb_rx_values_max`). The daemon refuses
   receiver and rate combinations above it.
 - Code style: clang-format 19, Google base, 4-space indent, 100 columns;
   `-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror`. The kernel
@@ -102,6 +103,15 @@ Nothing open.
 
 ## 3. Daemon (`daemon/`)
 
+- [ ] CPU use with no client: on a Pi 4 with no client connected, the
+      thread delivering RX blocks (`rb-rx-send`) used about 90% of a core
+      and the device thread about 60%, sending nothing, and logged
+      `rx-queue-full` three times in nine hours; the driver's CPU transport
+      thread used a whole core. Profile where `rb-rx-send` spends it, skip
+      the work when no client is streaming, and consider stopping the RX
+      stream while idle. Acceptance: with no client, the daemon's threads
+      under 5% of a core on a Pi 4, and no change to streaming with a
+      client (`ft8rx` over both protocols, 0 packets lost).
 - [ ] HL2 drive compatibility: the HL2 gateware takes 0x09's top four
       bits as AD9866 TX gain codes 0 to 15, the RadioBerry build maps the
       whole byte to codes 0 to 39 (`ad9866ctrl.v`), and the PA hat is not
@@ -110,6 +120,12 @@ Nothing open.
       output against gain code across the range, then decide whether
       `radioberryd` maps HL2 drive to RadioBerry codes. Until then piHPSDR
       is calibrated by hand (its per-band PA calibration, about 45 to 50).
+      Current piHPSDR (dl1ycf 900b1c94, `radio_calc_drive_level`) encodes
+      HL2 drive differently from the build used so far: the 0x09 byte is
+      a 0.5 dB attenuator step (0, 16, ... 240) and the rest goes into the
+      TX I/Q amplitude, so a level of 115 is sent as byte 32 (gateware
+      code 5) instead of 115 (code 17); hand calibrations made with the
+      older build give far less drive with it.
 - [ ] Integration test: a fake client against the daemon on loopback for
       both protocols, with fault injection for every fail-safe path.
       [tools/protoprobe/tests/daemon_test.cpp](../tools/protoprobe/tests/daemon_test.cpp)
@@ -139,9 +155,9 @@ Nothing open.
       `ExecStart=/etc/init.d/radioberryd`, `/etc/init.d/radioberryd`,
       `/usr/local/bin/radioberry`. Report it as a blocker named "the
       original RadioBerry software", list the files found, and say what to
-      remove; remove nothing. `postinst` prints the same list. Add a
-      "Coming from the original software" section to
-      [docs/packaging.md](../docs/packaging.md). Acceptance: tests through
+      remove; remove nothing; point to
+      [docs/original-software.md](../docs/original-software.md).
+      `postinst` prints the same. Acceptance: tests through
       the fake source for each signal alone and combined, and no finding on
       a Pi with only the packages installed (the development Pi, where the
       original's unit, init script and overlay were moved aside by hand).
@@ -184,7 +200,7 @@ Transmit items each need the board owner's go-ahead at the time.
 
 - [ ] Wi-Fi background scans: while associated, the development Pi scans
       every 33.7 s for 3.65 s, which stalls UDP to a Wi-Fi client for about
-      130 ms at a time ([docs/platform.md](../docs/platform.md)); longer than the 85 ms TX FIFO,
+      130 ms at a time ([docs/testing.md](../docs/testing.md)); longer than the 85 ms TX FIFO,
       so a Protocol 2 client transmitting over Wi-Fi would run it dry.
       Stop the scans (for example by locking the connection to the access
       point's BSSID, in the netplan configuration so it survives reboots),

@@ -28,24 +28,6 @@ namespace {
 
 constexpr int kCommandTimeoutMs = 5000;
 
-std::optional<fs::path> rp1_chip() {
-    std::error_code ec;
-    for (const auto& entry : fs::directory_iterator("/dev", ec)) {
-        const std::string name = entry.path().filename().string();
-        if (name.rfind("gpiochip", 0) != 0 || entry.is_symlink(ec)) {
-            continue;
-        }
-        try {
-            gpiod::chip chip(entry.path());
-            if (chip.get_info().label() == "pinctrl-rp1") {
-                return entry.path();
-            }
-        } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch): not a usable chip
-        }
-    }
-    return std::nullopt;
-}
-
 }  // namespace
 
 std::optional<std::string> LiveSource::read_file(const std::string& path) {
@@ -170,9 +152,9 @@ std::optional<CommandResult> LiveSource::run(const std::vector<std::string>& arg
 
 ConfigStatusLines LiveSource::read_config_status() {
     ConfigStatusLines lines;
-    const auto path = rp1_chip();
+    const auto path = find_header_gpio_chip();
     if (!path) {
-        lines.consumer = "no RP1 GPIO chip";
+        lines.consumer = "no header GPIO chip";
         return lines;
     }
     try {

@@ -16,7 +16,7 @@ clock it drives into the FPGA, from just before a receiver-count command
 until 200 us after it: 0 lock-ups in 4500 changes, against 17 in 1800
 without, at no measurable cost to the stream. A stall detector reports the
 condition should it occur anyway. The gateware defect itself is open
-([TODO/ACTIVE.md](../TODO/ACTIVE.md)).
+([TODO/ACTIVE.md](https://github.com/tomdionysus/corvus-radioberry/blob/main/TODO/ACTIVE.md)).
 
 ## Symptoms
 
@@ -104,7 +104,7 @@ edge for both.
 
 ## The workaround
 
-[driver/kernel/radioberry.c](../driver/kernel/radioberry.c), the command
+[driver/kernel/radioberry.c](https://github.com/tomdionysus/corvus-radioberry/blob/main/driver/kernel/radioberry.c), the command
 ioctl. When a general command
 carries a receiver count different from the current one, the driver:
 
@@ -114,7 +114,8 @@ carries a receiver count different from the current one, the driver:
 4. sleeps `rx_clock_hold_us` (default 200) to 1.25 times that;
 5. re-enables the state machine.
 
-No other command is affected; TX is not involved.
+On a Pi 4 the driver's thread stops clocking instead of the state
+machine stopping. No other command is affected; TX is not involved.
 `/sys/module/radioberry/parameters/rx_clock_hold_us` is writable at run
 time; 0 disables the hold. 200 us is the only value measured.
 
@@ -142,7 +143,7 @@ in flight, and "RX stream resumed" if words return. Sysfs `rx_stalled`
 
 Fixing it means editing the gateware source, which the project builds
 unmodified; that needs a separate decision, a versioned image and a
-[gateware/PROVENANCE.md](../gateware/PROVENANCE.md) entry. In order of directness:
+[gateware/PROVENANCE.md](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/PROVENANCE.md) entry. In order of directness:
 
 1. Synchronise the FIFO clear: replace `wrsync_aclr_synch("ON")` in
    `usiq_fifo` with `read_aclr_synch("ON")` and `write_aclr_synch("ON")`.
@@ -163,7 +164,7 @@ runs per image.
   `rx_clock_hold_us=0`, checking `rx_stalled` after each run and writing 1
   to `reload` when it is set. 150 runs take about seven minutes.
 - Seed sweep: compile each seed separately with
-  [tools/build-gateware.sh](../tools/build-gateware.sh) and keep each
+  [tools/build-gateware.sh](https://github.com/tomdionysus/corvus-radioberry/blob/main/tools/build-gateware.sh) and keep each
   `build/` directory; `radioberry.map.rpt` holds the state
   machine encoding and `radioberry.sta.rpt` the recovery and removal
   summaries.

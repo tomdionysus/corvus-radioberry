@@ -49,4 +49,8 @@ FakeSource development_pi();
 // A machine where everything is in place and the radio can run.
 FakeSource working_pi();
 
+// working_pi() on a Raspberry Pi 4: BCM2711, the rpi-v8 kernel, no RP1
+// PIO and no PMIC ADC.
+FakeSource working_pi4();
+
 }  // namespace radioberry::probe::test

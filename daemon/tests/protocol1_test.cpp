@@ -37,6 +37,14 @@ TEST_CASE("the RX capacity limits receivers by rate", "[p1]") {
     CHECK(max_receivers(2, 6) == 6);
     CHECK(max_receivers(3, 6) == 3);
     CHECK(max_receivers(3, 2) == 2);
+    // A driver's own figure; 0 is the Pi 5's.
+    CHECK(max_receivers(3, 6, 0) == 3);
+    CHECK(max_receivers(0, 6, 192000) == 2);
+    CHECK(max_receivers(1, 6, 192000) == 1);
+    // Never fewer than one, even above what the bus carries.
+    CHECK(max_receivers(2, 6, 192000) == 1);
+    CHECK(max_receivers(3, 6, 192000) == 1);
+    CHECK(max_receivers(0, 6, 1) == 1);
 }
 
 TEST_CASE("packets are classified by their first four bytes", "[p1]") {

@@ -3,6 +3,32 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-11: Raspberry Pi 4 on hardware (branch `item/platform-rpi4`):
+  the same packages installed and DKMS built for `rpi-v8`; the README's
+  build steps and `ctest` (319 tests) passed on the Pi 4; the CPU
+  transport bound with pull-downs applied, `rbdrivertest` passed, `rbcat`
+  streamed one receiver at 48 ksps for 10 minutes clean; `ft8rx` decoded
+  over both protocols with no packets lost; FT8 transmitted, decoded on
+  PSK Reporter, and a contact completed. `rbbus` measured the bus: clean
+  to 768 000 RX values per second, a whole core above 192 000, which
+  stays the driver's limit; SMI and DMA not needed. `docs/rpi4.md`; the
+  Pi 5 specifics moved to `docs/rpi5.md`.
+
+- 2026-11-10: Raspberry Pi 4 groundwork, Pi 5 unchanged (branch
+  `item/platform-rpi4`; docs/rpi4.md). One overlay for both boards
+  (`tools/check-overlay.sh` merges it onto both trees in CI); `rbload` and
+  `rbprobe` on either board; driver 0.5.0 with the RP1 PIO transport moved
+  unchanged behind a transport table and a CPU-clocked transport for the
+  Pi 4 (`driver/kernel/rb_bitbang.h`), chosen by SoC at probe;
+  `radioberry_info` reports `transport` and `rx_values_max`, and
+  `radioberryd` limits receivers by it; `rbbus` for measuring on a Pi 4;
+  bus code tested against a simulation of the gateware's bus modules.
+  Pi 5 acceptance with the 0.5.0 packages installed: CI and `rbdrivertest`
+  pass; booted with the new overlay; lock-up harness 0 stalls in 600 runs
+  with the hold on; `rbcat` six receivers at 192 ksps and three at
+  384 ksps for 30 s each with no resyncs, drops or overruns; `ft8rx`
+  decoded over Protocols 1 and 2 (four slots each) with 0 packets lost.
+  Nothing has run on a Pi 4 yet.
 - 2026-11-10: v0.3.0 released: the first release as Debian packages
   (`radioberry`, `radioberry-dkms`, `radioberry-dev`), and the README's
   section for a Pi coming from the original software. Release check on

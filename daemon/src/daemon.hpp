@@ -30,6 +30,10 @@ struct DaemonOptions {
     p1::IqConvention iq_convention = p1::IqConvention::Hl2;
     // Protocol 2: the LNA gain with no step attenuation, dB (-12 to 48).
     int p2_rx_gain_db = 14;
+    // The protocols served; a protocol that is off is not answered, not
+    // even its discovery.
+    bool protocol1 = true;
+    bool protocol2 = true;
     // SCHED_FIFO for the stream and network threads and locked memory
     // (realtime.hpp); without the privileges each is reported and skipped.
     bool realtime = true;
@@ -88,6 +92,8 @@ private:
     double frequency_ppm_ = 0;
     bool iq_standard_ = false;
     bool realtime_ = true;
+    bool protocol1_ = true;
+    bool protocol2_ = true;
     std::atomic<bool> realtime_failed_{false};
 };
 

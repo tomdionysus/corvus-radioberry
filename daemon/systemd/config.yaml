@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 # radioberryd options, read with --config (radioberry.service passes this
-# file). Each key is a long option with _ for - (radioberryd --help); an
-# option given on the command line overrides it. radioberryd reads this at
-# start: restart the service after a change.
+# file). Each key is a long option with _ for - and the same value
+# (radioberryd --help); an option given on the command line overrides it.
+# radioberryd reads this at start: restart the service after a change.
 
 # The radioberry.ko device to open.
 device: /dev/radioberry
@@ -31,6 +31,9 @@ iq_convention: hl2
 
 # Protocol 2 LNA gain in dB, -12 to 48, less the client's step attenuation.
 p2_rx_gain: 14
+
+# Protocols to serve: 1, 2 or 1,2. A protocol left out is not answered.
+protocols: 1,2
 
 # Run the stream threads at SCHED_FIFO and lock memory (needs CAP_SYS_NICE and CAP_IPC_LOCK).
 realtime: true

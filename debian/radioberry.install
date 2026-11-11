@@ -3,6 +3,7 @@ usr/bin/rbprobe
 usr/bin/rbcat
 usr/bin/rbctl
 usr/bin/rbload
+usr/bin/rbbus
 usr/bin/p1probe
 usr/bin/p2probe
 usr/lib/systemd/system/radioberry.service

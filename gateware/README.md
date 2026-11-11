@@ -39,7 +39,7 @@ SPI (section 4) and is the authority at run time.
 - Passive serial on GPIO 13 (DATA), 24 (DCLK), 27 (nCONFIG), read back on
   22 (CONF_DONE) and 26 (nSTATUS). Bytes least significant bit first. A
   bitstream for the other device leaves CONF_DONE low (measured on the
-  development board, see [docs/platform.md](../docs/platform.md)).
+  development board, see [docs/testing.md](../docs/testing.md)).
 - After configuration `radioberry/reset_handler.v` holds the design in
   reset for 2^24 - 16 cycles of the 10 MHz internal clock, about 1.68 s.
   During reset the SPI slave is held in reset and answers with its reset
@@ -121,13 +121,9 @@ SPI (section 4) and is the authority at run time.
   and autopushes at 28 bits, shifting left. Each 32-bit word the Pi reads
   is `index << 24 | sample`, top four bits zero.
 - The RX FIFO holds 1024 values; the gateware stops writing (drops) above
-  1012. With original clocking (PIO clock divider 2, so 100 MHz from the
-  200 MHz RP1 clock, five PIO cycles per nibble) one value takes 42 PIO
-  cycles: at most about 2.38 million values per second. One receiver needs
-  2 x rate values per second, so the original program carries six
-  receivers at 192 ksps (2.30 M/s) but only three at 384 ksps. Measured on
-  the development board: 2.37 million values per second at saturation,
-  and no stream errors below it.
+  1012. One receiver needs 2 x rate values per second; what each board's
+  clocking carries is in [docs/rpi5.md](../docs/rpi5.md) and
+  [docs/rpi4.md](../docs/rpi4.md).
 - Every receiver-count change asynchronously clears the RX FIFO, whose
   read side and the `rx_pi_pio` state machine run on the Pi's clock. If
   the Pi's clock is running while the clear is asserted and released, the

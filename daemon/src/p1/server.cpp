@@ -197,7 +197,8 @@ void Server::apply_locked(const HostCommand& c) {
     if (c.address == Control::kGeneral) {
         const unsigned want = ((data >> 3) & 0x0fu) + 1;
         const unsigned rate = (data >> 24) & 0x03u;
-        const unsigned run = std::min(want, max_receivers(rate, identity_.receivers));
+        const unsigned run =
+            std::min(want, max_receivers(rate, identity_.receivers, identity_.rx_values_max));
         if (want != client_receivers_ || run != device_receivers_) {
             if (run < want) {
                 spdlog::warn("{} receivers at {} ksps asked for; running {}, the rest sent as zero",

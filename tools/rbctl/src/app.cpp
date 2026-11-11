@@ -113,6 +113,26 @@ Node info_node(const radioberry_info& i) {
     } else {
         n.set("rx_rate_ksps", Node());
     }
+    // Drivers before 0.5 report neither (0).
+    switch (i.transport) {
+        case 0:
+            n.set("transport", Node());
+            break;
+        case RADIOBERRY_TRANSPORT_PIO:
+            n.set("transport", "rp1-pio");
+            break;
+        case RADIOBERRY_TRANSPORT_CPU:
+            n.set("transport", "cpu");
+            break;
+        default:
+            n.set("transport", "unknown (" + std::to_string(i.transport) + ")");
+            break;
+    }
+    if (i.rx_values_max != 0) {
+        n.set("rx_values_max", i.rx_values_max);
+    } else {
+        n.set("rx_values_max", Node());
+    }
     return n;
 }
 

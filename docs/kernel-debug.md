@@ -65,7 +65,7 @@ Nothing in the session sets PTT or the TX permission bit.
 | kmemleak scan | 21 records from `rp1_pio_sm_xfer_data()` (below) |
 
 Rates under KASAN run about 1% below nominal because the kernel is
-slower; on the stock kernel they are exact ([platform.md](platform.md)). The probes
+slower; on the stock kernel they are exact ([Test results](testing.md)). The probes
 were run with a 10% tolerance for that reason.
 
 ## Findings

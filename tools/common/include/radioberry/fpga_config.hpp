@@ -3,7 +3,9 @@
 
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 
@@ -52,7 +54,11 @@ struct ConfigResult {
 // then check nSTATUS and CONF_DONE and clock the initialisation cycles.
 ConfigResult configure_passive_serial(ConfigPins& pins, std::span<const std::uint8_t> image);
 
-// Live pins through libgpiod on the RP1 GPIO controller. Throws
+// The GPIO chip carrying the 40-pin header's GPIOs (RP1 on a Pi 5, BCM2711
+// on a Pi 4), or nothing.
+std::optional<std::filesystem::path> find_header_gpio_chip();
+
+// Live pins through libgpiod on the header's GPIO chip. Throws
 // std::runtime_error when the lines cannot be requested, typically because
 // the kernel driver owns them.
 std::unique_ptr<ConfigPins> open_gpiod_config_pins();

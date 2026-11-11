@@ -56,15 +56,22 @@ std::int32_t sample24(const std::uint8_t* p) {
 }
 
 struct Rig {
-    explicit Rig(TxPolicyOptions o = {}) : policy(control, session, o) {}
+    explicit Rig(TxPolicyOptions o = {}, std::uint32_t rx_values_max = 0)
+        : values_max(rx_values_max), policy(control, session, o) {}
+    std::uint32_t values_max;  // the driver's RX limit; 0 the Pi 5's
     Control control;
     SpscRing<TxBlock> tx{4};
     FakeLink link;
     p1::GatewareStatus status;
     Session session{[this] { control.safe(); }, 3s};
     TxPolicy policy;
-    Server server{Identity{{2, 0, 0, 0, 0, 1}, 75, 6}, control, tx, session, policy,
-                  [this] { return status; },           link};
+    Server server{Identity{{2, 0, 0, 0, 0, 1}, 75, 6, values_max},
+                  control,
+                  tx,
+                  session,
+                  policy,
+                  [this] { return status; },
+                  link};
     std::uint32_t hp_sequence = 0;
 
     void packet(unsigned port, const std::vector<std::uint8_t>& p, const Peer& from = kA,
@@ -220,6 +227,18 @@ TEST_CASE("a Protocol 1 owner keeps Protocol 2 out", "[p2server]") {
     rig.start({{0, 48}});
     CHECK_FALSE(rig.server.running());
     CHECK(rig.server.counters().ignored == 4);
+}
+
+TEST_CASE("a slower bus, as on a Pi 4, runs fewer DDCs", "[p2server]") {
+    Rig rig({}, 192000);
+    rig.start({{0, 48}, {1, 48}, {2, 48}});
+    CHECK(rig.server.device_rate_code() == 0);
+    CHECK(rig.server.device_receivers() == 2);
+    CHECK(rig.control.value(Control::kGeneral) == (1u << 3 | 1u << 2));
+    // One DDC at 192 ksps is more than it carries, but one always runs.
+    rig.packet(kRxSpecificPort, rx_specific_packet(2, {{0, 192}}));
+    CHECK(rig.server.device_rate_code() == 2);
+    CHECK(rig.server.device_receivers() == 1);
 }
 
 TEST_CASE("DDC requests set the gateware's receivers and rate", "[p2server]") {
