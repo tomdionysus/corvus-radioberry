@@ -36,6 +36,7 @@ TEST_CASE("boards are told apart by their SoC", "[board]") {
     CHECK(board_from_compatible("") == Board::kOther);
     // Without the trailing NUL, and a SoC name that only starts the same.
     CHECK(board_from_compatible(std::string_view("x\0brcm,bcm2711", 14)) == Board::kPi4);
+    CHECK(board_from_compatible(std::string_view("x\0brcm,bcm2837", 14)) == Board::kOther);
     CHECK(board_from_compatible(compatible({"brcm,bcm27120"})) == Board::kOther);
 }
 
