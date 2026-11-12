@@ -100,7 +100,19 @@ item is removed from here and recorded at the top of
 
 ## 2. Kernel driver remainder (`driver/`)
 
-Nothing open.
+- [ ] Raspberry Pi 4 TX drops: in the 0.4.0 acceptance test each FT8 TX
+      period logged 5 to 30 "TX blocks dropped" and 0 to 1 underruns, at
+      about 47.6k samples/s. Not investigated. Find the cause and fix it.
+      Transmitting needs the board owner's go-ahead at the time.
+      Acceptance: no TX blocks dropped across a run of FT8 TX periods on
+      the Pi 4.
+- [ ] Raspberry Pi 4 on 6.12.75: the harness test "the daemon's device
+      layer streams through the driver" failed once in 11 runs (a gap,
+      `rx_blocks_dropped` 31, RX queue full); the other 10 passed. It was
+      accepted as an anomaly for 0.4.1. Find the cause. Acceptance: the
+      cause identified, and fixed if it is ours.
+- [ ] Upstream review: the driver has not been through review on the
+      kernel mailing lists.
 
 ## 3. Daemon (`daemon/`)
 
