@@ -52,7 +52,8 @@ Then enable the driver, configure and start the service: the
   [reporting an issue](docs/reporting-issues.md)
 
 All documentation: [docs/index.md](docs/index.md). What works and what
-doesn't yet: [docs/status.md](docs/status.md).
+doesn't yet: [docs/status.md](docs/status.md). Changes per version:
+[CHANGELOG.md](CHANGELOG.md).
 
 ## Roadmap
 

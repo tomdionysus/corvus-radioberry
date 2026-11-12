@@ -19,7 +19,8 @@ transmit. The Pi 4 has no PIO, so a kernel thread clocks the RadioBerry's
 buses. From one receiver at 96 ksps up, that thread holds one CPU core
 at 100% while streaming, most of it polling for the next value; the
 client still receives every sample, up to one receiver at 384 ksps, and
-has the other three cores ([Testing](testing.md#raspberry-pi-4)).
+has the other three cores
+([CPU cost of receive](finding-rpi4-cpu.md)).
 
 ## Driver parameters
 

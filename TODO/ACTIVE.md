@@ -113,14 +113,16 @@ item is removed from here and recorded at the top of
 
 ## 2. Kernel driver remainder (`driver/`)
 
-- [ ] Raspberry Pi 4 RX over SMI with DMA, so one receiver at 192 ksps
-      no longer costs a whole CPU core: [RPI4-SMI.md](RPI4-SMI.md).
-      Acceptance there.
+- [ ] Raspberry Pi 4 RX over SMI with DMA, so receive no longer holds a
+      CPU core ([docs/finding-rpi4-cpu.md](../docs/finding-rpi4-cpu.md)):
+      plan, steps and acceptance in [RPI4-SMI.md](RPI4-SMI.md). Additive
+      beside the working transports; the Pi 5 is rechecked on the radio
+      after every driver step.
 - [ ] Raspberry Pi 4 at 48 ksps with piHPSDR: the driver's thread at
       102 to 104% of a core and `radioberryd`'s RX threads at about 90%
       together (2 sessions), against 17% for the driver's thread with
       `p1probe` at the same rate and packet rate
-      ([docs/testing.md](../docs/testing.md), Raspberry Pi 4). A client
+      ([docs/finding-rpi4-cpu.md](../docs/finding-rpi4-cpu.md)). A client
       replaying `p1probe`'s commands gave 100% once, right after
       piHPSDR, and 17% once. Find what puts the driver in that state.
       Acceptance: piHPSDR at one receiver at 48 ksps costs the driver's

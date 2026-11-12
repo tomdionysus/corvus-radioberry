@@ -57,44 +57,11 @@ CPU at 1.5 GHz.
   No setting needed `--settle`. Above 192 000 values per second, and at
   one receiver at 96 ksps, the loop never reaches its idle sleep. Hence
   the driver's default limit of 192 000.
-- CPU at 192 ksps, version 0.4.1, kernel 6.18.60, no throttling. Each
-  figure is one run unless a count is given.
-  - piHPSDR on the Pi's desktop, Protocol 1, one receiver at 192 ksps on
-    7.074 MHz, 60 s: cores at 19%, 100%, 20% and 19%. The driver's thread
-    took 101.5%, piHPSDR's six busiest threads 43% together,
-    `radioberryd`'s 12%. `wsprd -d` decoded a simulated WSPR file in 0.93 to 0.95 s
-    meanwhile (5 runs), and in 0.87 to 0.90 s with nothing streaming (5
-    runs).
-  - The driver's thread, `rbcat` for 20 s each, every stream clean (no
-    resyncs, dropped words or overruns): 1 receiver at 48 ksps 14%, 2 at
-    48 29%, 1 at 96 100%, 1 at 192 100%, 1 at 384 100% (768 000 values
-    per second delivered).
-  - Through `radioberryd` with `p1probe` for 30 s each, no packets lost:
-    1 at 48 17%, 2 at 48 51%, 1 at 96 and every higher load 100%,
-    including `p2probe` at 192 and 384 ksps.
-  - Share of RX bus clocks that found no value ready (`rbbus`, 20 s each,
-    `chrt -f 50`, `rbload` before each):
-
-    | Setting | RX values/s | Idle clocks | CPU, one core |
-    |---|---|---|---|
-    | 1 at 48 | 96 047 | 56% | 28% |
-    | 2 at 48 | 191 995 | 15% | 22% |
-    | 1 at 96 | 192 054 | 81% | 100% |
-    | 1 at 192 | 383 970 | 63% | 100% |
-    | 1 at 384 | 768 018 | 29% | 100% |
-    | 6 at 96, `--idle-sleep 0` | 1 103 819, 4.2% of frames lost | 0% | 100% |
-
-    The bus runs 8.2 to 8.8 million clocks per second while the loop
-    spins. At one receiver at 192 ksps 37% of them carry data and the
-    rest poll for the next value; the loop rests only when a run moves
-    nothing (`rb_bb_worker` in `driver/kernel/radioberry.c`).
-  - piHPSDR at one receiver at 48 ksps, 2 sessions of 30 and 60 s: the
-    driver's thread 102 and 104%, `radioberryd`'s `rb-rx-device` 61 and
-    63% and `rb-rx-send` 29 and 30%. `p1probe` at the same rate in the
-    same boot: 17% for the driver's thread (4 runs). Both clients send
-    about 375 packets per second. A client replaying `p1probe`'s
-    commands at that rate gave 100% once, started 4 s after piHPSDR was
-    killed, and 17% once, after a `p1probe` run. Cause not found.
+- CPU cost of receive, version 0.4.1: the driver's thread holds one core
+  at 100% from one receiver at 96 ksps up, with no samples lost up to one
+  receiver at 384 ksps; piHPSDR at one receiver at 192 ksps left the
+  other three cores about 80% idle. Measurements and cause:
+  [CPU cost of receive on the Raspberry Pi 4](finding-rpi4-cpu.md).
 
 To repeat the `rbbus` runs: comment out `dtoverlay=radioberry`, set
 `dtparam=spi=on` and reboot; then for each setting `sudo rbload` and
