@@ -8,12 +8,15 @@ item is removed from here and recorded at the top of
 ## Where things stand
 
 - Released: v0.4.1 (Raspberry Pi 4 and 5, Linux 6.12 and 6.18,
-  [docs/kernels.md](../docs/kernels.md)).
-- Working on the development Pi: the CL025 gateware (75.3, built from
-  source), the driver (0.4.1, the release's version; the PIO gateware's RX lock-up worked around,
+  [docs/kernels.md](../docs/kernels.md)), as Debian packages from the
+  apt repository and on GitHub.
+- Working on both boards: the CL025 gateware (75.3, built from source),
+  the driver (0.4.1; RP1 PIO on the Pi 5, CPU-clocked on the Pi 4; the PIO
+  gateware's RX lock-up worked around,
   [docs/fault-rx-lockup.md](../docs/fault-rx-lockup.md)), `rbprobe`,
-  `rbcat`, `rbctl`, `rbload`, `p1probe`, `p2probe`, the driver harness
-  `rbdrivertest` and the CI gate [tools/ci-pi.sh](../tools/ci-pi.sh).
+  `rbcat`, `rbctl`, `rbload`, `rbbus`, `p1probe`, `p2probe`, the driver
+  harness `rbdrivertest` and the CI gate
+  [tools/ci-pi.sh](../tools/ci-pi.sh).
 - `radioberryd`: Protocol 1 (HL2 dialect) receive and transmit over UDP
   and TCP, and Protocol 2 receive and transmit over UDP, one owning
   client, transmit only with `--allow-tx` through the transmit policy and
@@ -27,11 +30,16 @@ item is removed from here and recorded at the top of
   floor about 46 dB down).
 - `ft8rx` (`examples/ft8`, optional): receive-only FT8 decoder over
   Protocol 1 or 2.
-- Next: `rbprobe`
-  reporting an install of the original software (section 4); fuzzing the packet parsers and servers, and the integration test's
-  fault injection; the HL2 drive item and
-  the Protocol 2 output checks wait for the board owner's go-ahead to
-  transmit.
+- Known limits: on the Pi 4, receive above 192 000 values per second
+  (one receiver above 96 ksps) costs a whole CPU core (SMI item,
+  section 2); each Pi 4 FT8 TX period drops some TX blocks (section 2).
+- Next, in order: the Pi 4 SMI measurement (section 2,
+  [RPI4-SMI.md](RPI4-SMI.md) step 1); `rbprobe` reporting an install of
+  the original software (section 4); the integration test's fault
+  injection (section 3). Fuzzing the packet parsers, servers and the
+  driver's ioctl and sysfs interface waits until the code settles. The
+  Pi 4 TX drops, the HL2 drive item and the Protocol 2 output checks
+  wait for the board owner's go-ahead to transmit.
 
 ## Standing decisions
 
@@ -42,8 +50,10 @@ item is removed from here and recorded at the top of
 - Dependencies from Debian trixie packages only: catch2, libyaml-cpp-dev,
   nlohmann-json3-dev, libspdlog-dev, libliquid-dev, libgpiod-dev,
   libi2c-dev, libsystemd-dev.
-- Build and install with CMake throughout, including the kbuild wrapper for
-  the module; `cmake --install` places everything.
+- Build with CMake throughout, including the kbuild wrapper for the
+  module. Users install the Debian packages (the module through DKMS,
+  built by [tools/build-deb.sh](../tools/build-deb.sh)); `cmake --install`
+  is for development only.
 - Gateware: the Hermes-Lite 2 RadioBerry PIO variants (75.3), built
   unmodified from `gateware/source/` with Quartus Prime Lite 23.1std.1 on
   an x86-64 machine by
@@ -91,8 +101,9 @@ item is removed from here and recorded at the top of
   wideband, diversity or audio.
 - RX capacity: at most about 2.37 million values per second over the Pi
   5's PIO bus (six receivers at 192 ksps, three at 384 ksps), and 192 000
-  on a Pi 4 (the driver's `bb_rx_values_max`). The daemon refuses
-  receiver and rate combinations above it.
+  on a Pi 4 (the driver's `bb_rx_values_max`, until the SMI item). The
+  daemon runs fewer receivers than asked for above it, never fewer than
+  one, since a client's rate cannot be refused.
 - Code style: clang-format 19, Google base, 4-space indent, 100 columns;
   `-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror`. The kernel
   module and ABI header use kernel style and are not clang-formatted.
@@ -100,6 +111,9 @@ item is removed from here and recorded at the top of
 
 ## 2. Kernel driver remainder (`driver/`)
 
+- [ ] Raspberry Pi 4 RX over SMI with DMA, so one receiver at 192 ksps
+      no longer costs a whole CPU core: [RPI4-SMI.md](RPI4-SMI.md).
+      Acceptance there.
 - [ ] Raspberry Pi 4 TX drops: in the 0.4.0 acceptance test each FT8 TX
       period logged 5 to 30 "TX blocks dropped" and 0 to 1 underruns, at
       about 47.6k samples/s. Not investigated. Find the cause and fix it.
