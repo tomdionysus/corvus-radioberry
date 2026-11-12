@@ -54,6 +54,3 @@ directions for plain complex-baseband clients; the default, `hl2`, passes
 samples through for HL2 software. `ft8rx` defaults to `--iq-order qi` for
 the default daemon; against `iq_convention: standard` use
 `--iq-order iq`.
-
-`ft8rx` also measures the radio's frequency error
-([Frequency calibration](daemon.md#frequency-calibration)).

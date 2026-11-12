@@ -42,7 +42,7 @@ default. The ones most set:
 
 | Key | Default | Set it to |
 |---|---|---|
-| `frequency_ppm` | `0` | your RadioBerry's frequency error ([calibration](daemon.md#frequency-calibration)) |
+| `frequency_ppm` | `0` | your RadioBerry's frequency error ([calibration](calibration.md)) |
 | `allow_tx` | `false` | `true` to transmit |
 | `allow_pa` | `false` | `true` to use the PA; connect a rated antenna or dummy load first |
 | `drive_ceiling` | `150` | the highest drive sent, 0 to 255 |

@@ -20,7 +20,8 @@ Source: [github.com/tomdionysus/corvus-radioberry](https://github.com/tomdionysu
 - [Requirements and supported hardware](platform.md)
 - [Raspberry Pi 4](rpi4.md) and [Raspberry Pi 5](rpi5.md): capacity, parameters, tested kernels
 - [Kernels](kernels.md): 6.12 and 6.18 differences, tested kernels
-- [radioberryd](daemon.md): configuration, frequency calibration, protocols, clients
+- [radioberryd](daemon.md): configuration, protocols, clients
+- [Frequency calibration](calibration.md): measuring `frequency_ppm`
 - [Tools](tools.md): `rbprobe`, `rbcat`, `rbctl`, `rbload`, `rbbus`, `p1probe`, `p2probe`
 - [Kernel driver](driver.md): device interface, sysfs, parameters
 - [Debian packages and apt repositories](packaging.md)

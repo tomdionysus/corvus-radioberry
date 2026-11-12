@@ -55,7 +55,7 @@ one address only.
 ## Signals are off frequency
 
 Set `frequency_ppm` for your board
-([Frequency calibration](daemon.md#frequency-calibration)).
+([Frequency calibration](calibration.md)).
 
 ## Dropouts over Wi-Fi
 

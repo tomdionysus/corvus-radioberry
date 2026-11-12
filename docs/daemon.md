@@ -30,7 +30,7 @@ Stop the service before running anything else that opens
 | `port` | `--port N` | `1024` | Protocol 1 port and Protocol 2 base port |
 | `mac` | `--mac XX:XX:XX:XX:XX:XX` | the interface's | MAC reported by discovery |
 | `client_timeout_ms` | `--client-timeout-ms N` | `3000` | silence that ends a client's stream |
-| `frequency_ppm` | `--frequency-ppm P` | `0` | the radio's frequency error, positive if it tunes high (Frequency calibration, below) |
+| `frequency_ppm` | `--frequency-ppm P` | `0` | the radio's frequency error, positive if it tunes high ([Frequency calibration](calibration.md)) |
 | `iq_convention` | `--iq-convention C` | `hl2` | `hl2`: I/Q as the Hermes-Lite 2 sends it; `standard`: I and Q swapped both ways, for plain complex-baseband clients ([sample order](examples.md#sample-order)) |
 | `p2_rx_gain` | `--p2-rx-gain DB` | `14` | Protocol 2 LNA gain, -12 to 48 dB, less the client's step attenuation |
 | `protocols` | `--protocols LIST` | `1,2` | protocols to serve: `1`, `2` or `1,2` |
@@ -40,15 +40,6 @@ Stop the service before running anything else that opens
 | `drive_ceiling` | `--drive-ceiling N` | `150` as installed (`0` without the file) | highest drive level sent, 0 to 255 |
 | `tx_watchdog_s` | `--tx-watchdog-s N` | `120` | longest continuous MOX, seconds |
 | `log_level` | `--log-level LEVEL` | `info` | trace, debug, info, warn or error |
-
-## Frequency calibration
-
-Each RadioBerry's sample clock is a little off, so every frequency is off
-by the same proportion. Decode FT8 (for example with
-[ft8rx](examples.md)), compare the decoded frequencies with the median of
-PSK Reporter spots of the same stations over the same ten minutes, and set
-`frequency_ppm` to the error: positive if decoded frequencies read low.
-One figure corrects every band.
 
 ## Sessions and transmit
 
