@@ -27,7 +27,7 @@ Source: [github.com/tomdionysus/corvus-radioberry](https://github.com/tomdionysu
 - [Debian packages and apt repositories](packaging.md)
 - [Building from source](building.md)
 - [The PA5W V2 amplifier board](pa.md)
-- [Example clients](examples.md): `ft8rx`, sample order
+- [Example clients](examples.md): `ft8rx`, `wsprrx`, sample order
 - [Status](status.md): what works
 
 ## Development

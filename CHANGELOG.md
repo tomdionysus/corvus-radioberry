@@ -5,6 +5,8 @@ packages carry the same number.
 
 ## Unreleased
 
+- `wsprrx`: example WSPR receive client, the sister of `ft8rx`; also
+  decodes `.c2` files.
 - Docs: frequency calibration procedure; the Raspberry Pi 4 receive CPU
   finding; Code of Conduct.
 

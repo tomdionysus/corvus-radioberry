@@ -23,7 +23,9 @@ that work's licence header and copyright line beneath the SPDX line.
 | Hermes-Lite 2 protocol description | project wiki | Protocol 1 dialect, PA and bias commands | https://github.com/softerhardware/Hermes-Lite2/wiki/Protocol |
 | openHPSDR Ethernet Protocol v4.x and Protocol 1 firmware sources | GPL-2.0 | Protocol 2 reference | https://github.com/TAPR/OpenHPSDR-Firmware |
 | Raspberry Pi Linux kernel, `rp1-pio` driver | GPL-2.0 | Kernel API the driver is built on | https://github.com/raspberrypi/linux |
-| liquid-dsp | MIT | DSP library linked by the daemon and `ft8rx` | https://github.com/jgaeddert/liquid-dsp |
+| liquid-dsp | MIT | DSP library linked by the daemon, `ft8rx` and `wsprrx` | https://github.com/jgaeddert/liquid-dsp |
+| lookup3 hash (Bob Jenkins) | public domain | `hashlittle`, written out in `examples/wspr/src/wspr/codec.cpp` for WSPR's type 3 callsign hash | https://burtleburtle.net/bob/c/lookup3.c |
+| WSJT-X `wsprsim` and `wsprd` | GPL-3.0 | Reference output for `wspr_tests` and the decoder comparison; not linked, no code taken | https://wsjt.sourceforge.io/wsjtx.html |
 | ft8_lib | MIT | Message text code vendored in `examples/ft8/src/ft8_lib/` with its licence; the decoder in `examples/ft8/src/ft8/` is a C++ port of it, GPL-2.0-or-later here | https://github.com/kgoba/ft8_lib |
 | piHPSDR | GPL-2.0 | Reference client; not linked | https://github.com/dl1ycf/pihpsdr |
 | Quartus Prime Lite Edition and its generated IP (PLL, FIFO) | Quartus Prime licence agreement, accepted by whoever builds | Gateware toolchain ([gateware/QUARTUS.md](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/QUARTUS.md)); not redistributed; its IP is inside the bitfiles | https://www.altera.com/downloads |

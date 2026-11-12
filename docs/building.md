@@ -30,7 +30,7 @@ To build the Debian packages instead, see [Debian packages](packaging.md).
 | `-DRADIOBERRY_BUILD_MODULE=OFF` | skip the module |
 | `-DRADIOBERRY_ABI_INCLUDE_DIR=/usr/local/include` | build the tools and daemon against the installed ABI header; configuration fails if its ABI version differs from the source tree's |
 | `-DRADIOBERRY_BUILD_TESTS=OFF` | skip the unit tests (and the need for Catch2) |
-| `-DRADIOBERRY_BUILD_EXAMPLES=ON` | build `ft8rx` |
+| `-DRADIOBERRY_BUILD_EXAMPLES=ON` | build `ft8rx` and `wsprrx` |
 
 ## What `cmake --install` places
 

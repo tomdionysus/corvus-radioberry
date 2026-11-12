@@ -23,8 +23,12 @@ add_library(ft8_core STATIC
 target_include_directories(ft8_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src ${LIQUID_INCLUDE_DIR})
 target_link_libraries(ft8_core PUBLIC ft8_lib ${LIQUID_LIBRARY})
 
-add_executable(ft8rx src/main.cpp src/p1_receiver.cpp src/p2_receiver.cpp)
-target_link_libraries(ft8rx PRIVATE ft8_core Threads::Threads)
+# The Protocol 1 and 2 receive clients, shared with wsprrx.
+add_library(openhpsdr_rx STATIC src/p1_receiver.cpp src/p2_receiver.cpp)
+target_include_directories(openhpsdr_rx PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+add_executable(ft8rx src/main.cpp)
+target_link_libraries(ft8rx PRIVATE ft8_core openhpsdr_rx Threads::Threads)
 
 if(RADIOBERRY_BUILD_TESTS)
     add_executable(ft8_tests tests/ft8_test.cpp)

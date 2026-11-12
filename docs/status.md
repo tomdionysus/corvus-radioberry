@@ -17,6 +17,7 @@
 | Pi 4 bus measurement `rbbus` | `tools/rbbus/` | ✓ | Measures the Pi 4's CPU-clocked buses |
 | Protocol test clients `p1probe`, `p2probe` | `tools/protoprobe/` | ✓ | Discovery, receive and zero-drive transmit checks over Protocol 1 and 2 |
 | Example FT8 client `ft8rx` | `examples/ft8/` | ✓ | Receive only, Protocol 1 or 2; optional build |
+| Example WSPR client `wsprrx` | `examples/wspr/` | ✓ | Receive only, Protocol 1 or 2, or `.c2` files; optional build |
 
 Open work, in order:
 [TODO/ACTIVE.md](https://github.com/tomdionysus/corvus-radioberry/blob/main/TODO/ACTIVE.md).
