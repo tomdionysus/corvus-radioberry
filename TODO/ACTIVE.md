@@ -30,9 +30,11 @@ item is removed from here and recorded at the top of
   floor about 46 dB down).
 - `ft8rx` (`examples/ft8`, optional): receive-only FT8 decoder over
   Protocol 1 or 2.
-- Known limits: on the Pi 4, receive above 192 000 values per second
-  (one receiver above 96 ksps) costs a whole CPU core (SMI item,
-  section 2); each Pi 4 FT8 TX period drops some TX blocks (section 2).
+- Known limits: on the Pi 4, one receiver at 96 ksps or more, or three
+  or more at 48, holds the driver's thread at 100% of one CPU core,
+  mostly polling (SMI item, section 2), and so did piHPSDR at one
+  receiver at 48 ksps (section 2); each Pi 4 FT8 TX period drops some TX
+  blocks (section 2).
 - Next, in order: the Pi 4 SMI measurement (section 2,
   [RPI4-SMI.md](RPI4-SMI.md) step 1); `rbprobe` reporting an install of
   the original software (section 4); the integration test's fault
@@ -114,6 +116,15 @@ item is removed from here and recorded at the top of
 - [ ] Raspberry Pi 4 RX over SMI with DMA, so one receiver at 192 ksps
       no longer costs a whole CPU core: [RPI4-SMI.md](RPI4-SMI.md).
       Acceptance there.
+- [ ] Raspberry Pi 4 at 48 ksps with piHPSDR: the driver's thread at
+      102 to 104% of a core and `radioberryd`'s RX threads at about 90%
+      together (2 sessions), against 17% for the driver's thread with
+      `p1probe` at the same rate and packet rate
+      ([docs/testing.md](../docs/testing.md), Raspberry Pi 4). A client
+      replaying `p1probe`'s commands gave 100% once, right after
+      piHPSDR, and 17% once. Find what puts the driver in that state.
+      Acceptance: piHPSDR at one receiver at 48 ksps costs the driver's
+      thread what `p1probe` does.
 - [ ] Raspberry Pi 4 TX drops: in the 0.4.0 acceptance test each FT8 TX
       period logged 5 to 30 "TX blocks dropped" and 0 to 1 underruns, at
       about 47.6k samples/s. Not investigated. Find the cause and fix it.

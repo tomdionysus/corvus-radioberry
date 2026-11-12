@@ -16,7 +16,10 @@ anomaly). The tests: [Kernels](kernels.md#tested-kernels).
 
 Two receivers at 48 ksps or one at 96: enough for FT8 receive and
 transmit. The Pi 4 has no PIO, so a kernel thread clocks the RadioBerry's
-buses and uses part of one CPU core while streaming.
+buses. From one receiver at 96 ksps up, that thread holds one CPU core
+at 100% while streaming, most of it polling for the next value; the
+client still receives every sample, up to one receiver at 384 ksps, and
+has the other three cores ([Testing](testing.md#raspberry-pi-4)).
 
 ## Driver parameters
 

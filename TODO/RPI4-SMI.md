@@ -24,6 +24,17 @@ per core with the decode in about 10 s. The original uses its own
 GPIO-mode gateware: an 8-bit bus read on both clock edges, 12 register
 accesses per I/Q sample, with an interrupt on sample-ready.
 
+Reproduced on the Pi 4 with 0.4.1 and piHPSDR at one receiver at 192
+ksps: the driver's thread at 100% of one core, the other cores at about
+20%, no samples lost ([docs/testing.md](../docs/testing.md), Raspberry
+Pi 4). The access count is not what fills the core: 63% of the RX
+clocks at that rate find no value ready, so data takes about a third of
+the core and polling the rest, because the thread rests only when a
+whole run finds nothing. A CPU transport that rests between bursts, with
+the gateware's RX FIFO holding the values meanwhile, might cost about a
+third of a core at 192 ksps. Not tried; it is cheaper than SMI and
+needs no overlay, so measure it before step 2.
+
 When the Pi 4 support was merged, SMI was recorded as not needed because
 the limit stayed at 192 000 values per second
 ([COMPLETED.md](COMPLETED.md), 2026-11-10/11).
