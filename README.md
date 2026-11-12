@@ -1,5 +1,6 @@
 # corvus-radioberry
 
+[![Release](https://img.shields.io/github/v/release/tomdionysus/corvus-radioberry?display_name=release&label=latest)](https://github.com/tomdionysus/corvus-radioberry/releases/latest)
 [![CI](https://github.com/tomdionysus/corvus-radioberry/actions/workflows/ci.yml/badge.svg)](https://github.com/tomdionysus/corvus-radioberry/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/tomdionysus/corvus-radioberry/graph/badge.svg)](https://codecov.io/gh/tomdionysus/corvus-radioberry)
 [![CodeQL](https://github.com/tomdionysus/corvus-radioberry/actions/workflows/codeql.yml/badge.svg)](https://github.com/tomdionysus/corvus-radioberry/actions/workflows/codeql.yml)
@@ -77,6 +78,11 @@ doesn't yet: [docs/status.md](docs/status.md).
 This project was developed with the use of agentic engineering,
 specifically Claude. If that's a problem for you, there are
 [guides for compiling the original driver](https://github.com/pa3gsb/Radioberry-2.x#building).
+
+## Contributing
+
+PRs and comments welcome. Please see [CONTRIBUTING.md](CONTRIBUTING.md)
+and the [Code Of Conduct](CODE_OF_CONDUCT.md) for community guidelines.
 
 ## Licensing
 
