@@ -82,6 +82,7 @@ struct Running {
     bool finish() {
         if (thread.joinable()) {
             stop = true;
+            daemon.wake();
             thread.join();
         }
         return result;
@@ -298,7 +299,8 @@ TEST_CASE("radioberryd stops when the device fails", "[daemon]") {
     Running r(device);
     {
         const std::lock_guard lock(device.mutex);
-        device.fail_on = "stats";
+        // Idle, the daemon makes no device calls but the wait itself.
+        device.fail_on = "wait";
     }
     r.thread.join();
     CHECK_FALSE(r.result);

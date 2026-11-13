@@ -58,9 +58,13 @@ public:
     Daemon(const Daemon&) = delete;
     Daemon& operator=(const Daemon&) = delete;
 
-    // Runs until `stop` is set or the device fails, then leaves the
-    // gateware in the safe state. False if the device failed.
+    // Runs until `stop` is set (then call wake()) or the device fails,
+    // then leaves the gateware in the safe state. False if the device
+    // failed. With no client every thread sleeps until there is work: no
+    // timers run.
     bool run(const std::atomic<bool>& stop);
+    // Makes run() look at `stop` now. Thread- and async-signal-safe.
+    void wake() const noexcept { network_.wake(); }
 
     std::uint16_t port() const { return network_.port(); }
     // The Protocol 2 port at `offset` from the base (p2/protocol2.hpp).
@@ -100,6 +104,9 @@ private:
     bool protocol1_ = true;
     bool protocol2_ = true;
     std::atomic<bool> realtime_failed_{false};
+    // The main thread sleeps with no timeout: nobody owns the radio. A
+    // packet on another thread that may change that wakes it.
+    std::atomic<bool> idle_{false};
     std::mutex run_mutex_;  // update_run(): one reading of both servers at a time
 };
 

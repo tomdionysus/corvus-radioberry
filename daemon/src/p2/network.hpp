@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 
+#include <poll.h>
+
 #include <cstdint>
 #include <functional>
 #include <map>
 #include <mutex>
 #include <span>
+#include <vector>
 
+#include "event.hpp"
 #include "p2/server.hpp"
 #include "session.hpp"
 
@@ -32,9 +36,13 @@ public:
     std::uint16_t port(unsigned offset) const;
 
     using Handler = std::function<void(unsigned, std::span<const std::uint8_t>, const Peer&)>;
-    // Waits up to `timeout_ms` for traffic and hands each datagram, with
-    // the offset of the port it arrived on, to `handler`.
+    // Waits up to `timeout_ms` (-1: without limit) for traffic or wake(),
+    // and hands each datagram, with the offset of the port it arrived on,
+    // to `handler`.
     void poll(int timeout_ms, const Handler& handler);
+    // Ends the current or next poll() at once. Thread- and
+    // async-signal-safe.
+    void wake() const noexcept { wake_.signal(); }
 
     void send(unsigned port, const Peer& to, std::span<const std::uint8_t> bytes) override;
 
@@ -47,7 +55,10 @@ private:
         int fd = -1;
         std::uint16_t port = 0;
     };
+    Event wake_;
     std::map<unsigned, Socket> sockets_;  // by offset
+    std::vector<pollfd> fds_;             // wake_, then sockets_ in order
+    std::vector<unsigned> offsets_;
     SendBase send_base_;
     mutable std::mutex mutex_;
     std::uint64_t send_failures_ = 0;

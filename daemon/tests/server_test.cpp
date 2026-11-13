@@ -281,20 +281,31 @@ TEST_CASE("a command with C0 bit 7 is echoed in the next response", "[server]") 
     CHECK(p[8 + 512 + 3] == 0x00);  // then status address 0 resumes
 }
 
-TEST_CASE("the client's TX samples go to the TX ring while streaming", "[server]") {
-    Rig rig;
+namespace {
+TxPolicyOptions transmit_allowed();  // below
+}  // namespace
+
+TEST_CASE("the client's TX samples go to the TX ring only while MOX is granted", "[server]") {
+    Rig rig(transmit_allowed());
     rig.packet(host_packet(0, {}, {}, 0x1234, 0x5678), kA);
     CHECK(rig.tx.empty());  // not streaming
     rig.packet(start_packet(1), kA);
     rig.packet(host_packet(1, {}, {}, 0x1234, 0x5678), kA);
+    CHECK(rig.tx.empty());  // streaming without MOX: nothing for the device
+    rig.packet(host_packet(2, {}, {0x01, 0}, 0x1234, 0x5678), kA);  // MOX
     REQUIRE(rig.tx.front() != nullptr);
     CHECK(rig.tx.front()->size == 504);
     CHECK(rig.tx.front()->bytes[0] == 0x12);
     CHECK(rig.tx.front()->bytes[503] == 0x78);
-    rig.packet(host_packet(2, {}, {}), kA);
-    rig.packet(host_packet(3, {}, {}), kA);  // the ring holds two
+    rig.packet(host_packet(3, {}, {0x01, 0}), kA);
+    rig.packet(host_packet(4, {}, {0x01, 0}), kA);  // the ring holds two
     CHECK(rig.server.counters().tx_blocks_dropped == 1);
     CHECK(rig.session.faults() == 1);
+    CHECK_FALSE(rig.policy.transmitting());  // the full queue dropped MOX
+    rig.tx.pop();
+    rig.tx.pop();
+    rig.packet(host_packet(5, {}, {0x01, 0}), kA);  // latched: still nothing
+    CHECK(rig.tx.empty());
 }
 
 TEST_CASE("host sequence gaps and junk are counted", "[server]") {
@@ -305,9 +316,10 @@ TEST_CASE("host sequence gaps and junk are counted", "[server]") {
     rig.packet(host_packet(9, {}, {}), kA);
     rig.packet(host_packet(0, {}, {}), kA);  // a restart is no gap
     CHECK(rig.server.counters().host_sequence_gaps == 1);
-    // The gap and two TX-queue-full (the ring holds two): counted, and with
-    // no MOX nothing is latched.
-    CHECK(rig.session.faults() == 3);
+    // The gap: counted, and with no MOX nothing is latched (and no TX
+    // samples are queued, so the ring cannot fill).
+    CHECK(rig.session.faults() == 1);
+    CHECK(rig.tx.empty());
     CHECK_FALSE(rig.session.latched());
     const std::vector<std::uint8_t> junk = {1, 2, 3, 4};
     rig.packet(junk, kA);
@@ -351,7 +363,7 @@ TEST_CASE("the owner's MOX keys the transmitter through the policy", "[server]")
     // Drive 255 with PA enable, then MOX in the second block.
     rig.packet(host_packet(0, {0x13, 0xffu << 24 | 1u << 19}, {0x01, 14074000}, 0x1000, 0), kA);
     CHECK(rig.policy.transmitting());
-    CHECK(rig.control.transmit() == TransmitState{true, true, false});
+    CHECK(rig.control.transmit() == TransmitState{true, true, false, true});
     CHECK(rig.control.value(0x09) == (0x40u << 24 | 1u << 19));
     REQUIRE(rig.tx.front() != nullptr);
     CHECK(rig.tx.front()->bytes[0] == 0x10);
@@ -458,10 +470,10 @@ TEST_CASE("frequency commands are corrected for the radio's error", "[server]") 
 }
 
 TEST_CASE("the standard convention swaps TX I and Q", "[server]") {
-    Rig rig;
+    Rig rig(transmit_allowed());
     rig.server.set_iq_convention(IqConvention::Standard);
     rig.packet(start_packet(1), kA);
-    rig.packet(host_packet(0, {}, {}, 0x1234, 0x5678), kA);
+    rig.packet(host_packet(0, {}, {0x01, 0}, 0x1234, 0x5678), kA);  // MOX
     REQUIRE(rig.tx.front() != nullptr);
     CHECK(rig.tx.front()->bytes[0] == 0x56);
     CHECK(rig.tx.front()->bytes[1] == 0x78);
@@ -469,6 +481,7 @@ TEST_CASE("the standard convention swaps TX I and Q", "[server]") {
     CHECK(rig.tx.front()->bytes[3] == 0x34);
     rig.server.set_iq_convention(IqConvention::Hl2);
     rig.tx.pop();
-    rig.packet(host_packet(1, {}, {}, 0x1234, 0x5678), kA);
+    rig.packet(host_packet(1, {}, {0x01, 0}, 0x1234, 0x5678), kA);
+    REQUIRE(rig.tx.front() != nullptr);
     CHECK(rig.tx.front()->bytes[0] == 0x12);
 }

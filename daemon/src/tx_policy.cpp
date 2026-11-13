@@ -107,7 +107,8 @@ void TxPolicy::apply_locked(bool granted, std::chrono::nanoseconds now) {
         spdlog::info("PTT off");
     }
     granted_ = granted;
-    control_.set_transmit({granted, granted, granted && cwx_requested_});
+    control_.set_transmit(
+        {granted, granted, granted && cwx_requested_, granted && options_.allow_pa});
     if (control_.value(Control::kTxDrive) != drive_word) {
         Command c;
         c.address = Control::kTxDrive;

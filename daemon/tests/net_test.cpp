@@ -100,10 +100,14 @@ TEST_CASE("the Protocol 1 sockets report what they cannot set up", "[net]") {
     }
     {
         const FdLimit none(0);
-        CHECK(what_of([] { Network n(kLoopback, 0); }).find("UDP socket") != std::string::npos);
+        CHECK(what_of([] { Network n(kLoopback, 0); }).find("eventfd") != std::string::npos);
     }
     {
         const FdLimit one(1);
+        CHECK(what_of([] { Network n(kLoopback, 0); }).find("UDP socket") != std::string::npos);
+    }
+    {
+        const FdLimit two(2);
         CHECK(what_of([] { Network n(kLoopback, 0); }).find("TCP socket") != std::string::npos);
     }
 }

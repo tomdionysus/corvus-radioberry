@@ -5,8 +5,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <functional>
 #include <mutex>
 #include <optional>
+#include <utility>
 
 #include "radioberry/command.hpp"
 
@@ -18,6 +20,9 @@ struct TransmitState {
     bool ptt = false;        // C0 bit 0, SPI bit 32
     bool tx_permit = false;  // SPI bit 42: gates the CN301 T/R and PA lines
     bool cwx = false;        // SPI bit 41: CW keying from the TX I/Q LSBs
+    // The PA board may be keyed: gateware-v2 images gate all four PA lines
+    // on it (RADIOBERRY_CMD_PA_ALLOWED); the PIO gateware ignores it.
+    bool pa_allowed = false;
     bool operator==(const TransmitState&) const = default;
 };
 
@@ -61,10 +66,21 @@ public:
     std::optional<std::uint32_t> value(std::uint8_t address) const;
     // Commands waiting for next(), counting a pending carrier.
     std::size_t pending() const;
+    // Called, outside the lock, whenever a change gives next() something
+    // to return: the device thread sleeps until then. Set before any
+    // thread uses this object.
+    void set_notify(std::function<void()> notify) { notify_ = std::move(notify); }
 
 private:
     void queue_locked(std::uint8_t address, bool front);
     Command stamp_locked(std::uint8_t address);
+    void notify() const {
+        if (notify_) {
+            notify_();
+        }
+    }
+
+    std::function<void()> notify_;
 
     mutable std::mutex mutex_;
     std::array<std::optional<std::uint32_t>, kAddresses> values_{};

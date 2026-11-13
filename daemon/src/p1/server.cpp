@@ -242,6 +242,12 @@ void Server::apply_locked(const HostCommand& c) {
 }
 
 void Server::queue_tx_locked(const HostPacket& packet) {
+    // Clients send TX samples between overs too, as zeros. Only samples
+    // sent while MOX is granted go to the device; the rest would cost the
+    // driver, the link and the gateware work for nothing.
+    if (!policy_.transmitting()) {
+        return;
+    }
     TxBlock* block = tx_.acquire();
     if (block == nullptr) {
         ++counters_.tx_blocks_dropped;

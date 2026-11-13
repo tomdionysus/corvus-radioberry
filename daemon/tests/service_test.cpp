@@ -143,7 +143,7 @@ TEST_CASE("the service keeps running TX after an RX device error", "[service]") 
     REQUIRE(service.start());
     {
         const std::lock_guard lock(device.mutex);
-        device.fail_on = "stats";
+        device.fail_on = "wait";  // idle, the wait is the only device call
     }
     REQUIRE(eventually([&] { return service.failed(); }));
     TxBlock* t = service.tx().acquire();

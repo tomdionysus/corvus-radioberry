@@ -17,6 +17,7 @@ struct Command {
     static constexpr std::uint8_t kRun = 1u << 0;
     static constexpr std::uint8_t kCwx = 1u << 1;
     static constexpr std::uint8_t kTxPermit = 1u << 2;
+    static constexpr std::uint8_t kPaAllowed = 1u << 3;
 
     std::uint8_t flags = kRun;  // byte 0
     std::uint8_t address = 0;   // C0 bits 7..1, 0 to 0x3f

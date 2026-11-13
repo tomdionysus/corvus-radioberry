@@ -9,6 +9,7 @@
 #include <optional>
 #include <span>
 
+#include "event.hpp"
 #include "p1/server.hpp"
 #include "session.hpp"
 
@@ -31,9 +32,12 @@ public:
     std::uint16_t port() const { return port_; }
 
     using Handler = std::function<void(std::span<const std::uint8_t>, const p1::Peer&)>;
-    // Waits up to `timeout_ms` for traffic and hands each datagram and each
-    // whole TCP record to `handler`.
+    // Waits up to `timeout_ms` (-1: without limit) for traffic or wake(),
+    // and hands each datagram and each whole TCP record to `handler`.
     void poll(int timeout_ms, const Handler& handler);
+    // Ends the current or next poll() at once. Thread- and
+    // async-signal-safe.
+    void wake() const noexcept { wake_.signal(); }
 
     void send(const p1::Peer& to, std::span<const std::uint8_t> bytes) override;
     void close(const p1::Peer& peer) override;
@@ -46,6 +50,7 @@ private:
     void read_tcp(const Handler& handler);
     void close_tcp_locked();
 
+    Event wake_;
     int udp_ = -1;
     int listener_ = -1;
     std::uint16_t port_ = 0;

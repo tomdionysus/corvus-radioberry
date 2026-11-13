@@ -18,6 +18,7 @@ struct Readiness {
     bool readable = false;  // at least one RX frame queued
     bool writable = false;  // room for at least one TX sample
     bool error = false;     // an RX overrun not yet reported by stats()
+    bool woken = false;     // wait_or_wake(): the wake descriptor was signalled
 };
 
 // /dev/radioberry, behind an interface so tools and the daemon are tested
@@ -42,6 +43,14 @@ public:
     // read (if `want_read`), a sample can be written (if `want_write`) or
     // an RX overrun is pending. Returns all false on timeout or a signal.
     virtual Readiness wait(bool want_read, bool want_write, int timeout_ms) = 0;
+    // As wait(), and also returns, with `woken` set, as soon as `wake_fd`
+    // (an eventfd the caller drains; -1 for none) is readable: a thread can
+    // sleep with no timeout and still be handed work. The default suits
+    // devices whose wait() does not block (test fakes): it ignores wake_fd.
+    virtual Readiness wait_or_wake(bool want_read, bool want_write, int timeout_ms, int wake_fd) {
+        (void)wake_fd;
+        return wait(want_read, want_write, timeout_ms);
+    }
 };
 
 inline constexpr const char* kDevicePath = "/dev/radioberry";

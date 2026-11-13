@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "fake_device.hpp"
 
+#include <poll.h>
+
 #include <algorithm>
 #include <cerrno>
 #include <chrono>
@@ -104,6 +106,29 @@ Readiness FakeDevice::wait(bool want_read, bool want_write, int timeout_ms) {
     if (!r.readable && !r.writable && !r.error && idle_wait_ms > 0) {
         std::this_thread::sleep_for(std::chrono::milliseconds(std::min(idle_wait_ms, timeout_ms)));
     }
+    return r;
+}
+
+Readiness FakeDevice::wait_or_wake(bool want_read, bool want_write, int timeout_ms, int wake_fd) {
+    Readiness r = wait(want_read, want_write, 0);
+    {
+        const std::lock_guard lock(mutex);
+        last_timeout_ms = timeout_ms;
+    }
+    if (r.readable || r.writable || r.error) {
+        return r;
+    }
+    int ms = 0;
+    {
+        const std::lock_guard lock(mutex);
+        ms = timeout_ms < 0 ? std::max(idle_wait_ms, 1) : std::min(idle_wait_ms, timeout_ms);
+    }
+    if (wake_fd < 0) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+        return r;
+    }
+    pollfd p{wake_fd, POLLIN, 0};
+    r.woken = ::poll(&p, 1, ms) > 0;
     return r;
 }
 

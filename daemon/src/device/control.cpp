@@ -17,35 +17,49 @@ void Control::set(const Command& command) {
     if (disables_tx_watchdog(command)) {
         throw std::invalid_argument("PTT hang time 31 disables the gateware's TX watchdog");
     }
-    const std::lock_guard lock(mutex_);
-    values_[command.address] = command.data;
-    queue_locked(command.address, false);
+    {
+        const std::lock_guard lock(mutex_);
+        values_[command.address] = command.data;
+        queue_locked(command.address, false);
+    }
+    notify();
 }
 
 void Control::set_transmit(TransmitState state) {
-    const std::lock_guard lock(mutex_);
-    if (state != transmit_) {
+    {
+        const std::lock_guard lock(mutex_);
+        if (state == transmit_) {
+            return;
+        }
         transmit_ = state;
         bits_changed_ = true;
     }
+    notify();
 }
 
 void Control::set_run(bool run) {
-    const std::lock_guard lock(mutex_);
-    if (run != run_) {
+    {
+        const std::lock_guard lock(mutex_);
+        if (run == run_) {
+            return;
+        }
         run_ = run;
         bits_changed_ = true;
     }
+    notify();
 }
 
 void Control::safe() {
-    const std::lock_guard lock(mutex_);
-    if (transmit_ != TransmitState{}) {
-        transmit_ = {};
-        bits_changed_ = true;
+    {
+        const std::lock_guard lock(mutex_);
+        if (transmit_ != TransmitState{}) {
+            transmit_ = {};
+            bits_changed_ = true;
+        }
+        values_[kTxDrive] = values_[kTxDrive].value_or(0) & ~kTxDriveHazards;
+        queue_locked(kTxDrive, true);
     }
-    values_[kTxDrive] = values_[kTxDrive].value_or(0) & ~kTxDriveHazards;
-    queue_locked(kTxDrive, true);
+    notify();
 }
 
 std::optional<Command> Control::next() {
@@ -99,9 +113,9 @@ void Control::queue_locked(std::uint8_t address, bool front) {
 
 Command Control::stamp_locked(std::uint8_t address) {
     Command c;
-    c.flags = static_cast<std::uint8_t>((run_ ? Command::kRun : 0) |
-                                        (transmit_.tx_permit ? Command::kTxPermit : 0) |
-                                        (transmit_.cwx ? Command::kCwx : 0));
+    c.flags = static_cast<std::uint8_t>(
+        (run_ ? Command::kRun : 0) | (transmit_.tx_permit ? Command::kTxPermit : 0) |
+        (transmit_.cwx ? Command::kCwx : 0) | (transmit_.pa_allowed ? Command::kPaAllowed : 0));
     c.address = address;
     c.ptt = transmit_.ptt;
     c.data = values_[address].value_or(0);

@@ -21,8 +21,15 @@
 namespace {
 
 std::atomic<bool> stop{false};
+std::atomic<const radioberry::daemon::Daemon*> running{nullptr};
 
-void on_signal(int) { stop = true; }
+// Async-signal-safe: an atomic store and an eventfd write.
+void on_signal(int) {
+    stop = true;
+    if (const auto* daemon = running.load()) {
+        daemon->wake();
+    }
+}
 
 }  // namespace
 
@@ -61,7 +68,10 @@ int main(int argc, char** argv) {
     try {
         const auto device = radioberry::open_device_nonblocking(options.device);
         Daemon daemon(*device, options.daemon);
-        return daemon.run(stop) ? 0 : 1;
+        running = &daemon;
+        const bool ok = daemon.run(stop);
+        running = nullptr;
+        return ok ? 0 : 1;
     } catch (const std::exception& e) {
         spdlog::error("{}", e.what());
         return 1;

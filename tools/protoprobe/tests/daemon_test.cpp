@@ -49,6 +49,7 @@ struct Running {
     }
     ~Running() {
         stop = true;
+        daemon.wake();
         thread.join();
         feeder.join();
     }

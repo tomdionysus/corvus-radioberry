@@ -172,6 +172,30 @@ TEST_CASE("MOX keys PTT and the TX permission bit only while granted", "[policy]
     CHECK_FALSE(off[0].can_transmit());
 }
 
+TEST_CASE("PA allowed rides MOX only when allow_pa is set", "[policy]") {
+    Rig no_pa(allowed(false));
+    no_pa.policy.update(kClient, true, 0s);
+    CHECK(no_pa.control.transmit() == TransmitState{true, true, false, false});
+    for (const Command& c : no_pa.drain()) {
+        CHECK((c.flags & Command::kPaAllowed) == 0);
+    }
+
+    Rig pa(allowed(true));
+    pa.policy.update(kClient, false, 0s);
+    pa.drain();
+    pa.policy.update(kClient, true, 1s);
+    CHECK(pa.control.transmit() == TransmitState{true, true, false, true});
+    const auto on = pa.drain();
+    REQUIRE(on.size() == 1);
+    CHECK((on[0].flags & Command::kPaAllowed) != 0);
+    CHECK(on[0].can_transmit());
+    pa.policy.update(kClient, false, 2s);
+    const auto off = pa.drain();
+    REQUIRE(off.size() == 1);
+    CHECK((off[0].flags & Command::kPaAllowed) == 0);
+    CHECK_FALSE(off[0].can_transmit());
+}
+
 TEST_CASE("no MOX without an owner", "[policy]") {
     Rig rig(allowed());
     rig.session.release(kClient, "test");

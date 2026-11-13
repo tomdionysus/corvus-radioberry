@@ -60,7 +60,20 @@ Stop the service before running anything else that opens
   latency and the gateware's 12 ms PTT hang time (address 0x17); a
   client's lower latency is raised to 40 ms. Protocol 2 streams use
   100 ms and 20 ms.
+- TX samples go to the driver only while MOX is granted. Clients send
+  them between overs too, as zeros; those are dropped in the daemon.
+  Protocol 2 samples still pass through the decimator, so its filter holds
+  the client's signal when transmission starts.
+- PA allowed (`RADIOBERRY_CMD_PA_ALLOWED`) is set with MOX only with
+  `allow_pa: true`; gateware-v2 images gate every PA line on it.
 - No PA interlock is claimed.
+
+## Idle
+
+With no client the daemon makes no system calls: each thread blocks
+until a packet arrives, a command is queued or it is stopped, and the
+client timeout and TX watchdog run only while a client owns the radio.
+Run is clear, so the driver streams nothing either.
 
 ## Protocol 2
 

@@ -10,6 +10,7 @@
 #include "device/control.hpp"
 #include "device/monitor.hpp"
 #include "device/ring.hpp"
+#include "event.hpp"
 #include "radioberry/device.hpp"
 
 namespace radioberry::daemon {
@@ -35,21 +36,29 @@ class RxPump {
 public:
     struct Options {
         std::chrono::nanoseconds stats_period = std::chrono::milliseconds(100);
-        int wait_ms = 10;  // longest wait for frames before sending commands
+        int wait_ms = 10;  // longest wait for frames while run is set
     };
 
     RxPump(Device& device, Control& control, SpscRing<RxBlock>& ring, Monitor& monitor,
            FaultSink sink, Clock clock, Options options);
+    ~RxPump();
+    RxPump(const RxPump&) = delete;
+    RxPump& operator=(const RxPump&) = delete;
 
     // Reads the current layout from the driver. False on a device error.
     bool start();
-    // One pass: sends every queued command, waits up to wait_ms for
-    // frames, polls the statistics when due or when an RX overrun is
-    // pending, and reads into one block. When the ring is full the block
-    // is read and dropped, and an rx-queue-full fault is reported once
-    // until a block is delivered again. Returns false after a device
+    // One pass: sends every queued command, then waits for frames, a new
+    // command (Control notifies) or wake(). With run set it waits up to
+    // wait_ms and polls the statistics when due; with run clear nothing
+    // streams and it waits without limit, so an idle radio costs no
+    // wake-ups. Statistics are also polled when an RX overrun or a device
+    // error is pending. Reads into one block; when the ring is full the
+    // block is read and dropped, and an rx-queue-full fault is reported
+    // once until a block is delivered again. Returns false after a device
     // error, which is reported as a fault and ends the pump.
     bool step();
+    // Ends the current wait at once (for stopping). Thread-safe.
+    void wake() const noexcept { wake_.signal(); }
     // Sends every queued command. False on a device error.
     bool flush_commands();
 
@@ -77,6 +86,7 @@ private:
     FaultSink sink_;
     Clock clock_;
     Options options_;
+    Event wake_;
     RxBlock scratch_;
     std::chrono::nanoseconds last_stats_{};
     std::uint64_t sequence_ = 0;

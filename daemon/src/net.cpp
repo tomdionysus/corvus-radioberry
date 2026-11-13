@@ -97,18 +97,22 @@ Network::~Network() {
 }
 
 void Network::poll(int timeout_ms, const Handler& handler) {
-    pollfd fds[3] = {{udp_, POLLIN, 0}, {listener_, POLLIN, 0}, {tcp_, POLLIN, 0}};
-    const nfds_t n = tcp_ >= 0 ? 3 : 2;
+    pollfd fds[4] = {
+        {wake_.fd(), POLLIN, 0}, {udp_, POLLIN, 0}, {listener_, POLLIN, 0}, {tcp_, POLLIN, 0}};
+    const nfds_t n = tcp_ >= 0 ? 4 : 3;
     if (::poll(fds, n, timeout_ms) <= 0) {
         return;
     }
     if (fds[0].revents != 0) {
-        read_udp(handler);
+        wake_.drain();
     }
     if (fds[1].revents != 0) {
+        read_udp(handler);
+    }
+    if (fds[2].revents != 0) {
         accept_tcp();
     }
-    if (n == 3 && fds[2].revents != 0) {
+    if (n == 4 && fds[3].revents != 0) {
         read_tcp(handler);
     }
 }

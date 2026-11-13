@@ -27,6 +27,10 @@ public:
     std::size_t read(std::span<std::uint8_t> buffer) override;
     std::size_t write(std::span<const std::uint8_t> buffer) override;
     Readiness wait(bool want_read, bool want_write, int timeout_ms) override;
+    // As wait(), but with nothing ready it sleeps on `wake_fd` (up to
+    // idle_wait_ms, or 1 ms when that is 0 and there is no timeout), so an
+    // untimed wait in a test neither spins nor hangs.
+    Readiness wait_or_wake(bool want_read, bool want_write, int timeout_ms, int wake_fd) override;
 
     void drain_tx(std::uint32_t words);
 
@@ -52,6 +56,7 @@ public:
     int idle_wait_ms = 0;
     std::size_t waits = 0;
     std::size_t stats_calls = 0;
+    int last_timeout_ms = 0;  // as passed to the last wait_or_wake()
 
 private:
     void maybe_fail(const char* op);
