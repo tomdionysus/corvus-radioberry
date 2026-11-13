@@ -34,6 +34,7 @@ All on the Pi 4, kernel 6.18.60, gateware 75.3, SMI transport.
 | 8 | same: `p1probe --rate 192 --mox --seconds 15` through `radioberryd` (PTT and T/R relay keyed, drive 0, PA enable clear, zero samples) | Wi-Fi ping 100/100, slowest 9 ms; no under-voltage; 48 120 TX samples/s, 0 TX blocks dropped |
 | 9 | same, piHPSDR and WSJT-X calling on Protocol 2 | six transmissions of 13.6 to 13.9 s, 0 TX blocks dropped, WSJT-X starting one each period; pings lost for 6 s from PTT on in the first, 0.4 to 7 s late in the next four, lost from the sixth onward including the 17 s between transmissions, until the owner cut the power; wake-up lateness on the Pi 1 to 10 ms (one 20.7 ms); the kernel logged `sched: DL replenish lagged too much` once, in a 5 s ping stall |
 | 10 | same, piHPSDR and WSJT-X, 192 then 48 ksps (owner) | ten transmissions from 14:32:15, 13.8 to 14.0 s, 47 633 to 48 024 samples/s; the first dropped 100 TX blocks, the rest none. The Pi's own ping to its router, each second: 1 to 11 ms outside transmissions; during each, lost in 1 to 4 seconds and 50 to 981 ms in others. Wi-Fi signal unchanged (-61 to -62 dBm), TX bitrate 72.2 Mb/s dipping to 65; throttle flags 0x0 throughout (no under-voltage) and no kernel message; wake-up lateness 1 to 16 ms, 44.7 to 79.5 ms in the second after PTT on. Owner: the desktop locked at 48 ksps too, and the TX data looked corrupt |
+| 11 | released 0.4.1 (driver and daemon), `cpu` transport, SMI overlay removed, same config; piHPSDR and WSJT-X transmitting at 48 ksps and at the higher rate (owner) | owner: noticeable slowdown, but no lock-up of the desktop or the network at either rate |
 
 The Pi reported under-voltage (`hwmon1: Undervoltage detected!`) during
 the transmissions in steps 1 to 4; none in steps 8 and 10.
@@ -47,8 +48,11 @@ the transmissions in steps 1 to 4; none in steps 8 and 10.
   48 000 per second (step 7), or PTT keyed at drive 0 with the PA off
   (step 8).
 - Under-voltage was not present in step 10, which still failed.
-- The `cpu` transport carried the 0.4.0 acceptance test's transmissions
-  without lock-ups; it has not been retried today.
+- The `cpu` transport (released 0.4.1) does not lock up on transmit, at
+  48 ksps or at the higher rate, on the same Pi, board, config and
+  clients (step 11); it slows the system down. The lock-up comes with the
+  SMI transport.
+- The owner rules out Wi-Fi as the cause.
 
 ## Open
 
@@ -58,7 +62,8 @@ the transmissions in steps 1 to 4; none in steps 8 and 10.
 2. How the TX path interacts with the SMI and its DMA while transmitting:
    what differs between step 7 (TX words clocked, PTT clear) and a real
    transmission on the SMI side.
-3. The same transmissions on the `cpu` transport today.
+3. The slowdown on the `cpu` transport while transmitting (step 3: the
+   CPU-clocked TX thread holds 55 to 70% of a core).
 
 Every step that transmits needs the owner's go-ahead at the time.
 
@@ -72,5 +77,5 @@ Every step that transmits needs the owner's go-ahead at the time.
   6.6 s with nobody keying. The daemon should require MOX released before
   granting it to a new session.
 - `6fc7958` (TX gating, batched sends) and `f05d897` (TX thread sleeps on
-  a full FIFO) are on the branch; the Pi 4 runs `0.4.1+git16.gc3c96c1`.
+  a full FIFO) are on the branch; the Pi 4 runs the released 0.4.1.
   Whether they stay is decided when this item closes.
