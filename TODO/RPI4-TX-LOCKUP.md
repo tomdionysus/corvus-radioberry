@@ -12,6 +12,28 @@ once the owner had to cut the power to end it. Stopping `radioberryd`
 ended a transmission and the desktop recovered at once. The 0.4.0
 acceptance test on the `cpu` transport had no lock-ups.
 
+## Safety: read before any keyed test
+
+Step 15 was set up as a transmission without RF, on the strength of
+`drive_ceiling: 0` and `allow_pa: false`. It transmitted real RF and
+overdrove the PA. Those settings had never been measured to give no
+output, and the gateware's `exttr` line follows PTT whatever `allow_pa`
+says. Step 14 keyed the transmitter twice for 24 s under the same
+settings and the same assumption; what it radiated is not known.
+
+- Every keyed test is a full-power transmission. The daemon's drive
+  ceiling and PA permission are not safeguards on this build.
+- Before any keyed test the owner confirms the physical state: dummy
+  load connected, external PA off or disconnected.
+- The Pi under test stays at `allow_tx: false` with the daemon stopped
+  between tests.
+- "No RF" is a claim that needs a measurement on the build in question.
+
+Open from step 15: why a transmission the daemon logged as drive 0
+produced output (the drive command not reaching or not being obeyed by
+the gateware on SMI, corrupt TX data, or the drive level not scaling the
+output to nothing), measured into the dummy load on both transports.
+
 ## The owner's assessment
 
 The fault is in the TX path, interacting with the SMI and its DMA. The
@@ -38,6 +60,7 @@ All on the Pi 4, kernel 6.18.60, gateware 75.3, SMI transport.
 | 12 | released 0.4.1, `cpu`, no RF, daemon stopped: `rbcat --rate 192` (a) alone, (b) with `--tx-zeros`, (c) with `--tx-zeros`, `stress-ng --cpu 4` and a stream out over the Wi-Fi | 12 s each, router ping every 0.2 s: 60/60 in each, slowest 128, 5 and 90 ms; (c) carried 7.3 MB/s over the Wi-Fi with every core busy; streams clean |
 | 13 | SMI packages again, no RF: (a) to (c) as step 12, and (d) `p2probe --rate 192` through `radioberryd` with the same load | router ping 60/60 in each, slowest 7, 5, 101 and 69 ms; Wi-Fi stream 7.3 MB/s in (c) and (d); SMI DMA 545 interrupts a second in all four (one per period); CPU 0 in softirq 5.5%, 3.5%, 19% and 22%; streams clean, 48 000 TX words a second taken in (b) and (c) |
 | 14 | SMI, `p2probe --mox --rate 192` through `radioberryd` for 24 s (PTT and T/R relay keyed, drive ceiling 0, PA not allowed, zero samples): (a) alone, (b) with the step 12 load | router ping 60/60 in each, slowest 11 and 105 ms; (b) carried 6.7 MB/s over the Wi-Fi; SMI DMA 545 interrupts a second; 47 997 and 47 991 TX samples a second, 0 TX blocks dropped |
+| 15 | SMI, piHPSDR and WSJT-X on Protocol 2 at 48 ksps, `drive_ceiling: 0`, `allow_pa: false`; meant to be a transmission without RF | **it transmitted real RF and overdrove the PA** (owner); the owner shut the test down. The daemon logged `PTT on: drive 0 (client asked for 217, ceiling 0)`, 13.8 s, 48 026 samples a second, 0 TX blocks dropped. Router ping each second during it: none lost, 13 to 198 ms in 9 of 13 seconds, 1 to 2 ms before and after; one `sched: DL replenish lagged too much` |
 
 Without a keyed transmitter the Wi-Fi shows single pings of 60 to 200 ms
 now and then on both transports (steps 12 and 13).
@@ -137,9 +160,11 @@ steps are keyed, in this order, each one capture on SMI:
    under the step 13 load, PTT and the T/R relay keyed, drive 0, zero
    samples, PA not allowed. No stall: the keyed state, Protocol 2 and
    load together are not enough.
-2. piHPSDR and WSJT-X transmitting with `allow_pa: false` and
-   `drive_ceiling: 0`: the real clients and their TX data, no RF.
-3. The same with the PA and drive as in step 10, into the dummy load.
+2. Run as step 15 and stopped by the owner: it was not without RF (see
+   Safety). One transmission: pings delayed, none lost; the owner did
+   not report on the desktop.
+3. Not run. Whatever follows is the owner's decision, with the physical
+   state confirmed first.
 
 The first of these to stall names what the stall needs; stages C to E
 below then apply to that case.
@@ -237,6 +262,14 @@ Decides H2, independently of the stall. Parts 1 and 2 need no RF.
   once: after the daemon restarted, piHPSDR, still in MOX, transmitted for
   6.6 s with nobody keying. The daemon should require MOX released before
   granting it to a new session.
+- After a daemon restart on the SMI build (driver not reloaded, its last
+  session keyed at 192 ksps), four Protocol 2 sessions at 48 ksps in a
+  row (two piHPSDR, two `p2probe`) got no receive packets and the daemon
+  logged no receiver set-up, while the SMI's DMA ran at 551 interrupts a
+  second and no stall was flagged. One session at 192 ksps delivered
+  packets, and 48 and 96 ksps worked after it (3 of 3). Not investigated.
 - `6fc7958` (TX gating, batched sends) and `f05d897` (TX thread sleeps on
-  a full FIFO) are on the branch; the Pi 4 runs the released 0.4.1.
+  a full FIFO) are on the branch; the Pi 4 runs the SMI packages
+  `0.4.1+git16.gc3c96c1` again, daemon stopped and disabled, transmit
+  not allowed.
   Whether they stay is decided when this item closes.
