@@ -32,6 +32,11 @@
 #define RADIOBERRY_CMD_RUN (1u << 0)
 #define RADIOBERRY_CMD_CWX (1u << 1)
 #define RADIOBERRY_CMD_TX_PERMIT (1u << 2)
+/*
+ * The PA board may be keyed (its T/R relay, bias and enable lines). Only
+ * gateware-v2 images act on it; the PIO gateware ignores this bit.
+ */
+#define RADIOBERRY_CMD_PA_ALLOWED (1u << 3)
 
 /* Byte 1 of a command is Hermes-Lite 2 C0: address << 1 | PTT. */
 #define RADIOBERRY_CMD_PTT (1u << 0)

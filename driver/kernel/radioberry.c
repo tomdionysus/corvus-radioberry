@@ -279,24 +279,35 @@ struct rb_dev {
 	bool tx_starved;
 	wait_queue_head_t tx_wait;
 
-	/* Pi 4 I2S transport (gateware-v2 receive image). */
+	/* Pi 4 I2S transport (gateware-v2 image). */
 	void __iomem *pcm;
-	struct dma_chan *pcm_rx;
-	dma_cookie_t pcm_rx_cookie;
-	u32 *pcm_buf;		/* coherent, RB_I2S_PERIODS periods */
+	struct dma_chan *pcm_rx, *pcm_tx;
+	dma_cookie_t pcm_rx_cookie, pcm_tx_cookie;
+	u32 *pcm_buf;		/* RX, coherent, RB_I2S_PERIODS periods */
 	dma_addr_t pcm_buf_dma;
+	u32 *pcm_tbuf;		/* TX, coherent, the same size */
+	dma_addr_t pcm_tbuf_dma;
 	phys_addr_t pcm_fifo;
-	unsigned int pcm_period;	/* words */
-	unsigned int pcm_next;		/* next period to take */
+	unsigned int pcm_period;	/* words, each way */
+	unsigned int pcm_next;		/* next RX period to take */
+	unsigned int pcm_tfill;		/* next TX period to fill */
+	struct rb_i2s_tx_sched pcm_sched;
 	u32 *pcm_copy, *pcm_values;	/* one period each, cached */
 	bool pcm_streaming;
-	ktime_t pcm_tx_last;	/* TX stub: when words were last taken */
-	u64 pcm_tx_credit;
-	unsigned int i2s_div;
+	u64 pcm_tx_late;	/* TX DMA reached periods not yet filled */
+	u64 pcm_tx_fifo_errors;	/* PCM TX FIFO ran dry: stream resynchronised */
+	unsigned int i2s_div;		/* the divider the streams run at */
+	unsigned int i2s_div_want;	/* for the current receivers and rate */
 	u8 *frame_tx, *frame_rx;	/* DMA-safe */
 	u8 frame_seq;
-	u8 i2s_flags;		/* run, PTT and permission last sent */
+	u8 i2s_status2;		/* from the last reply */
+	u8 i2s_flags;		/* run, permission, PA allowed, PTT (0x80) last sent */
 	bool i2s_flags_sent;
+	u32 i2s_control;	/* CONTROL last written */
+	bool i2s_control_sent;
+	bool i2s_loopback;	/* sysfs tx_loopback */
+	struct delayed_work i2s_keepalive; /* rewrites KEYING while it is set */
+	struct work_struct i2s_resync;	   /* restarts the streams after a TX FIFO error */
 	u8 i2s_reply[RB_CMD_BYTES]; /* identity in the PIO reply layout, once valid */
 	bool i2s_identified;
 
@@ -1256,7 +1267,7 @@ static const struct rb_transport rb_bb_transport = {
 };
 
 
-/* ---- I2S into the PCM block (Pi 4, gateware-v2 receive image) ------- */
+/* ---- I2S into the PCM block (Pi 4, gateware-v2 image) ---------------- */
 
 /* BCM2711 PCM registers and bits (BCM2711 ARM Peripherals, chapter 7). */
 #define RB_PCM_CS 0x00
@@ -1267,9 +1278,11 @@ static const struct rb_transport rb_bb_transport = {
 #define RB_PCM_DREQ 0x14
 #define RB_PCM_CS_EN BIT(0)
 #define RB_PCM_CS_RXON BIT(1)
+#define RB_PCM_CS_TXON BIT(2)
 #define RB_PCM_CS_TXCLR BIT(3)
 #define RB_PCM_CS_RXCLR BIT(4)
 #define RB_PCM_CS_DMAEN BIT(9)
+#define RB_PCM_CS_TXERR BIT(15)
 #define RB_PCM_CS_RXERR BIT(16)
 #define RB_PCM_MODE_FSM BIT(21)
 #define RB_PCM_MODE_CLKM BIT(23)
@@ -1277,6 +1290,8 @@ static const struct rb_transport rb_bb_transport = {
 #define RB_I2S_FIRMWARE "radioberry-rpi4-i2s.rbf"
 #define RB_I2S_PERIODS 16
 #define RB_I2S_MAX_PERIOD 4096 /* words */
+#define RB_I2S_TX_LEAD 4	   /* TX periods kept filled ahead of the DMA, about 8 ms */
+#define RB_I2S_KEEPALIVE_MS 250	   /* KEYING rewrites; the image clears it after 1 s */
 /* What the image reports to clients: the Hermes-Lite 2 core it carries. */
 #define RB_I2S_HL2_MAJOR 75
 #define RB_I2S_HL2_MINOR 3
@@ -1290,7 +1305,7 @@ static int rb_frame_xfer(struct rb_dev *rb, bool write, bool board, u8 addr, u32
 		.rx_buf = rb->frame_rx,
 		.len = RB_FRAME_BYTES,
 	};
-	u8 st, seq;
+	u8 st, st2;
 	u32 v;
 	int ret, tries;
 
@@ -1299,7 +1314,8 @@ static int rb_frame_xfer(struct rb_dev *rb, bool write, bool board, u8 addr, u32
 		ret = spi_sync_transfer(rb->spi, &t, 1);
 		if (ret)
 			return ret;
-		if (rb_frame_reply(rb->frame_rx, &st, &v, &seq)) {
+		if (rb_frame_reply(rb->frame_rx, &st, &v, &st2)) {
+			rb->i2s_status2 = st2;
 			if (value)
 				*value = v;
 			if (status)
@@ -1324,9 +1340,9 @@ static int rb_breg_write(struct rb_dev *rb, u8 addr, u32 value)
 
 /*
  * Identity in the PIO gateware's reply layout (rb_reply_parse()), once the
- * image is running: no transmitter, the receivers it carries, the Hermes-
- * Lite 2 core level clients see. Zeros until then, so rb_read_identity()
- * keeps polling.
+ * image is running: its transmitter (none in the receive image), the
+ * receivers it carries, the Hermes-Lite 2 core level clients see. Zeros
+ * until then, so rb_read_identity() keeps polling.
  */
 static int rb_i2s_identify(struct rb_dev *rb, u8 status)
 {
@@ -1343,7 +1359,7 @@ static int rb_i2s_identify(struct rb_dev *rb, u8 status)
 	if (ret)
 		return ret;
 	if (id != RB_ID_RBV2 || RB_CAPS_TRANSPORT(caps) != RB_CAPS_TRANSPORT_I2S) {
-		dev_err_ratelimited(rb->dev, "not the I2S receive image: id 0x%08x caps 0x%08x\n",
+		dev_err_ratelimited(rb->dev, "not a gateware-v2 I2S image: id 0x%08x caps 0x%08x\n",
 				    id, caps);
 		return 0;
 	}
@@ -1362,38 +1378,64 @@ static void rb_i2s_stream_stop(struct rb_dev *rb)
 		writel(0, rb->pcm + RB_PCM_CS);
 	if (rb->pcm_rx && rb->pcm_streaming)
 		dmaengine_terminate_sync(rb->pcm_rx);
+	if (rb->pcm_tx && rb->pcm_streaming)
+		dmaengine_terminate_sync(rb->pcm_tx);
 	rb->pcm_streaming = false;
 }
 
 static void rb_i2s_dma_done(void *param);
 
-/* Starts RX DMA with periods sized for the divider. */
+/*
+ * Starts RX and TX DMA with periods sized for the divider. TX starts with
+ * idle frames (all zero) and its schedule from the start; the image starts
+ * its sequence check again whenever the link is disabled, which every call
+ * here follows.
+ */
 static int rb_i2s_stream_start(struct rb_dev *rb, unsigned int div)
 {
-	struct dma_slave_config cfg = {
+	struct dma_slave_config rcfg = {
 		.direction = DMA_DEV_TO_MEM,
 		.src_addr = rb->pcm_fifo,
 		.src_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES,
 		.src_maxburst = 2,
 	};
-	struct dma_async_tx_descriptor *desc;
+	struct dma_slave_config tcfg = {
+		.direction = DMA_MEM_TO_DEV,
+		.dst_addr = rb->pcm_fifo,
+		.dst_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES,
+		.dst_maxburst = 2,
+	};
+	struct dma_async_tx_descriptor *rdesc, *tdesc;
 	/* Two 32-bit channels in a 64-bit frame, MSB first, no delay. */
 	u32 ch = BIT(31) | BIT(30) | 0 << 20 | 8 << 16 | BIT(15) | BIT(14) | 32 << 4 | 8;
+	size_t bytes;
 	int ret;
 
 	rb->pcm_period = rb_i2s_period_words(div);
+	bytes = (size_t)rb->pcm_period * 4 * RB_I2S_PERIODS;
 	rb->pcm_next = 0;
-	ret = dmaengine_slave_config(rb->pcm_rx, &cfg);
+	rb->pcm_tfill = 1;
+	memset(&rb->pcm_sched, 0, sizeof(rb->pcm_sched));
+	memset(rb->pcm_tbuf, 0, bytes);
+	ret = dmaengine_slave_config(rb->pcm_rx, &rcfg);
+	if (!ret)
+		ret = dmaengine_slave_config(rb->pcm_tx, &tcfg);
 	if (ret)
 		return ret;
-	desc = dmaengine_prep_dma_cyclic(rb->pcm_rx, rb->pcm_buf_dma,
-					 (size_t)rb->pcm_period * 4 * RB_I2S_PERIODS,
-					 (size_t)rb->pcm_period * 4, DMA_DEV_TO_MEM,
-					 DMA_PREP_INTERRUPT);
-	if (!desc)
+	rdesc = dmaengine_prep_dma_cyclic(rb->pcm_rx, rb->pcm_buf_dma, bytes,
+					  (size_t)rb->pcm_period * 4, DMA_DEV_TO_MEM,
+					  DMA_PREP_INTERRUPT);
+	tdesc = dmaengine_prep_dma_cyclic(rb->pcm_tx, rb->pcm_tbuf_dma, bytes,
+					  (size_t)rb->pcm_period * 4, DMA_MEM_TO_DEV, 0);
+	if (!rdesc || !tdesc) {
+		if (rdesc)
+			dmaengine_desc_free(rdesc);
+		if (tdesc)
+			dmaengine_desc_free(tdesc);
 		return -EIO;
-	desc->callback = rb_i2s_dma_done;
-	desc->callback_param = rb;
+	}
+	rdesc->callback = rb_i2s_dma_done;
+	rdesc->callback_param = rb;
 
 	writel(0, rb->pcm + RB_PCM_CS);
 	writel(RB_PCM_MODE_CLKM | RB_PCM_MODE_FSM | 63 << 10 | 32, rb->pcm + RB_PCM_MODE);
@@ -1403,27 +1445,31 @@ static int rb_i2s_stream_start(struct rb_dev *rb, unsigned int div)
 	writel(RB_PCM_CS_EN | RB_PCM_CS_RXCLR | RB_PCM_CS_TXCLR, rb->pcm + RB_PCM_CS);
 	usleep_range(1000, 2000);
 	writel(0x10 << 24 | 0x30 << 16 | 0x30 << 8 | 0x20, rb->pcm + RB_PCM_DREQ);
-	writel(RB_PCM_CS_EN | RB_PCM_CS_DMAEN | RB_PCM_CS_RXERR, rb->pcm + RB_PCM_CS);
-	rb->pcm_tx_last = ktime_get();
-	rb->pcm_tx_credit = 0;
-	rb->pcm_rx_cookie = dmaengine_submit(desc);
+	writel(RB_PCM_CS_EN | RB_PCM_CS_DMAEN | RB_PCM_CS_RXERR | RB_PCM_CS_TXERR,
+	       rb->pcm + RB_PCM_CS);
+	rb->pcm_rx_cookie = dmaengine_submit(rdesc);
+	rb->pcm_tx_cookie = dmaengine_submit(tdesc);
 	dma_async_issue_pending(rb->pcm_rx);
+	dma_async_issue_pending(rb->pcm_tx);
+	/* The TX DMA fills the PCM FIFO, starting with frame word 0. */
+	usleep_range(1000, 2000);
 	rb->pcm_streaming = true;
-	writel(RB_PCM_CS_EN | RB_PCM_CS_DMAEN | RB_PCM_CS_RXON, rb->pcm + RB_PCM_CS);
+	writel(RB_PCM_CS_EN | RB_PCM_CS_DMAEN | RB_PCM_CS_RXON | RB_PCM_CS_TXON,
+	       rb->pcm + RB_PCM_CS);
 	return 0;
 }
 
 /*
- * Sets the image's bit clock for the divider and restarts RX DMA with
- * periods to match. The link stops for the change: words in flight in the
- * image's FIFO wait for it, and the parser resynchronises on the next
- * frame start anyway.
+ * Sets the image's bit clock for the divider and restarts both DMA streams
+ * with periods to match (force: even with the divider unchanged). The link
+ * stops for the change: words in flight in the image's FIFO wait for it,
+ * and the parser resynchronises on the next frame start anyway.
  */
-static int rb_i2s_set_div(struct rb_dev *rb, unsigned int div)
+static int rb_i2s_set_div(struct rb_dev *rb, unsigned int div, bool force)
 {
 	int ret;
 
-	if (rb->pcm_streaming && div == rb->i2s_div)
+	if (rb->pcm_streaming && div == rb->i2s_div && !force)
 		return 0;
 	ret = rb_breg_write(rb, RB_BREG_I2S, (u32)div << 8);
 	if (ret)
@@ -1432,13 +1478,57 @@ static int rb_i2s_set_div(struct rb_dev *rb, unsigned int div)
 	ret = rb_i2s_stream_start(rb, div);
 	if (ret)
 		return ret;
-	ret = rb_breg_write(rb, RB_BREG_I2S, 1u << 16 | (u32)div << 8 | 1);
+	ret = rb_breg_write(rb, RB_BREG_I2S, rb_i2s_link_reg(div));
 	if (ret)
 		return ret;
 	rb_trace(rb, "I2S bit clock %u Hz, %u words a DMA period\n", RB_I2S_FAST_HZ / div,
 		 rb->pcm_period);
 	rb->i2s_div = div;
 	return 0;
+}
+
+/*
+ * Keeps the TX buffer filled RB_I2S_TX_LEAD periods ahead of the period the
+ * TX DMA is reading, each period from the ring by the transmit schedule.
+ * True if samples were taken from the ring.
+ */
+static bool rb_i2s_tx_fill(struct rb_dev *rb, unsigned int period, size_t bytes)
+{
+	unsigned int frames = period / 2, reading, ahead, slots, take, got;
+	struct dma_tx_state state;
+	unsigned long flags;
+	bool took = false;
+	u32 *dst;
+
+	dmaengine_tx_status(rb->pcm_tx, rb->pcm_tx_cookie, &state);
+	reading = (unsigned int)(((bytes - min_t(size_t, state.residue, bytes)) % bytes) /
+				 ((size_t)period * 4));
+	ahead = (rb->pcm_tfill + RB_I2S_PERIODS - reading) % RB_I2S_PERIODS;
+	if (ahead == 0 || ahead > RB_I2S_TX_LEAD + 1) {
+		/* The DMA has reached periods not filled: they went as they were. */
+		rb->pcm_tx_late++;
+		rb->pcm_tfill = (reading + 1) % RB_I2S_PERIODS;
+	}
+	while ((rb->pcm_tfill + RB_I2S_PERIODS - reading) % RB_I2S_PERIODS <= RB_I2S_TX_LEAD) {
+		/* The slots this period has: what the schedule will want. */
+		slots = (rb->pcm_sched.acc + frames * rb->i2s_div) / RB_I2S_TX_DIV;
+		spin_lock_irqsave(&rb->tx_lock, flags);
+		take = min_t(u32, slots, rb_ring_used(&rb->tx_ring) / 4);
+		got = rb_ring_get(&rb->tx_ring, (u8 *)rb->pcm_values, take * 4) / 4;
+		rb->stats.tx_words += got;
+		if (got < slots && rb->ptt)
+			rb->stats.tx_underruns++;
+		spin_unlock_irqrestore(&rb->tx_lock, flags);
+		if (got)
+			took = true;
+		/* Built in cached memory, then one copy into the uncached buffer. */
+		rb_i2s_tx_frames(&rb->pcm_sched, rb->i2s_div, rb->pcm_copy, frames, rb->pcm_values,
+				 got, &slots);
+		dst = rb->pcm_tbuf + (size_t)rb->pcm_tfill * period;
+		memcpy(dst, rb->pcm_copy, (size_t)period * 4);
+		rb->pcm_tfill = (rb->pcm_tfill + 1) % RB_I2S_PERIODS;
+	}
+	return took;
 }
 
 /* The periods the DMA has filled since the last call, from its residue. */
@@ -1449,11 +1539,7 @@ static void rb_i2s_dma_done(void *param)
 	size_t bytes = (size_t)period * 4 * RB_I2S_PERIODS;
 	struct dma_tx_state state;
 	unsigned int filling, n, k, values;
-	unsigned long flags;
 	bool wake = false;
-	u32 used, got;
-	u64 allow;
-	ktime_t now;
 	u32 cs;
 
 	dmaengine_tx_status(rb->pcm_rx, rb->pcm_rx_cookie, &state);
@@ -1473,53 +1559,99 @@ static void rb_i2s_dma_done(void *param)
 		wake_up_interruptible(&rb->rx_wait);
 
 	cs = readl(rb->pcm + RB_PCM_CS);
-	if (cs & RB_PCM_CS_RXERR) {
+	if (cs & (RB_PCM_CS_RXERR | RB_PCM_CS_TXERR))
 		writel(cs & ~(RB_PCM_CS_RXCLR | RB_PCM_CS_TXCLR), rb->pcm + RB_PCM_CS);
+	if (cs & RB_PCM_CS_RXERR)
 		rb_debug(rb, "PCM RX FIFO overflowed\n");
+	if (cs & RB_PCM_CS_TXERR) {
+		/*
+		 * The PCM block sent zeros and may have slipped a word between
+		 * its two channels. The image drops frames whose flags fail
+		 * their check; restart the streams to put the words back.
+		 */
+		rb->pcm_tx_fifo_errors++;
+		rb_debug(rb, "PCM TX FIFO ran dry: restarting the streams\n");
+		schedule_work(&rb->i2s_resync);
 	}
 
-	/*
-	 * Transmit is not wired in this image. TX words are taken from the
-	 * ring at the gateware's 48 000 a second and discarded, so writers see
-	 * the back-pressure the transmit path will give them.
-	 */
-	now = ktime_get();
-	allow = rb->pcm_tx_credit +
-		(u64)ktime_to_ns(ktime_sub(now, rb->pcm_tx_last)) * 48000u / NSEC_PER_SEC;
-	rb->pcm_tx_last = now;
-	spin_lock_irqsave(&rb->tx_lock, flags);
-	used = min_t(u64, rb_ring_used(&rb->tx_ring), allow * 4) & ~3u;
-	got = 0;
-	while (used) {
-		u32 chunk = rb_ring_get(&rb->tx_ring, (u8 *)rb->pcm_copy,
-					min_t(u32, used, (u32)period * 4));
-
-		if (!chunk)
-			break;
-		got += chunk;
-		used -= chunk;
-	}
-	rb->stats.tx_words += got / 4;
-	/* Credit kept for a ring that ran short, up to 20 ms of samples. */
-	rb->pcm_tx_credit = min_t(u64, allow - got / 4, 960);
-	spin_unlock_irqrestore(&rb->tx_lock, flags);
-	if (got)
+	if (rb_i2s_tx_fill(rb, period, bytes))
 		wake_up_interruptible(&rb->tx_wait);
 
 	rb_check_stall(rb);
 }
 
+#define RB_I2S_FLAG_PTT 0x80
+
+static u32 rb_i2s_keying(u8 flags)
+{
+	return (flags & RB_I2S_FLAG_PTT ? RB_KEYING_PTT : 0) |
+	       (flags & RADIOBERRY_CMD_TX_PERMIT ? RB_KEYING_PERMIT : 0);
+}
+
+/* CONTROL from the flags and the loopback setting, written when it changes. */
+static int rb_i2s_write_control(struct rb_dev *rb)
+{
+	u32 control = (rb->i2s_flags & RADIOBERRY_CMD_RUN ? RB_CONTROL_RUN : 0) |
+		      (rb->i2s_flags & RADIOBERRY_CMD_PA_ALLOWED ? RB_CONTROL_PA_ALLOWED : 0) |
+		      (rb->i2s_loopback ? RB_CONTROL_LOOPBACK : 0);
+	int ret;
+
+	lockdep_assert_held(&rb->cmd_lock);
+	if (rb->i2s_control_sent && control == rb->i2s_control)
+		return 0;
+	ret = rb_breg_write(rb, RB_BREG_CONTROL, control);
+	if (ret)
+		return ret;
+	rb->i2s_control = control;
+	rb->i2s_control_sent = true;
+	return 0;
+}
+
+/*
+ * The image clears KEYING unless it is written again within a second, so a
+ * host that stops (a crash, a hung kernel) stops the transmitter. While
+ * PTT or the permission bit is set this rewrites it every
+ * RB_I2S_KEEPALIVE_MS.
+ */
+static void rb_i2s_keepalive(struct work_struct *work)
+{
+	struct rb_dev *rb = container_of(to_delayed_work(work), struct rb_dev, i2s_keepalive);
+	u32 keying;
+
+	mutex_lock(&rb->cmd_lock);
+	keying = rb->i2s_flags_sent ? rb_i2s_keying(rb->i2s_flags) : 0;
+	if (keying && rb_breg_write(rb, RB_BREG_KEYING, keying))
+		dev_err_ratelimited(rb->dev, "KEYING keepalive failed\n");
+	mutex_unlock(&rb->cmd_lock);
+	if (keying)
+		schedule_delayed_work(&rb->i2s_keepalive, msecs_to_jiffies(RB_I2S_KEEPALIVE_MS));
+}
+
+/* After the PCM TX FIFO ran dry: both streams from the start. */
+static void rb_i2s_resync(struct work_struct *work)
+{
+	struct rb_dev *rb = container_of(work, struct rb_dev, i2s_resync);
+
+	mutex_lock(&rb->cmd_lock);
+	if (rb->pcm_streaming && !rb->rx_paused && rb_i2s_set_div(rb, rb->i2s_div, true))
+		dev_err_ratelimited(rb->dev, "restarting the I2S streams failed\n");
+	mutex_unlock(&rb->cmd_lock);
+}
+
 /*
  * One command block, in the image's framed protocol: the Hermes-Lite 2
- * command to the radio space; run, PTT and the permission bit, when they
- * change, to the board's CONTROL and KEYING registers (KEYING has no effect
- * in this image); a receiver-count or rate change sets the bit clock. rx[]
- * gets the identity in the PIO reply layout.
+ * command to the radio space; run and PA allowed, when they change, to the
+ * board's CONTROL register, PTT and the permission bit to KEYING (kept
+ * alive while set); a receiver-count or rate change sets the bit clock.
+ * rx[] gets the reply in the PIO layout: byte 0 from status 2 (the core's
+ * CW or the jack's PTT, the jack's key), then the identity.
  */
 static int rb_i2s_command(struct rb_dev *rb, const u8 *tx, u8 *rx)
 {
-	u8 flags = (u8)((tx[0] & (RADIOBERRY_CMD_RUN | RADIOBERRY_CMD_TX_PERMIT)) |
-			(rb_cmd_ptt(tx) ? 0x80 : 0));
+	u8 flags = (u8)((tx[0] & (RADIOBERRY_CMD_RUN | RADIOBERRY_CMD_TX_PERMIT |
+				  RADIOBERRY_CMD_PA_ALLOWED)) |
+			(rb_cmd_ptt(tx) ? RB_I2S_FLAG_PTT : 0));
+	bool first = !rb->i2s_flags_sent;
 	unsigned int receivers, rate_code;
 	u8 status;
 	int ret;
@@ -1527,38 +1659,55 @@ static int rb_i2s_command(struct rb_dev *rb, const u8 *tx, u8 *rx)
 	ret = rb_frame_xfer(rb, true, false, rb_cmd_addr(tx), rb_cmd_data(tx), NULL, &status);
 	if (ret)
 		return ret;
-	if (!rb->i2s_flags_sent || (flags ^ rb->i2s_flags) & RADIOBERRY_CMD_RUN) {
-		ret = rb_breg_write(rb, RB_BREG_CONTROL, flags & RADIOBERRY_CMD_RUN ? 1 : 0);
-		if (ret)
-			return ret;
-	}
-	if (!rb->i2s_flags_sent || (flags ^ rb->i2s_flags) & (RADIOBERRY_CMD_TX_PERMIT | 0x80)) {
-		ret = rb_breg_write(rb, RB_BREG_KEYING, (flags & 0x80 ? 1u : 0) |
-				    (flags & RADIOBERRY_CMD_TX_PERMIT ? 2u : 0));
+	/* Keying off before PA allowed goes; PA allowed before keying goes on. */
+	if (!first && rb_i2s_keying(flags) != rb_i2s_keying(rb->i2s_flags) &&
+	    !rb_i2s_keying(flags)) {
+		ret = rb_breg_write(rb, RB_BREG_KEYING, 0);
 		if (ret)
 			return ret;
 	}
 	rb->i2s_flags = flags;
 	rb->i2s_flags_sent = true;
-
-	if (rb->pcm && rb_cmd_general(tx, &receivers, &rate_code)) {
-		ret = rb_i2s_set_div(rb, rb_i2s_div(rate_code, receivers));
+	ret = rb_i2s_write_control(rb);
+	if (ret)
+		return ret;
+	if (rb_i2s_keying(flags)) {
+		ret = rb_breg_write(rb, RB_BREG_KEYING, rb_i2s_keying(flags));
 		if (ret)
 			return ret;
+		mod_delayed_work(system_wq, &rb->i2s_keepalive,
+				 msecs_to_jiffies(RB_I2S_KEEPALIVE_MS));
+	} else if (first) {
+		ret = rb_breg_write(rb, RB_BREG_KEYING, 0);
+		if (ret)
+			return ret;
+	}
+
+	if (rb->pcm && rb_cmd_general(tx, &receivers, &rate_code)) {
+		rb->i2s_div_want = rb_i2s_div(rate_code, receivers);
+		/* Paused: the link starts at this divider when run is set. */
+		if (!rb->rx_paused) {
+			ret = rb_i2s_set_div(rb, rb->i2s_div_want, false);
+			if (ret)
+				return ret;
+		}
 	}
 
 	ret = rb_i2s_identify(rb, status);
 	if (ret)
 		return ret;
-	if (rb->i2s_identified)
+	if (rb->i2s_identified) {
 		memcpy(rx, rb->i2s_reply, RB_CMD_BYTES);
-	else
+		rx[0] = rb_frame_reply_flags(rb->i2s_status2);
+	} else {
 		memset(rx, 0, RB_CMD_BYTES);
+	}
 	return 0;
 }
 
 static void rb_i2s_down(struct rb_dev *rb)
 {
+	cancel_work_sync(&rb->i2s_resync);
 	rb_i2s_stream_stop(rb);
 	if (rb->pcm_rx) {
 		if (rb->pcm_buf)
@@ -1567,8 +1716,17 @@ static void rb_i2s_down(struct rb_dev *rb)
 					  rb->pcm_buf, rb->pcm_buf_dma);
 		dma_release_channel(rb->pcm_rx);
 	}
+	if (rb->pcm_tx) {
+		if (rb->pcm_tbuf)
+			dma_free_coherent(rb->pcm_tx->device->dev,
+					  (size_t)RB_I2S_MAX_PERIOD * 4 * RB_I2S_PERIODS,
+					  rb->pcm_tbuf, rb->pcm_tbuf_dma);
+		dma_release_channel(rb->pcm_tx);
+	}
 	rb->pcm_rx = NULL;
 	rb->pcm_buf = NULL;
+	rb->pcm_tx = NULL;
+	rb->pcm_tbuf = NULL;
 	if (rb->pcm)
 		iounmap(rb->pcm);
 	rb->pcm = NULL;
@@ -1580,12 +1738,13 @@ static void rb_i2s_down(struct rb_dev *rb)
 	/* A reload restarts the image: identify it and send the flags again. */
 	rb->i2s_identified = false;
 	rb->i2s_flags_sent = false;
+	rb->i2s_control_sent = false;
 }
 
 /*
  * The PCM block from the overlay's radioberry,pcm phandle. Its node stays
  * disabled, so the stock I2S driver never binds it and no sound card
- * exists; only its registers and its RX DMA request are used.
+ * exists; only its registers and its DMA requests are used.
  */
 static int rb_i2s_up(struct rb_dev *rb)
 {
@@ -1610,12 +1769,22 @@ static int rb_i2s_up(struct rb_dev *rb)
 		dev_err(rb->dev, "no RX DMA channel for the PCM block: %d\n", ret);
 		goto out;
 	}
+	rb->pcm_tx = of_dma_request_slave_channel(np, "tx");
+	if (IS_ERR(rb->pcm_tx)) {
+		ret = PTR_ERR(rb->pcm_tx);
+		rb->pcm_tx = NULL;
+		dev_err(rb->dev, "no TX DMA channel for the PCM block: %d\n", ret);
+		goto out;
+	}
 	rb->pcm_buf = dma_alloc_coherent(rb->pcm_rx->device->dev,
 					 (size_t)RB_I2S_MAX_PERIOD * 4 * RB_I2S_PERIODS,
 					 &rb->pcm_buf_dma, GFP_KERNEL);
+	rb->pcm_tbuf = dma_alloc_coherent(rb->pcm_tx->device->dev,
+					  (size_t)RB_I2S_MAX_PERIOD * 4 * RB_I2S_PERIODS,
+					  &rb->pcm_tbuf_dma, GFP_KERNEL);
 	rb->pcm_copy = kvcalloc(RB_I2S_MAX_PERIOD, sizeof(u32), GFP_KERNEL);
 	rb->pcm_values = kvcalloc(RB_I2S_MAX_PERIOD, sizeof(u32), GFP_KERNEL);
-	if (!rb->pcm || !rb->pcm_buf || !rb->pcm_copy || !rb->pcm_values) {
+	if (!rb->pcm || !rb->pcm_buf || !rb->pcm_tbuf || !rb->pcm_copy || !rb->pcm_values) {
 		ret = -ENOMEM;
 		goto out;
 	}
@@ -1625,12 +1794,16 @@ static int rb_i2s_up(struct rb_dev *rb)
 	rate_code = rb->rate_code;
 	spin_unlock_irqrestore(&rb->rx_lock, flags);
 	mutex_lock(&rb->cmd_lock);
-	ret = rb_i2s_set_div(rb, rb_i2s_div(rate_code, receivers));
+	rb->i2s_div_want = rb_i2s_div(rate_code, receivers);
+	if (rb->rx_paused)
+		ret = rb_breg_write(rb, RB_BREG_I2S, (u32)rb->i2s_div_want << 8);
+	else
+		ret = rb_i2s_set_div(rb, rb->i2s_div_want, false);
 	mutex_unlock(&rb->cmd_lock);
 	if (ret)
 		goto out;
 	of_node_put(np);
-	dev_info(rb->dev, "RX over I2S into the PCM block, up to %u values per second\n",
+	dev_info(rb->dev, "RX and TX over I2S with the PCM block, RX up to %u values per second\n",
 		 RB_I2S_VALUES_MAX);
 	return 0;
 
@@ -1650,13 +1823,29 @@ static void rb_i2s_rx_release(struct rb_dev *rb)
 {
 }
 
-/* Run (CONTROL bit 0) stops the stream in the image itself. */
+/*
+ * Run clear: nothing streams, so nothing runs. The PCM block and both DMA
+ * channels stop and the image's link is disabled: no bit clock, no DMA, no
+ * interrupts until run is set again. Called with cmd_lock held.
+ */
 static void rb_i2s_rx_pause(struct rb_dev *rb)
 {
+	lockdep_assert_held(&rb->cmd_lock);
+	if (!rb->pcm)
+		return;
+	rb_i2s_stream_stop(rb);
+	if (rb_breg_write(rb, RB_BREG_I2S, (u32)rb->i2s_div_want << 8))
+		dev_err_ratelimited(rb->dev, "disabling the I2S link failed\n");
+	rb_trace(rb, "I2S link and DMA stopped: run clear\n");
 }
 
 static void rb_i2s_rx_resume(struct rb_dev *rb)
 {
+	lockdep_assert_held(&rb->cmd_lock);
+	if (!rb->pcm)
+		return;
+	if (rb_i2s_set_div(rb, rb->i2s_div_want, true))
+		dev_err_ratelimited(rb->dev, "starting the I2S link failed\n");
 }
 
 static const struct rb_transport rb_i2s_transport = {
@@ -2203,6 +2392,76 @@ static ssize_t transport_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(transport);
 
+/*
+ * Pi 4 I2S only. 1 puts the image's AD9866 in digital loopback: TxDAC and
+ * IAMP powered down, TX quiet and every PA line held low, transmit samples
+ * back on the receive bus. For a self-test of the transmit path; the
+ * transmitter still has to be keyed (PTT and permission) for samples to
+ * flow. Written to the image at once.
+ */
+static ssize_t tx_loopback_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct rb_dev *rb = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "%d\n", READ_ONCE(rb->i2s_loopback) ? 1 : 0);
+}
+
+static ssize_t tx_loopback_store(struct device *dev, struct device_attribute *attr,
+				 const char *buf, size_t count)
+{
+	struct rb_dev *rb = dev_get_drvdata(dev);
+	bool on;
+	int ret;
+
+	if (rb->tp != &rb_i2s_transport)
+		return -EOPNOTSUPP;
+	ret = kstrtobool(buf, &on);
+	if (ret)
+		return ret;
+	mutex_lock(&rb->cmd_lock);
+	WRITE_ONCE(rb->i2s_loopback, on);
+	ret = rb->i2s_flags_sent ? rb_i2s_write_control(rb) : 0;
+	mutex_unlock(&rb->cmd_lock);
+	return ret ? ret : (ssize_t)count;
+}
+static DEVICE_ATTR_RW(tx_loopback);
+
+/* Pi 4 I2S only: the image's transmit counters and the driver's own. */
+static ssize_t i2s_counters_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	static const struct {
+		u8 reg;
+		const char *name;
+	} regs[] = {
+		{ RB_BREG_I2S_TX, "words_to_pi" },  { RB_BREG_I2S_RX, "tx_samples" },
+		{ RB_BREG_SEQ_GAPS, "tx_seq_gaps" }, { RB_BREG_TX_BAD, "tx_bad_frames" },
+		{ RB_BREG_TX_OVF, "tx_overflows" },  { RB_BREG_TX_UNDER, "tx_underruns" },
+		{ RB_BREG_STATUS2, "status2" },	     { RB_BREG_CONTROL, "control" },
+		{ RB_BREG_KEYING, "keying" },	     { RB_BREG_I2S, "i2s" },
+	};
+	struct rb_dev *rb = dev_get_drvdata(dev);
+	ssize_t n = 0;
+	unsigned int i;
+	u32 v;
+	int ret = 0;
+
+	if (rb->tp != &rb_i2s_transport)
+		return -EOPNOTSUPP;
+	mutex_lock(&rb->cmd_lock);
+	for (i = 0; i < ARRAY_SIZE(regs) && !ret; i++) {
+		ret = rb_breg_read(rb, regs[i].reg, &v);
+		if (!ret)
+			n += sysfs_emit_at(buf, n, "%s 0x%08x %u\n", regs[i].name, v, v);
+	}
+	mutex_unlock(&rb->cmd_lock);
+	if (ret)
+		return ret;
+	n += sysfs_emit_at(buf, n, "driver_tx_late %llu\ndriver_tx_fifo_errors %llu\n",
+			   READ_ONCE(rb->pcm_tx_late), READ_ONCE(rb->pcm_tx_fifo_errors));
+	return n;
+}
+static DEVICE_ATTR_RO(i2s_counters);
+
 static struct attribute *rb_attrs[] = {
 	&dev_attr_gateware_version.attr,
 	&dev_attr_fpga_type.attr,
@@ -2212,6 +2471,8 @@ static struct attribute *rb_attrs[] = {
 	&dev_attr_rx_stalled.attr,
 	&dev_attr_rx_stalls.attr,
 	&dev_attr_transport.attr,
+	&dev_attr_tx_loopback.attr,
+	&dev_attr_i2s_counters.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(rb);
@@ -2295,6 +2556,8 @@ static int rb_probe(struct spi_device *spi)
 	init_waitqueue_head(&rb->rx_wait);
 	init_waitqueue_head(&rb->tx_wait);
 	init_waitqueue_head(&rb->work_wait);
+	INIT_DELAYED_WORK(&rb->i2s_keepalive, rb_i2s_keepalive);
+	INIT_WORK(&rb->i2s_resync, rb_i2s_resync);
 	atomic_set(&rb->rx.inflight, 0);
 	atomic_set(&rb->tx.inflight, 0);
 	spi_set_drvdata(spi, rb);
@@ -2348,6 +2611,7 @@ err_streams:
 	rb_stop_streams(rb);
 err_safe:
 	rb_command_safe(rb, NULL);
+	cancel_delayed_work_sync(&rb->i2s_keepalive);
 err_free:
 	rb_free(rb);
 	return ret;
@@ -2360,6 +2624,7 @@ static void rb_remove(struct spi_device *spi)
 	misc_deregister(&rb->misc);
 	rb_stop_streams(rb);
 	rb_command_safe(rb, NULL);
+	cancel_delayed_work_sync(&rb->i2s_keepalive);
 	rb_free(rb);
 }
 
