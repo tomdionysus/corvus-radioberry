@@ -162,6 +162,7 @@ MODULE_PARM_DESC(bb_settle_reads, "Pi 4: extra pin reads after each bus clock pu
 #define RB_SMI_DC 0x30
 #define RB_SMI_CS_ENABLE BIT(0)
 #define RB_SMI_CS_DONE BIT(1) /* written 1 to clear */
+#define RB_SMI_CS_ACTIVE BIT(2) /* a transfer is running */
 #define RB_SMI_CS_START BIT(3)
 #define RB_SMI_CS_CLEAR BIT(4)
 #define RB_SMI_CS_INTD BIT(9) /* interrupt when a transfer is done */
@@ -1443,7 +1444,9 @@ static void rb_smi_rx_resume(struct rb_dev *rb)
 
 /*
  * A stream that should run but has completed no DMA period for
- * RB_SMI_WATCHDOG_MS has stopped: restart the transfer and count it. Not
+ * RB_SMI_WATCHDOG_MS, with no transfer active, has stopped: restart the
+ * transfer and count it. With a transfer active the DMA callback is only
+ * late (seen once under a debug kernel), and START would be ignored. Not
  * seen once the done interrupt restarted transfers; kept as a safety net.
  * Worker only.
  */
@@ -1462,8 +1465,8 @@ static void rb_smi_watchdog(struct rb_dev *rb)
 	if (time_before(jiffies, rb->smi_last_progress + msecs_to_jiffies(RB_SMI_WATCHDOG_MS)))
 		return;
 	spin_lock_irqsave(&rb->smi_lock, flags);
-	if (rb->smi_strobing) {
-		cs = readl(rb->smi_regs + RB_SMI_CS);
+	cs = readl(rb->smi_regs + RB_SMI_CS);
+	if (rb->smi_strobing && !(cs & RB_SMI_CS_ACTIVE)) {
 		rb_smi_start_locked(rb);
 		rb->smi_stalls++;
 		restart = true;
