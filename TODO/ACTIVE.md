@@ -130,6 +130,20 @@ item is removed from here and recorded at the top of
       Pi 4 runs SMI. Acceptance: piHPSDR at one receiver at 48 ksps costs
       the driver's thread what `p1probe` does, on the transport the Pi 4
       ships with.
+- [ ] Raspberry Pi 4 `cpu` transport (no SMI overlay, or SMI failed):
+      drain in bursts and sleep on a timer instead of polling. The
+      original driver sleeps on a GPIO 25 interrupt, but its GPIO-mode
+      gateware reads the RX FIFO on the radio's clock and drives GPIO 25
+      from the fill level (`usiq_tlength > 256`). The PIO gateware reads it
+      on the Pi's RX clock (`rd_clk(pi_rx_clk)`) and drives sample-ready
+      from `rx_pi_pio`, whose fill count only updates on that clock, so no
+      edge comes while the Pi is not clocking. The fill rate is known (2 x
+      rate x receivers values per second; drops above 1012): wake every
+      half fill time with an hrtimer, clock until sample-ready stays low,
+      sleep. Estimated duty at one receiver: about 9% of a core at 48 ksps,
+      a third at 192 ksps (not measured). Acceptance: the driver's thread
+      measured against today's at 48, 96 and 192 ksps, with no loss over
+      `rbdrivertest` and 10 minutes of `ft8rx`.
 - [ ] Raspberry Pi 4 TX drops: in the 0.4.0 acceptance test each FT8 TX
       period logged 5 to 30 "TX blocks dropped" and 0 to 1 underruns, at
       about 47.6k samples/s. Not investigated. Find the cause and fix it.
