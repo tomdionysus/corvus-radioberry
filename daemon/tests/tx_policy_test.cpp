@@ -131,6 +131,26 @@ TEST_CASE("the defaults never transmit", "[policy]") {
     CHECK_FALSE(rig.policy.transmitting());
 }
 
+TEST_CASE("a receive-only gateware refuses MOX even with transmit allowed", "[policy]") {
+    LogCapture log;
+    TxPolicyOptions o = allowed(true, 0xff);
+    o.tx_available = false;
+    Rig rig(o);
+    rig.policy.set_tx_drive(0xffu << 24 | kPa);
+    rig.policy.update(kClient, false, 0s);
+    log.take();
+    rig.policy.update(kClient, true, 1s);
+    rig.policy.update(kClient, true, 2s);  // refusal logged once
+    CHECK(log.take() == std::vector<std::string>{
+                            "MOX refused: the gateware has no transmitter (receive-only image)"});
+    CHECK_FALSE(rig.policy.transmitting());
+    CHECK_FALSE(rig.session.transmitting());
+    CHECK(rig.control.transmit() == TransmitState{});
+    for (const Command& c : rig.drain()) {
+        CHECK_FALSE(c.can_transmit());
+    }
+}
+
 TEST_CASE("MOX keys PTT and the TX permission bit only while granted", "[policy]") {
     Rig rig(allowed());
     rig.policy.update(kClient, false, 0s);

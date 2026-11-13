@@ -32,6 +32,12 @@ DeviceOptions with_thread_hook(DeviceOptions options, std::function<void(const c
     return options;
 }
 
+// The transmit options, with whether the gateware has a transmitter.
+TxPolicyOptions with_tx_available(TxPolicyOptions options, Device& device) {
+    options.tx_available = device.info().transmitters != 0;
+    return options;
+}
+
 // Faults that break the transmit stream: the session drops MOX on them.
 // A driver TX underrun is not one: the driver's ring runs empty for moments
 // whenever the gateware fills its own 85 ms FIFO at PIO speed (on PTT, at
@@ -64,7 +70,7 @@ Daemon::Daemon(Device& device, const DaemonOptions& options)
                                    std::string(role) == "rx" ? "rb-rx-device" : "rb-tx-device",
                                    kDevicePriority);
                            })),
-      policy_(service_.control(), session_, options.tx),
+      policy_(service_.control(), session_, with_tx_available(options.tx, device)),
       network_(options.address, options.port),
       server_(
           identity_, service_.control(), service_.tx(), session_, policy_,
@@ -185,7 +191,9 @@ bool Daemon::run(const std::atomic<bool>& stop) {
                      kDevicePriority, kNetworkPriority);
     }
     start_thread("the Protocol 1 network thread", kNetworkPriority, false);
-    if (tx.allow_tx) {
+    if (!tx.tx_available) {
+        spdlog::info("the gateware has no transmitter: receive only, MOX is refused");
+    } else if (tx.allow_tx) {
         spdlog::warn(
             "transmit allowed: drive ceiling {}, PA {}, watchdog {} s; no PA interlock is claimed",
             tx.drive_ceiling, tx.allow_pa ? "allowed" : "not allowed",

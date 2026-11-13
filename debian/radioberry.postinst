@@ -13,14 +13,23 @@ if [ "$1" = configure ]; then
     # The driver loads /usr/lib/firmware/radioberry.rbf.
     ln -sfn "/usr/share/radioberry/gateware/rpi-5/$fpga/radioberry.rbf" \
         /usr/lib/firmware/radioberry.rbf
+    # With the radioberry-i2s overlay (Raspberry Pi 4) it loads the
+    # gateware-v2 receive image instead, built for the 10CL025 only.
+    i2s="/usr/share/radioberry/gateware/rpi4-i2s/$fpga/radioberry-rpi4-i2s.rbf"
+    if [ -f "$i2s" ]; then
+        ln -sfn "$i2s" /usr/lib/firmware/radioberry-rpi4-i2s.rbf
+    elif [ -L /usr/lib/firmware/radioberry-rpi4-i2s.rbf ]; then
+        rm -f /usr/lib/firmware/radioberry-rpi4-i2s.rbf
+    fi
 
     # The firmware reads overlays from /boot/firmware/overlays, a FAT
     # file system dpkg cannot manage files on.
     if [ -d /boot/firmware/overlays ]; then
-        cp /usr/share/radioberry/overlays/radioberry.dtbo \
-            /boot/firmware/overlays/radioberry.dtbo.new
-        mv /boot/firmware/overlays/radioberry.dtbo.new \
-            /boot/firmware/overlays/radioberry.dtbo
+        for o in radioberry radioberry-i2s; do
+            [ -f "/usr/share/radioberry/overlays/$o.dtbo" ] || continue
+            cp "/usr/share/radioberry/overlays/$o.dtbo" "/boot/firmware/overlays/$o.dtbo.new"
+            mv "/boot/firmware/overlays/$o.dtbo.new" "/boot/firmware/overlays/$o.dtbo"
+        done
     else
         echo "radioberry: /boot/firmware/overlays not found; copy" \
             "/usr/share/radioberry/overlays/radioberry.dtbo there." >&2

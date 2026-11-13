@@ -13,6 +13,13 @@ foreach(type IN ITEMS CL016 CL025)
     endif()
 endforeach()
 
+# The gateware-v2 Raspberry Pi 4 receive image, which the driver's I2S
+# transport loads as radioberry-rpi4-i2s.rbf (10CL025 only so far).
+set(_rpi4 ${CMAKE_CURRENT_SOURCE_DIR}/../gateware-v2/images/rpi4-i2s/CL025/radioberry-rpi4-i2s.rbf)
+if(EXISTS ${_rpi4})
+    install(FILES ${_rpi4} DESTINATION ${RADIOBERRY_GATEWARE_DIR}/rpi4-i2s/CL025)
+endif()
+
 # The Debian package turns this off: its install script links the image
 # for the FPGA the user chooses instead.
 option(RADIOBERRY_INSTALL_FIRMWARE "Install the FPGATYPE image as the driver's firmware" ON)
@@ -21,6 +28,9 @@ if(NOT RADIOBERRY_INSTALL_FIRMWARE)
     message(STATUS "Driver firmware not installed (RADIOBERRY_INSTALL_FIRMWARE=OFF)")
 elseif(EXISTS ${_selected})
     install(FILES ${_selected} DESTINATION ${RADIOBERRY_FIRMWARE_DIR})
+    if(FPGATYPE STREQUAL "CL025" AND EXISTS ${_rpi4})
+        install(FILES ${_rpi4} DESTINATION ${RADIOBERRY_FIRMWARE_DIR})
+    endif()
 else()
     message(STATUS "No gateware image for ${FPGATYPE} in gateware/rpi-5 yet; not installed")
 endif()

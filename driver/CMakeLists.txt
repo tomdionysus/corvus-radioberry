@@ -13,6 +13,7 @@ radioberry_add_kernel_module(radioberry
         ${CMAKE_CURRENT_SOURCE_DIR}/kernel/rb_logic.h
         ${CMAKE_CURRENT_SOURCE_DIR}/kernel/rb_pio.h
         ${CMAKE_CURRENT_SOURCE_DIR}/kernel/rb_bitbang.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/kernel/rb_frame.h
         ${CMAKE_CURRENT_SOURCE_DIR}/include/radioberry_ioctl.h)
 
 find_program(DTC_EXECUTABLE dtc)
@@ -25,8 +26,17 @@ if(DTC_EXECUTABLE)
         DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/radioberry.dts
         COMMENT "Building device tree overlay radioberry.dtbo"
         VERBATIM)
-    add_custom_target(radioberry_overlay ALL DEPENDS ${_dtbo})
-    install(FILES ${_dtbo} DESTINATION ${RADIOBERRY_OVERLAY_DIR})
+    # Raspberry Pi 4 only: receive over I2S with the gateware-v2 image.
+    set(_dtbo_i2s ${CMAKE_CURRENT_BINARY_DIR}/radioberry-i2s.dtbo)
+    add_custom_command(
+        OUTPUT ${_dtbo_i2s}
+        COMMAND ${DTC_EXECUTABLE} -@ -q -I dts -O dtb -o ${_dtbo_i2s}
+                ${CMAKE_CURRENT_SOURCE_DIR}/radioberry-i2s.dts
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/radioberry-i2s.dts
+        COMMENT "Building device tree overlay radioberry-i2s.dtbo"
+        VERBATIM)
+    add_custom_target(radioberry_overlay ALL DEPENDS ${_dtbo} ${_dtbo_i2s})
+    install(FILES ${_dtbo} ${_dtbo_i2s} DESTINATION ${RADIOBERRY_OVERLAY_DIR})
 else()
     message(WARNING "dtc not found; the device tree overlay is not built")
 endif()
@@ -60,7 +70,8 @@ endif()
 install(FILES include/radioberry_ioctl.h DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 if(RADIOBERRY_BUILD_TESTS)
-    add_executable(driver_tests tests/logic_test.cpp tests/pio_test.cpp tests/bitbang_test.cpp)
+    add_executable(driver_tests tests/logic_test.cpp tests/pio_test.cpp tests/bitbang_test.cpp
+        tests/frame_test.cpp)
     # The module's own logic is tested against the source tree's header.
     target_include_directories(driver_tests PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/kernel ${CMAKE_CURRENT_SOURCE_DIR}/include)

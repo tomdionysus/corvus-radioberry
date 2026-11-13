@@ -27,6 +27,7 @@ override_dh_install:
 	install -d $(DKMS_SRC)/include
 	install -m 644 driver/kernel/Kbuild driver/kernel/radioberry.c \
 		driver/kernel/rb_logic.h driver/kernel/rb_pio.h driver/kernel/rb_bitbang.h \
+		driver/kernel/rb_frame.h \
 		$(DKMS_SRC)/
 	install -m 644 driver/include/radioberry_ioctl.h $(DKMS_SRC)/include/
 

@@ -124,6 +124,9 @@ Node info_node(const radioberry_info& i) {
         case RADIOBERRY_TRANSPORT_CPU:
             n.set("transport", "cpu");
             break;
+        case RADIOBERRY_TRANSPORT_I2S:
+            n.set("transport", "i2s");
+            break;
         default:
             n.set("transport", "unknown (" + std::to_string(i.transport) + ")");
             break;
