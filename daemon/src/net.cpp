@@ -11,6 +11,7 @@
 #include <poll.h>
 #include <spdlog/spdlog.h>
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <unistd.h>
 
 #include <algorithm>
@@ -198,6 +199,21 @@ void Network::send(const p1::Peer& to, std::span<const std::uint8_t> bytes) {
     }
 }
 
+void Network::send_batch(const p1::Peer& to,
+                         std::span<const std::span<const std::uint8_t>> packets) {
+    if (to.tcp) {
+        for (const auto& p : packets) {
+            send(to, p);
+        }
+        return;
+    }
+    const std::size_t failed = send_datagrams(udp_, to.address, to.port, packets);
+    if (failed != 0) {
+        const std::lock_guard lock(tcp_mutex_);
+        send_failures_ += failed;
+    }
+}
+
 void Network::close(const p1::Peer& peer) {
     const std::lock_guard lock(tcp_mutex_);
     if (peer.tcp && tcp_peer_ == peer) {
@@ -217,6 +233,40 @@ void Network::close_tcp_locked() {
         tcp_peer_ = {};
         record_fill_ = 0;
     }
+}
+
+std::size_t send_datagrams(int fd, std::uint32_t address, std::uint16_t port,
+                           std::span<const std::span<const std::uint8_t>> packets) {
+    constexpr std::size_t kChunk = 64;
+    sockaddr_in a = socket_address(address, port);
+    std::array<iovec, kChunk> iov{};
+    std::array<mmsghdr, kChunk> msgs{};
+    std::size_t failed = 0;
+    std::size_t done = 0;
+    while (done < packets.size()) {
+        const std::size_t n = std::min(kChunk, packets.size() - done);
+        for (std::size_t k = 0; k < n; ++k) {
+            const auto& p = packets[done + k];
+            // sendmmsg() only reads the buffers and the address.
+            iov[k].iov_base = const_cast<std::uint8_t*>(p.data());
+            iov[k].iov_len = p.size();
+            msgs[k] = {};
+            msgs[k].msg_hdr.msg_name = &a;
+            msgs[k].msg_hdr.msg_namelen = sizeof a;
+            msgs[k].msg_hdr.msg_iov = &iov[k];
+            msgs[k].msg_hdr.msg_iovlen = 1;
+        }
+        const int sent = ::sendmmsg(fd, msgs.data(), static_cast<unsigned>(n), MSG_DONTWAIT);
+        if (sent > 0) {
+            done += static_cast<std::size_t>(sent);
+        } else {
+            // The first packet failed (a full buffer, or the peer gone):
+            // it is dropped and counted, as a failed sendto() was.
+            ++failed;
+            ++done;
+        }
+    }
+    return failed;
 }
 
 std::optional<std::array<std::uint8_t, 6>> interface_mac() {

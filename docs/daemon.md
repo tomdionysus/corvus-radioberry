@@ -56,6 +56,11 @@ Stop the service before running anything else that opens
   logged and do not drop MOX. Driver TX underruns are logged at debug
   level only: the driver counts one each time its short ring empties
   between client bursts while the gateware's FIFO still holds samples.
+- TX samples go to the driver only while MOX is granted. Clients send
+  them between overs too, as zeros; the gateware discards samples outside
+  transmit ([gateware/README.md](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/README.md)
+  section 7), and on the Raspberry Pi 4 each would cost a CPU-clocked
+  word.
 - TX buffer: each Protocol 1 stream starts with a 40 ms TX buffer
   latency and the gateware's 12 ms PTT hang time (address 0x17); a
   client's lower latency is raised to 40 ms. Protocol 2 streams use

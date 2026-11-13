@@ -278,10 +278,15 @@ void Server::on_rx(const RxBlock& block) {
             }
         }
     }
-    for (std::size_t i = 0; i < n; ++i) {
-        link_.send(outgoing_[i].port, to,
-                   std::span<const std::uint8_t>(outgoing_[i].bytes.data(), outgoing_[i].size));
+    if (n == 0) {
+        return;
     }
+    batch_.clear();
+    for (std::size_t i = 0; i < n; ++i) {
+        batch_.push_back({outgoing_[i].port, std::span<const std::uint8_t>(
+                                                 outgoing_[i].bytes.data(), outgoing_[i].size)});
+    }
+    link_.send_batch(to, batch_);
 }
 
 void Server::tick() {
@@ -486,11 +491,18 @@ void Server::tx_iq_locked(const TxIq& t) {
         session_.fault("Protocol 2 TX I/Q sequence gap");
     }
     last_tx_iq_ = t.sequence;
-    TxBlock* block = tx_.acquire();
-    if (block == nullptr) {
-        ++counters_.tx_blocks_dropped;
-        session_.fault("TX queue full");
-        return;
+    // The gateware discards samples outside transmit (gateware/README.md
+    // section 7), so only samples sent while MOX is granted go to the
+    // device. The decimator still takes every sample, so its filter holds
+    // the client's signal when transmission starts.
+    TxBlock* block = nullptr;
+    if (policy_.transmitting()) {
+        block = tx_.acquire();
+        if (block == nullptr) {
+            ++counters_.tx_blocks_dropped;
+            session_.fault("TX queue full");
+            return;
+        }
     }
     std::size_t out = 0;
     for (std::size_t k = 0; k < kTxSamplesPerPacket; ++k) {
@@ -498,7 +510,7 @@ void Server::tx_iq_locked(const TxIq& t) {
         const std::complex<float> x(static_cast<float>(get24(in)) / kFullScale24,
                                     static_cast<float>(get24(in + 3)) / kFullScale24);
         std::complex<float> y;
-        if (!tx_decimator_.push(x, y)) {
+        if (!tx_decimator_.push(x, y) || block == nullptr) {
             continue;
         }
         const std::int32_t i = quantise(y.real(), 32768.0f, 32767);
@@ -512,8 +524,10 @@ void Server::tx_iq_locked(const TxIq& t) {
         p[3] = static_cast<std::uint8_t>(second);
         ++out;
     }
-    block->size = out * kTxSampleBytes;
-    tx_.publish();
+    if (block != nullptr) {
+        block->size = out * kTxSampleBytes;
+        tx_.publish();
+    }
 }
 
 void Server::command_locked(std::uint8_t address, std::uint32_t data) {

@@ -6,6 +6,7 @@
 #include <map>
 #include <mutex>
 #include <span>
+#include <vector>
 
 #include "p2/server.hpp"
 #include "session.hpp"
@@ -37,6 +38,8 @@ public:
     void poll(int timeout_ms, const Handler& handler);
 
     void send(unsigned port, const Peer& to, std::span<const std::uint8_t> bytes) override;
+    // One sendmmsg() per run of packets from the same port.
+    void send_batch(const Peer& to, std::span<const Datagram> packets) override;
 
     std::uint64_t send_failures() const;
 
@@ -49,6 +52,8 @@ private:
     };
     std::map<unsigned, Socket> sockets_;  // by offset
     SendBase send_base_;
+    // Used by send_batch(), from the RX delivery thread only.
+    std::vector<std::span<const std::uint8_t>> run_;
     mutable std::mutex mutex_;
     std::uint64_t send_failures_ = 0;
 };

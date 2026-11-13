@@ -14,6 +14,8 @@
 #include <utility>
 #include <vector>
 
+#include "net.hpp"
+
 namespace radioberry::daemon::p2 {
 namespace {
 
@@ -121,6 +123,35 @@ void Network::send(unsigned port, const Peer& to, std::span<const std::uint8_t> 
                                          reinterpret_cast<const sockaddr*>(&a), sizeof a) < 0) {
         const std::lock_guard lock(mutex_);
         ++send_failures_;
+    }
+}
+
+void Network::send_batch(const Peer& to, std::span<const Datagram> packets) {
+    std::size_t failed = 0;
+    std::size_t i = 0;
+    while (i < packets.size()) {
+        const unsigned port = packets[i].port;
+        std::size_t end = i;
+        run_.clear();
+        while (end < packets.size() && packets[end].port == port) {
+            run_.push_back(packets[end].bytes);
+            ++end;
+        }
+        const auto it = sockets_.find(port);
+        if (port == kGeneralPort) {
+            for (const auto& p : run_) {
+                send_base_(to, p);
+            }
+        } else if (it == sockets_.end()) {
+            failed += run_.size();
+        } else {
+            failed += send_datagrams(it->second.fd, to.address, to.port, run_);
+        }
+        i = end;
+    }
+    if (failed != 0) {
+        const std::lock_guard lock(mutex_);
+        send_failures_ += failed;
     }
 }
 

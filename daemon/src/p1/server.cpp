@@ -126,9 +126,14 @@ void Server::on_rx(const RxBlock& block) {
             });
         counters_.packets_out += n;
     }
-    for (std::size_t i = 0; i < n; ++i) {
-        link_.send(to, outgoing_[i]);
+    if (n == 0) {
+        return;
     }
+    batch_.clear();
+    for (std::size_t i = 0; i < n; ++i) {
+        batch_.emplace_back(outgoing_[i]);
+    }
+    link_.send_batch(to, batch_);
 }
 
 void Server::tick() {
@@ -242,6 +247,13 @@ void Server::apply_locked(const HostCommand& c) {
 }
 
 void Server::queue_tx_locked(const HostPacket& packet) {
+    // Clients send TX samples, zero between overs, whether transmitting or
+    // not. The gateware discards samples outside transmit (gateware/README.md
+    // section 7), so only samples sent while MOX is granted go to the
+    // device: the rest would cost the Pi 4 a CPU-clocked word each.
+    if (!policy_.transmitting()) {
+        return;
+    }
     TxBlock* block = tx_.acquire();
     if (block == nullptr) {
         ++counters_.tx_blocks_dropped;

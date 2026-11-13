@@ -30,6 +30,17 @@ class Link {
 public:
     virtual ~Link() = default;
     virtual void send(unsigned port, const Peer& to, std::span<const std::uint8_t> bytes) = 0;
+    struct Datagram {
+        unsigned port;
+        std::span<const std::uint8_t> bytes;
+    };
+    // Several packets to one peer, in order; a socket sends each run from
+    // one port in one call.
+    virtual void send_batch(const Peer& to, std::span<const Datagram> packets) {
+        for (const Datagram& d : packets) {
+            send(d.port, to, d.bytes);
+        }
+    }
 };
 
 struct ServerCounters {
@@ -145,6 +156,7 @@ private:
 
     // Used by on_rx only.
     std::vector<Outgoing> outgoing_;
+    std::vector<Link::Datagram> batch_;
 };
 
 }  // namespace radioberry::daemon::p2

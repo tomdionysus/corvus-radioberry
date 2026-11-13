@@ -36,6 +36,9 @@ public:
     void poll(int timeout_ms, const Handler& handler);
 
     void send(const p1::Peer& to, std::span<const std::uint8_t> bytes) override;
+    // Over UDP, one sendmmsg() per batch.
+    void send_batch(const p1::Peer& to,
+                    std::span<const std::span<const std::uint8_t>> packets) override;
     void close(const p1::Peer& peer) override;
 
     std::uint64_t send_failures() const;
@@ -57,6 +60,12 @@ private:
     std::size_t record_fill_ = 0;
     std::uint64_t send_failures_ = 0;
 };
+
+// Sends `packets` in order from the UDP socket `fd` to `address`:`port`
+// (host byte order) without blocking, with as few sendmmsg() calls as the
+// socket allows. Returns how many were not sent.
+std::size_t send_datagrams(int fd, std::uint32_t address, std::uint16_t port,
+                           std::span<const std::span<const std::uint8_t>> packets);
 
 // The hardware address of the first running non-loopback interface, or
 // nothing.

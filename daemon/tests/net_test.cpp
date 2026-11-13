@@ -122,6 +122,88 @@ TEST_CASE("the Protocol 1 sockets count the sends that fail", "[net]") {
     CHECK(n.send_failures() == 2);
 }
 
+namespace {
+
+// Every datagram waiting on `fd`, in order.
+std::vector<std::vector<std::uint8_t>> drain(int fd) {
+    std::vector<std::vector<std::uint8_t>> got;
+    std::vector<std::uint8_t> b(2048);
+    for (;;) {
+        const ssize_t n = ::recv(fd, b.data(), b.size(), MSG_DONTWAIT);
+        if (n < 0) {
+            return got;
+        }
+        got.emplace_back(b.begin(), b.begin() + n);
+    }
+}
+
+}  // namespace
+
+TEST_CASE("a batch goes out in order, with the failures counted", "[net]") {
+    Network n(kLoopback, 0);
+    const Held client(SOCK_DGRAM);
+    const int room = 1 << 20;
+    ::setsockopt(client.fd, SOL_SOCKET, SO_RCVBUF, &room, sizeof room);
+    const Peer to{kLoopback, client.port, false};
+    // More than one sendmmsg() chunk, in different sizes; one too large.
+    std::vector<std::vector<std::uint8_t>> packets;
+    for (std::uint8_t k = 0; k < 150; ++k) {
+        packets.emplace_back(k == 70 ? 70000 : 100u + k, k);
+    }
+    std::vector<std::span<const std::uint8_t>> spans(packets.begin(), packets.end());
+    n.send_batch(to, spans);
+    CHECK(n.send_failures() == 1);
+    const auto got = drain(client.fd);
+    REQUIRE(got.size() == 149);
+    for (std::size_t i = 0; i < got.size(); ++i) {
+        const std::uint8_t k = static_cast<std::uint8_t>(i < 70 ? i : i + 1);
+        CHECK(got[i].size() == 100u + k);
+        CHECK(got[i][0] == k);
+    }
+    // Over TCP with no connection, each packet fails.
+    n.send_batch(Peer{kLoopback, client.port, true}, std::span(spans).first(3));
+    CHECK(n.send_failures() == 4);
+    CHECK(send_datagrams(-1, kLoopback, client.port, std::span(spans).first(5)) == 5);
+}
+
+TEST_CASE("a Protocol 2 batch goes out from each packet's port", "[net]") {
+    std::size_t base_sends = 0;
+    p2::Network n(kLoopback, 0, 2,
+                  [&](const Peer&, std::span<const std::uint8_t>) { ++base_sends; });
+    const Held client(SOCK_DGRAM);
+    const Peer to{kLoopback, client.port, false};
+    const std::vector<std::uint8_t> a(60, 1);
+    const std::vector<std::uint8_t> b(60, 2);
+    const std::vector<p2::Link::Datagram> batch = {
+        {p2::kMicLinePort, a},  {p2::kDdcPort0, a},    {p2::kDdcPort0, b},
+        {p2::kDdcPort0 + 1, b}, {p2::kGeneralPort, a}, {p2::kDdcPort0 + 5, a},
+        {p2::kDdcPort0 + 1, a},
+    };
+    n.send_batch(to, batch);
+    CHECK(base_sends == 1);
+    CHECK(n.send_failures() == 1);  // no such DDC
+    std::vector<std::uint16_t> from;
+    std::vector<std::uint8_t> first;
+    std::vector<std::uint8_t> buf(2048);
+    for (;;) {
+        sockaddr_in src{};
+        socklen_t len = sizeof src;
+        const ssize_t got = ::recvfrom(client.fd, buf.data(), buf.size(), MSG_DONTWAIT,
+                                       reinterpret_cast<sockaddr*>(&src), &len);
+        if (got < 0) {
+            break;
+        }
+        from.push_back(ntohs(src.sin_port));
+        first.push_back(buf[0]);
+    }
+    const std::vector<std::uint16_t> ports = {
+        n.port(p2::kMicLinePort),  n.port(p2::kDdcPort0),     n.port(p2::kDdcPort0),
+        n.port(p2::kDdcPort0 + 1), n.port(p2::kDdcPort0 + 1),
+    };
+    CHECK(from == ports);
+    CHECK(first == std::vector<std::uint8_t>{1, 1, 2, 2, 1});
+}
+
 TEST_CASE("the Protocol 1 TCP connection survives a peer reset", "[net]") {
     Network n(kLoopback, 0);
     const auto ignore = [](std::span<const std::uint8_t>, const Peer&) {};

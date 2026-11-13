@@ -409,7 +409,9 @@ TEST_CASE("Mic/Line and status packets follow the radio's clock", "[p2server]") 
 
 TEST_CASE("TX I/Q is decimated to 48 ksps for the gateware", "[p2server]") {
     Rig rig(transmit());
-    rig.start({{0, 48}});
+    HighPriorityBytes h;
+    h.mox = true;
+    rig.start({{0, 48}}, h);
     for (std::uint32_t seq = 0; seq < 4; ++seq) {
         rig.packet(kTxIqPort, tx_iq_packet(seq, 0x123400, -0x123400));
         TxBlock* b = rig.tx.front();
@@ -430,6 +432,34 @@ TEST_CASE("TX I/Q is decimated to 48 ksps for the gateware", "[p2server]") {
     const std::uint8_t* last = rig.tx.front()->bytes.data() + 59 * kTxSampleBytes;
     CHECK(static_cast<std::int16_t>(last[0] << 8 | last[1]) < 0);  // Q first
     rig.tx.pop();
+    CHECK(rig.server.counters().tx_iq_sequence_gaps == 0);
+}
+
+TEST_CASE("TX I/Q outside transmit is not sent to the device", "[p2server]") {
+    // The gateware would discard it. The decimator still runs, so the first
+    // block after MOX is the settled signal.
+    Rig rig(transmit());
+    HighPriorityBytes h;
+    rig.start({{0, 48}}, h);
+    for (std::uint32_t seq = 0; seq < 6; ++seq) {
+        rig.packet(kTxIqPort, tx_iq_packet(seq, 0x123400, -0x123400));
+    }
+    CHECK(rig.tx.empty());
+    CHECK(rig.server.counters().tx_blocks_dropped == 0);
+    h.mox = true;
+    rig.high_priority(h);
+    REQUIRE(rig.policy.transmitting());
+    rig.packet(kTxIqPort, tx_iq_packet(6, 0x123400, -0x123400));
+    TxBlock* b = rig.tx.front();
+    REQUIRE(b != nullptr);
+    CHECK(b->size == 60 * kTxSampleBytes);
+    const auto i = static_cast<std::int16_t>(b->bytes[0] << 8 | b->bytes[1]);
+    CHECK(std::abs(i - 0x1234) <= 1);
+    rig.tx.pop();
+    h.mox = false;
+    rig.high_priority(h);
+    rig.packet(kTxIqPort, tx_iq_packet(7, 0x123400, -0x123400));
+    CHECK(rig.tx.empty());
     CHECK(rig.server.counters().tx_iq_sequence_gaps == 0);
 }
 

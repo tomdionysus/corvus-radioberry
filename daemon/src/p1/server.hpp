@@ -27,6 +27,13 @@ class Link {
 public:
     virtual ~Link() = default;
     virtual void send(const Peer& to, std::span<const std::uint8_t> bytes) = 0;
+    // Several packets to one peer, in order; a socket sends them in one call.
+    virtual void send_batch(const Peer& to,
+                            std::span<const std::span<const std::uint8_t>> packets) {
+        for (const auto& p : packets) {
+            send(to, p);
+        }
+    }
     // Ends a TCP connection (after a discovery reply, a stop or a lost
     // session); nothing for UDP.
     virtual void close(const Peer& peer) = 0;
@@ -126,6 +133,7 @@ private:
 
     // Used by on_rx only.
     std::vector<std::array<std::uint8_t, kPacketBytes>> outgoing_;
+    std::vector<std::span<const std::uint8_t>> batch_;
 };
 
 }  // namespace radioberry::daemon::p1

@@ -281,20 +281,55 @@ TEST_CASE("a command with C0 bit 7 is echoed in the next response", "[server]") 
     CHECK(p[8 + 512 + 3] == 0x00);  // then status address 0 resumes
 }
 
-TEST_CASE("the client's TX samples go to the TX ring while streaming", "[server]") {
-    Rig rig;
-    rig.packet(host_packet(0, {}, {}, 0x1234, 0x5678), kA);
+namespace {
+
+TxPolicyOptions transmit_allowed() {
+    TxPolicyOptions o;
+    o.allow_tx = true;
+    o.allow_pa = true;
+    o.drive_ceiling = 0x40;
+    return o;
+}
+
+}  // namespace
+
+TEST_CASE("the client's TX samples go to the TX ring while transmitting", "[server]") {
+    Rig rig(transmit_allowed());
+    rig.packet(host_packet(0, {}, {0x01, 0}, 0x1234, 0x5678), kA);
     CHECK(rig.tx.empty());  // not streaming
     rig.packet(start_packet(1), kA);
-    rig.packet(host_packet(1, {}, {}, 0x1234, 0x5678), kA);
+    rig.packet(host_packet(1, {}, {0x01, 0}, 0x1234, 0x5678), kA);
     REQUIRE(rig.tx.front() != nullptr);
     CHECK(rig.tx.front()->size == 504);
     CHECK(rig.tx.front()->bytes[0] == 0x12);
     CHECK(rig.tx.front()->bytes[503] == 0x78);
-    rig.packet(host_packet(2, {}, {}), kA);
-    rig.packet(host_packet(3, {}, {}), kA);  // the ring holds two
+    rig.packet(host_packet(2, {}, {0x01, 0}), kA);
+    rig.packet(host_packet(3, {}, {0x01, 0}), kA);  // the ring holds two
     CHECK(rig.server.counters().tx_blocks_dropped == 1);
     CHECK(rig.session.faults() == 1);
+}
+
+TEST_CASE("TX samples outside transmit are not sent to the device", "[server]") {
+    // Without MOX, and with MOX refused, the gateware would discard them.
+    Rig receive_only;
+    receive_only.packet(start_packet(1), kA);
+    receive_only.packet(host_packet(0, {}, {}, 0x1234, 0x5678), kA);
+    receive_only.packet(host_packet(1, {}, {0x01, 0}, 0x1234, 0x5678), kA);
+    CHECK(receive_only.tx.empty());
+
+    Rig rig(transmit_allowed());
+    rig.packet(start_packet(1), kA);
+    for (std::uint32_t seq = 0; seq < 4; ++seq) {
+        rig.packet(host_packet(seq, {}, {}, 0x1234, 0x5678), kA);
+    }
+    CHECK(rig.tx.empty());
+    CHECK(rig.server.counters().tx_blocks_dropped == 0);
+    // MOX: this packet's samples go, the next ones after release do not.
+    rig.packet(host_packet(4, {}, {0x01, 0}, 0x1234, 0x5678), kA);
+    REQUIRE(rig.tx.front() != nullptr);
+    rig.tx.pop();
+    rig.packet(host_packet(5, {}, {0x00, 0}, 0x1234, 0x5678), kA);
+    CHECK(rig.tx.empty());
 }
 
 TEST_CASE("host sequence gaps and junk are counted", "[server]") {
@@ -305,9 +340,8 @@ TEST_CASE("host sequence gaps and junk are counted", "[server]") {
     rig.packet(host_packet(9, {}, {}), kA);
     rig.packet(host_packet(0, {}, {}), kA);  // a restart is no gap
     CHECK(rig.server.counters().host_sequence_gaps == 1);
-    // The gap and two TX-queue-full (the ring holds two): counted, and with
-    // no MOX nothing is latched.
-    CHECK(rig.session.faults() == 3);
+    // The gap is counted, and with no MOX nothing is latched.
+    CHECK(rig.session.faults() == 1);
     CHECK_FALSE(rig.session.latched());
     const std::vector<std::uint8_t> junk = {1, 2, 3, 4};
     rig.packet(junk, kA);
@@ -329,21 +363,9 @@ TEST_CASE("a client that lost the radio to a timeout stops being served", "[serv
     rig.server.tick();  // nothing more to do
     CHECK_FALSE(rig.server.running());
     // Its late packets no longer feed the TX ring.
-    rig.packet(host_packet(1, {}, {}), kA, 11s);
+    rig.packet(host_packet(1, {}, {0x01, 0}), kA, 11s);
     CHECK(rig.tx.empty());
 }
-
-namespace {
-
-TxPolicyOptions transmit_allowed() {
-    TxPolicyOptions o;
-    o.allow_tx = true;
-    o.allow_pa = true;
-    o.drive_ceiling = 0x40;
-    return o;
-}
-
-}  // namespace
 
 TEST_CASE("the owner's MOX keys the transmitter through the policy", "[server]") {
     Rig rig(transmit_allowed());
@@ -399,19 +421,20 @@ TEST_CASE("a host sequence gap while transmitting drops MOX until released", "[s
     rig.packet(start_packet(1), kA);
     rig.packet(host_packet(0, {0x02, 0}, {0x01, 0}), kA);
     CHECK(rig.policy.transmitting());
+    REQUIRE(rig.tx.front() != nullptr);
     rig.tx.pop();
     rig.packet(host_packet(5, {0x02, 0}, {0x01, 0}), kA);  // packets 1 to 4 lost
     CHECK(rig.session.latched());
     CHECK_FALSE(rig.policy.transmitting());
     CHECK(rig.control.transmit() == TransmitState{});
-    rig.tx.pop();
+    CHECK(rig.tx.empty());  // the gap dropped MOX before its samples
     rig.packet(host_packet(6, {0x02, 0}, {0x01, 0}), kA);
     CHECK_FALSE(rig.policy.transmitting());
-    rig.tx.pop();
+    CHECK(rig.tx.empty());
     rig.packet(host_packet(7, {0x02, 0}, {0x00, 0}), kA);  // released
-    rig.tx.pop();
     rig.packet(host_packet(8, {0x02, 0}, {0x01, 0}), kA);
     CHECK(rig.policy.transmitting());
+    CHECK(rig.tx.front() != nullptr);
 }
 
 TEST_CASE("stopping while transmitting leaves the gateware safe", "[server]") {
@@ -458,10 +481,10 @@ TEST_CASE("frequency commands are corrected for the radio's error", "[server]") 
 }
 
 TEST_CASE("the standard convention swaps TX I and Q", "[server]") {
-    Rig rig;
+    Rig rig(transmit_allowed());
     rig.server.set_iq_convention(IqConvention::Standard);
     rig.packet(start_packet(1), kA);
-    rig.packet(host_packet(0, {}, {}, 0x1234, 0x5678), kA);
+    rig.packet(host_packet(0, {}, {0x01, 0}, 0x1234, 0x5678), kA);
     REQUIRE(rig.tx.front() != nullptr);
     CHECK(rig.tx.front()->bytes[0] == 0x56);
     CHECK(rig.tx.front()->bytes[1] == 0x78);
@@ -469,6 +492,7 @@ TEST_CASE("the standard convention swaps TX I and Q", "[server]") {
     CHECK(rig.tx.front()->bytes[3] == 0x34);
     rig.server.set_iq_convention(IqConvention::Hl2);
     rig.tx.pop();
-    rig.packet(host_packet(1, {}, {}, 0x1234, 0x5678), kA);
+    rig.packet(host_packet(1, {}, {0x01, 0}, 0x1234, 0x5678), kA);
+    REQUIRE(rig.tx.front() != nullptr);
     CHECK(rig.tx.front()->bytes[0] == 0x12);
 }
