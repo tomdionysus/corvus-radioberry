@@ -170,7 +170,8 @@ MODULE_PARM_DESC(bb_settle_reads, "Pi 4: extra pin reads after each bus clock pu
 /* 18-bit reads (RWIDTH 2), setup 2, hold 2, pace 16, strobe 10 cycles. */
 #define RB_SMI_DSR0_VALUE (2u << 30 | 2u << 24 | 2u << 16 | 16u << 8 | 10u)
 /* DMA requests on, thresholds as bcm2835_smi sets them. */
-#define RB_SMI_DC_VALUE (BIT(28) | 32u << 18 | 32u << 12 | 1u << 6 | 63u)
+#define RB_SMI_DC_DMAEN BIT(28)
+#define RB_SMI_DC_VALUE (RB_SMI_DC_DMAEN | 32u << 18 | 32u << 12 | 1u << 6 | 63u)
 /*
  * A transfer's length: the strobes stop at its end, and START written while
  * one runs is ignored, so the done interrupt starts the next; 2^30 strobes
@@ -320,6 +321,8 @@ struct rb_dev {
 	u64 smi_seen_periods; /* worker only */
 	unsigned long smi_last_progress; /* worker only */
 	u64 smi_restarts, smi_stalls;
+	u64 smi_hold_leaks; /* holds after which strobes went on */
+	bool smi_stall_reported; /* worker only */
 
 	spinlock_t rx_lock; /* parser, rx ring, rx statistics */
 	struct rb_rx_parser parser;
@@ -1364,12 +1367,17 @@ static void rb_smi_dma_done(void *param)
 }
 
 /*
- * Stops the strobes, so the RX clock stands still; false if not running.
- * Then parses every word read before the stop, so that none is parsed
- * after a later reset of the parsers (rb_smi_rx_release(), rb_rx_gate()).
+ * Stops the DMA and the strobes, so the RX clock stands still; false if
+ * not running. DMA requests go off first: with the SMI disabled they no
+ * longer pace the DMA, which then reads the data register as fast as it
+ * can (measured: about 2 200 words of nothing in 100 us). Words strobed
+ * in between stay in the SMI FIFO for rb_smi_rx_release(). Then parses
+ * every word moved before the stop, so that none is parsed after a later
+ * reset of the parsers (rb_smi_rx_release(), rb_rx_gate()).
  */
 static bool rb_smi_rx_hold(struct rb_dev *rb)
 {
+	unsigned int before, moved;
 	unsigned long flags;
 	bool wake;
 
@@ -1377,13 +1385,21 @@ static bool rb_smi_rx_hold(struct rb_dev *rb)
 		return false;
 	spin_lock_irqsave(&rb->smi_lock, flags);
 	rb->smi_strobing = false;
+	writel(RB_SMI_DC_VALUE & ~RB_SMI_DC_DMAEN, rb->smi_regs + RB_SMI_DC);
 	writel(0, rb->smi_regs + RB_SMI_CS);
 	spin_unlock_irqrestore(&rb->smi_lock, flags);
-	/*
-	 * A strobe in progress lasts at most 30 cycles of 8 ns; the DMA then
-	 * empties the SMI FIFO at about 9 million words a second.
-	 */
+	/* A strobe and a DMA beat in progress end within a microsecond. */
 	udelay(10);
+	before = rb_smi_written(rb);
+	udelay(100);
+	moved = (rb_smi_written(rb) + RB_SMI_RING_WORDS - before) % RB_SMI_RING_WORDS;
+	if (moved) {
+		/* Something still moves: the stream is not standing still. */
+		rb->smi_hold_leaks++;
+		dev_warn_ratelimited(rb->dev,
+				     "SMI DMA moved %u words in the 100 us after it was stopped (CS 0x%08x)\n",
+				     moved, readl(rb->smi_regs + RB_SMI_CS));
+	}
 	spin_lock_bh(&rb->smi_parse_lock);
 	wake = rb_smi_parse_to_locked(rb, rb_smi_written(rb));
 	spin_unlock_bh(&rb->smi_parse_lock);
@@ -1408,6 +1424,7 @@ static void rb_smi_rx_release(struct rb_dev *rb)
 	spin_unlock_bh(&rb->smi_parse_lock);
 	spin_lock_irqsave(&rb->smi_lock, flags);
 	rb->smi_strobing = true;
+	writel(RB_SMI_DC_VALUE, rb->smi_regs + RB_SMI_DC);
 	rb_smi_start_locked(rb);
 	spin_unlock_irqrestore(&rb->smi_lock, flags);
 	rb->smi_last_progress = jiffies;
@@ -1457,6 +1474,33 @@ static void rb_smi_watchdog(struct rb_dev *rb)
 		dev_warn_ratelimited(rb->dev, "SMI stream stalled (CS 0x%08x); restarted\n", cs);
 }
 
+/*
+ * When the RX stall check fires, says whether the SMI was still strobing
+ * (DMA periods arriving: the gateware stopped offering values, as in its
+ * RX lock-up) or had stopped. Worker only.
+ */
+static void rb_smi_report_stall(struct rb_dev *rb)
+{
+	bool dma_moving;
+
+	if (!rb->rx_stalled) {
+		rb->smi_stall_reported = false;
+		return;
+	}
+	if (rb->smi_stall_reported)
+		return;
+	rb->smi_stall_reported = true;
+	dma_moving = time_before(jiffies, rb->smi_last_progress + msecs_to_jiffies(50));
+	spin_lock_bh(&rb->smi_parse_lock);
+	dev_warn(rb->dev,
+		 "SMI at the RX stall: CS 0x%08x, strobing %d, DMA periods %llu and %s, %llu values and %llu idle words parsed, %llu transfer restarts, %llu stalls restarted, %llu leaky holds\n",
+		 readl(rb->smi_regs + RB_SMI_CS), READ_ONCE(rb->smi_strobing),
+		 READ_ONCE(rb->smi_periods), dma_moving ? "arriving" : "stopped",
+		 rb->smi_parser.values, rb->smi_parser.idle, rb->smi_restarts, rb->smi_stalls,
+		 rb->smi_hold_leaks);
+	spin_unlock_bh(&rb->smi_parse_lock);
+}
+
 /* With RX by SMI the thread has only TX to clock: it sleeps without it. */
 static bool rb_smi_tx_wake(struct rb_dev *rb)
 {
@@ -1482,6 +1526,7 @@ static int rb_smi_worker(void *arg)
 		mutex_unlock(&rb->bb_lock);
 		rb_check_stall(rb);
 		rb_smi_watchdog(rb);
+		rb_smi_report_stall(rb);
 		if (tx_busy)
 			cond_resched();
 		else
@@ -1498,6 +1543,7 @@ static void rb_smi_down(struct rb_dev *rb)
 	if (rb->smi_regs) {
 		spin_lock_irqsave(&rb->smi_lock, flags);
 		rb->smi_strobing = false;
+		writel(0, rb->smi_regs + RB_SMI_DC);
 		writel(0, rb->smi_regs + RB_SMI_CS);
 		spin_unlock_irqrestore(&rb->smi_lock, flags);
 	}
@@ -1687,11 +1733,14 @@ static int rb_smi_up(struct rb_dev *rb)
 	rb->smi_last_progress = jiffies;
 	rb->smi_restarts = 0;
 	rb->smi_stalls = 0;
+	rb->smi_hold_leaks = 0;
+	rb->smi_stall_reported = false;
 	rb_smi_init(&rb->smi_parser);
 
 	writel(0, rb->smi_regs + RB_SMI_A);
 	writel(RB_SMI_DSR0_VALUE, rb->smi_regs + RB_SMI_DSR0);
-	writel(RB_SMI_DC_VALUE, rb->smi_regs + RB_SMI_DC);
+	/* DMA requests stay off until the strobes start (rb_smi_rx_hold()). */
+	writel(RB_SMI_DC_VALUE & ~RB_SMI_DC_DMAEN, rb->smi_regs + RB_SMI_DC);
 	writel(RB_SMI_TRANSFER_WORDS, rb->smi_regs + RB_SMI_L);
 	writel(RB_SMI_CS_ENABLE | RB_SMI_CS_CLEAR, rb->smi_regs + RB_SMI_CS);
 	rb->smi_cookie = dmaengine_submit(desc);
@@ -1707,6 +1756,7 @@ static int rb_smi_up(struct rb_dev *rb)
 	if (!READ_ONCE(rb->rx_paused)) {
 		spin_lock_irqsave(&rb->smi_lock, flags);
 		rb->smi_strobing = true;
+		writel(RB_SMI_DC_VALUE, rb->smi_regs + RB_SMI_DC);
 		rb_smi_start_locked(rb);
 		spin_unlock_irqrestore(&rb->smi_lock, flags);
 	}

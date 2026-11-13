@@ -112,10 +112,13 @@ same RX parser and drain the same TX ring.
   boundary. The SMI's done interrupt starts the next transfer at once. A
   check in the thread restarts a stream that completed no period for
   20 ms and logs it.
-- RX clock hold and pause: the SMI is disabled, so SOE_N stands still;
-  the words read before are parsed at once, and on release the value in
-  progress is dropped (a disabled strobe can cut one short), which the
-  parser's settling counts as discarded.
+- RX clock hold and pause: DMA requests go off, then the SMI is
+  disabled, so SOE_N stands still. In the other order the DMA, no longer
+  paced by the SMI, reads its data register as fast as it can and fills
+  the ring with words that were never strobed (measured: about 2 200 in
+  100 us). The words moved before the stop are parsed at once, and on
+  release the value in progress is dropped (a disabled strobe can cut one
+  short), which the parser's settling counts as discarded.
 - TX stays CPU-clocked by the thread, which sleeps while there are no TX
   words.
 - Measured in [CPU cost of receive](finding-rpi4-cpu.md#the-fix) and

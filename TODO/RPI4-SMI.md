@@ -130,7 +130,12 @@ matrix on both boards, the release gate on each.
   fall on a period boundary), and RX hold and pause parse every word
   read before the stop and drop the value in progress on release (pause
   and resume otherwise gave one resync in 3 of 20 client sessions; none
-  in 40 after).
+  in 40 after). And DMA requests must go off before the SMI is disabled:
+  in the other order the DMA free-runs on the data register (about 2 200
+  words in 100 us after every hold), which the 11-kernel matrix caught as
+  one RX stall on 6.18.29 in the pause test and a loop of that test as
+  794 619 words arriving while paused (1 run in 50); after the change, 0
+  in 50 and no movement after any stop.
 - `RADIOBERRY_TRANSPORT_SMI` (3) in the ABI header, an added value only;
   `rbctl` prints `smi`; `rbprobe` advises the overlay on a Pi 4 running
   `cpu` and warns when the overlay is there but SMI did not start.
