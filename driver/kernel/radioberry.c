@@ -1372,24 +1372,110 @@ static int rb_i2s_identify(struct rb_dev *rb, u8 status)
 	return 0;
 }
 
+/*
+ * The PCM block is a bit-clock slave: its FIFO clears (and its channel
+ * order) act on bit clock edges. So every FIFO clear and every start of
+ * transmission happens with the image's link enabled. A clear made with
+ * the clock stopped is lost, and a word left in the TX FIFO shifts every
+ * later frame by one word (measured on the Pi 4: every frame then failed
+ * the image's check).
+ */
+#define RB_PCM_CLR_US 100 /* many bit clocks at the slowest divider */
+
+/*
+ * Stops both DMA streams and empties the PCM FIFOs while the bit clock
+ * still runs. The block stays enabled and idle; rb_i2s_link_stop() turns it
+ * off once the link has stopped.
+ */
 static void rb_i2s_stream_stop(struct rb_dev *rb)
 {
+	if (!rb->pcm || !rb->pcm_streaming)
+		return;
+	writel(RB_PCM_CS_EN, rb->pcm + RB_PCM_CS);
+	dmaengine_terminate_sync(rb->pcm_rx);
+	dmaengine_terminate_sync(rb->pcm_tx);
+	writel(RB_PCM_CS_EN | RB_PCM_CS_RXCLR | RB_PCM_CS_TXCLR, rb->pcm + RB_PCM_CS);
+	usleep_range(RB_PCM_CLR_US, 2 * RB_PCM_CLR_US);
+	rb->pcm_streaming = false;
+}
+
+/*
+ * Stops the streams, then the image's link (the bit clock), then the PCM
+ * block. `div` is written with the link disabled, for its next start.
+ */
+static int rb_i2s_link_stop(struct rb_dev *rb, unsigned int div)
+{
+	int ret;
+
+	rb_i2s_stream_stop(rb);
+	ret = rb_breg_write(rb, RB_BREG_I2S, (u32)div << 8);
 	if (rb->pcm)
 		writel(0, rb->pcm + RB_PCM_CS);
-	if (rb->pcm_rx && rb->pcm_streaming)
-		dmaengine_terminate_sync(rb->pcm_rx);
-	if (rb->pcm_tx && rb->pcm_streaming)
-		dmaengine_terminate_sync(rb->pcm_tx);
-	rb->pcm_streaming = false;
+	return ret;
+}
+
+/*
+ * Keeps the TX buffer filled RB_I2S_TX_LEAD periods ahead of the period the
+ * TX DMA is reading, each period from the ring by the transmit schedule.
+ * True if samples were taken from the ring.
+ */
+static bool rb_i2s_tx_fill_from(struct rb_dev *rb, unsigned int period, unsigned int reading)
+{
+	unsigned int frames = period / 2, ahead, slots, take, got;
+	unsigned long flags;
+	bool took = false;
+	u32 *dst;
+
+	ahead = (rb->pcm_tfill + RB_I2S_PERIODS - reading) % RB_I2S_PERIODS;
+	if (ahead == 0 || ahead > RB_I2S_TX_LEAD + 1) {
+		/* The DMA has reached periods not filled: they went as they were. */
+		rb->pcm_tx_late++;
+		rb->pcm_tfill = (reading + 1) % RB_I2S_PERIODS;
+	}
+	while ((rb->pcm_tfill + RB_I2S_PERIODS - reading) % RB_I2S_PERIODS <= RB_I2S_TX_LEAD) {
+		/* The slots this period has: what the schedule will want. */
+		slots = (rb->pcm_sched.acc + frames * rb->i2s_div) / RB_I2S_TX_DIV;
+		spin_lock_irqsave(&rb->tx_lock, flags);
+		take = min_t(u32, slots, rb_ring_used(&rb->tx_ring) / 4);
+		got = rb_ring_get(&rb->tx_ring, (u8 *)rb->pcm_values, take * 4) / 4;
+		rb->stats.tx_words += got;
+		if (got < slots && rb->ptt)
+			rb->stats.tx_underruns++;
+		spin_unlock_irqrestore(&rb->tx_lock, flags);
+		if (got)
+			took = true;
+		/* Built in cached memory, then one copy into the uncached buffer. */
+		rb_i2s_tx_frames(&rb->pcm_sched, rb->i2s_div, rb->pcm_copy, frames, rb->pcm_values,
+				 got, &slots);
+		dst = rb->pcm_tbuf + (size_t)rb->pcm_tfill * period;
+		memcpy(dst, rb->pcm_copy, (size_t)period * 4);
+		rb->pcm_tfill = (rb->pcm_tfill + 1) % RB_I2S_PERIODS;
+	}
+	return took;
+}
+
+/* As rb_i2s_tx_fill_from(), from the period the TX DMA is reading now. */
+static bool rb_i2s_tx_fill(struct rb_dev *rb, unsigned int period, size_t bytes)
+{
+	struct dma_tx_state state;
+	unsigned int reading;
+
+	dmaengine_tx_status(rb->pcm_tx, rb->pcm_tx_cookie, &state);
+	reading = (unsigned int)(((bytes - min_t(size_t, state.residue, bytes)) % bytes) /
+				 ((size_t)period * 4));
+	return rb_i2s_tx_fill_from(rb, period, reading);
 }
 
 static void rb_i2s_dma_done(void *param);
 
 /*
- * Starts RX and TX DMA with periods sized for the divider. TX starts with
- * idle frames (all zero) and its schedule from the start; the image starts
- * its sequence check again whenever the link is disabled, which every call
- * here follows.
+ * Starts the link at the divider and RX and TX DMA with periods sized for
+ * it, from stopped (rb_i2s_link_stop()): the PCM block is set up idle, the
+ * image's link started, the FIFOs cleared with the bit clock running, the
+ * TX FIFO primed by DMA, then both directions switched on. TX starts with
+ * an idle period and the lead periods filled from the ring, its schedule
+ * from the start; the image starts its sequence check again whenever the
+ * link is disabled, which every call here follows.
  */
 static int rb_i2s_stream_start(struct rb_dev *rb, unsigned int div)
 {
@@ -1417,6 +1503,9 @@ static int rb_i2s_stream_start(struct rb_dev *rb, unsigned int div)
 	rb->pcm_tfill = 1;
 	memset(&rb->pcm_sched, 0, sizeof(rb->pcm_sched));
 	memset(rb->pcm_tbuf, 0, bytes);
+	/* Period 0 goes idle; the lead periods after it are filled now. */
+	if (rb_i2s_tx_fill_from(rb, rb->pcm_period, 0))
+		wake_up_interruptible(&rb->tx_wait);
 	ret = dmaengine_slave_config(rb->pcm_rx, &rcfg);
 	if (!ret)
 		ret = dmaengine_slave_config(rb->pcm_tx, &tcfg);
@@ -1442,8 +1531,15 @@ static int rb_i2s_stream_start(struct rb_dev *rb, unsigned int div)
 	writel(ch, rb->pcm + RB_PCM_RXC);
 	writel(ch, rb->pcm + RB_PCM_TXC);
 	writel(RB_PCM_CS_EN, rb->pcm + RB_PCM_CS);
+	ret = rb_breg_write(rb, RB_BREG_I2S, rb_i2s_link_reg(div));
+	if (ret) {
+		writel(0, rb->pcm + RB_PCM_CS);
+		dmaengine_desc_free(rdesc);
+		dmaengine_desc_free(tdesc);
+		return ret;
+	}
 	writel(RB_PCM_CS_EN | RB_PCM_CS_RXCLR | RB_PCM_CS_TXCLR, rb->pcm + RB_PCM_CS);
-	usleep_range(1000, 2000);
+	usleep_range(RB_PCM_CLR_US, 2 * RB_PCM_CLR_US);
 	writel(0x10 << 24 | 0x30 << 16 | 0x30 << 8 | 0x20, rb->pcm + RB_PCM_DREQ);
 	writel(RB_PCM_CS_EN | RB_PCM_CS_DMAEN | RB_PCM_CS_RXERR | RB_PCM_CS_TXERR,
 	       rb->pcm + RB_PCM_CS);
@@ -1471,64 +1567,16 @@ static int rb_i2s_set_div(struct rb_dev *rb, unsigned int div, bool force)
 
 	if (rb->pcm_streaming && div == rb->i2s_div && !force)
 		return 0;
-	ret = rb_breg_write(rb, RB_BREG_I2S, (u32)div << 8);
+	ret = rb_i2s_link_stop(rb, div);
 	if (ret)
 		return ret;
-	rb_i2s_stream_stop(rb);
+	rb->i2s_div = div; /* the TX schedule's divider, from the first fill */
 	ret = rb_i2s_stream_start(rb, div);
-	if (ret)
-		return ret;
-	ret = rb_breg_write(rb, RB_BREG_I2S, rb_i2s_link_reg(div));
 	if (ret)
 		return ret;
 	rb_trace(rb, "I2S bit clock %u Hz, %u words a DMA period\n", RB_I2S_FAST_HZ / div,
 		 rb->pcm_period);
-	rb->i2s_div = div;
 	return 0;
-}
-
-/*
- * Keeps the TX buffer filled RB_I2S_TX_LEAD periods ahead of the period the
- * TX DMA is reading, each period from the ring by the transmit schedule.
- * True if samples were taken from the ring.
- */
-static bool rb_i2s_tx_fill(struct rb_dev *rb, unsigned int period, size_t bytes)
-{
-	unsigned int frames = period / 2, reading, ahead, slots, take, got;
-	struct dma_tx_state state;
-	unsigned long flags;
-	bool took = false;
-	u32 *dst;
-
-	dmaengine_tx_status(rb->pcm_tx, rb->pcm_tx_cookie, &state);
-	reading = (unsigned int)(((bytes - min_t(size_t, state.residue, bytes)) % bytes) /
-				 ((size_t)period * 4));
-	ahead = (rb->pcm_tfill + RB_I2S_PERIODS - reading) % RB_I2S_PERIODS;
-	if (ahead == 0 || ahead > RB_I2S_TX_LEAD + 1) {
-		/* The DMA has reached periods not filled: they went as they were. */
-		rb->pcm_tx_late++;
-		rb->pcm_tfill = (reading + 1) % RB_I2S_PERIODS;
-	}
-	while ((rb->pcm_tfill + RB_I2S_PERIODS - reading) % RB_I2S_PERIODS <= RB_I2S_TX_LEAD) {
-		/* The slots this period has: what the schedule will want. */
-		slots = (rb->pcm_sched.acc + frames * rb->i2s_div) / RB_I2S_TX_DIV;
-		spin_lock_irqsave(&rb->tx_lock, flags);
-		take = min_t(u32, slots, rb_ring_used(&rb->tx_ring) / 4);
-		got = rb_ring_get(&rb->tx_ring, (u8 *)rb->pcm_values, take * 4) / 4;
-		rb->stats.tx_words += got;
-		if (got < slots && rb->ptt)
-			rb->stats.tx_underruns++;
-		spin_unlock_irqrestore(&rb->tx_lock, flags);
-		if (got)
-			took = true;
-		/* Built in cached memory, then one copy into the uncached buffer. */
-		rb_i2s_tx_frames(&rb->pcm_sched, rb->i2s_div, rb->pcm_copy, frames, rb->pcm_values,
-				 got, &slots);
-		dst = rb->pcm_tbuf + (size_t)rb->pcm_tfill * period;
-		memcpy(dst, rb->pcm_copy, (size_t)period * 4);
-		rb->pcm_tfill = (rb->pcm_tfill + 1) % RB_I2S_PERIODS;
-	}
-	return took;
 }
 
 /* The periods the DMA has filled since the last call, from its residue. */
@@ -1708,7 +1756,12 @@ static int rb_i2s_command(struct rb_dev *rb, const u8 *tx, u8 *rx)
 static void rb_i2s_down(struct rb_dev *rb)
 {
 	cancel_work_sync(&rb->i2s_resync);
-	rb_i2s_stream_stop(rb);
+	if (rb->pcm) {
+		mutex_lock(&rb->cmd_lock);
+		if (rb_i2s_link_stop(rb, rb->i2s_div_want))
+			dev_err_ratelimited(rb->dev, "stopping the I2S link failed\n");
+		mutex_unlock(&rb->cmd_lock);
+	}
 	if (rb->pcm_rx) {
 		if (rb->pcm_buf)
 			dma_free_coherent(rb->pcm_rx->device->dev,
@@ -1796,7 +1849,7 @@ static int rb_i2s_up(struct rb_dev *rb)
 	mutex_lock(&rb->cmd_lock);
 	rb->i2s_div_want = rb_i2s_div(rate_code, receivers);
 	if (rb->rx_paused)
-		ret = rb_breg_write(rb, RB_BREG_I2S, (u32)rb->i2s_div_want << 8);
+		ret = rb_i2s_link_stop(rb, rb->i2s_div_want);
 	else
 		ret = rb_i2s_set_div(rb, rb->i2s_div_want, false);
 	mutex_unlock(&rb->cmd_lock);
@@ -1833,9 +1886,8 @@ static void rb_i2s_rx_pause(struct rb_dev *rb)
 	lockdep_assert_held(&rb->cmd_lock);
 	if (!rb->pcm)
 		return;
-	rb_i2s_stream_stop(rb);
-	if (rb_breg_write(rb, RB_BREG_I2S, (u32)rb->i2s_div_want << 8))
-		dev_err_ratelimited(rb->dev, "disabling the I2S link failed\n");
+	if (rb_i2s_link_stop(rb, rb->i2s_div_want))
+		dev_err_ratelimited(rb->dev, "stopping the I2S link failed\n");
 	rb_trace(rb, "I2S link and DMA stopped: run clear\n");
 }
 

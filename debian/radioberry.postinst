@@ -14,7 +14,7 @@ if [ "$1" = configure ]; then
     ln -sfn "/usr/share/radioberry/gateware/rpi-5/$fpga/radioberry.rbf" \
         /usr/lib/firmware/radioberry.rbf
     # With the radioberry-i2s overlay (Raspberry Pi 4) it loads the
-    # gateware-v2 receive image instead, built for the 10CL025 only.
+    # gateware-v2 image instead, built for the 10CL025 only.
     i2s="/usr/share/radioberry/gateware/rpi4-i2s/$fpga/radioberry-rpi4-i2s.rbf"
     if [ -f "$i2s" ]; then
         ln -sfn "$i2s" /usr/lib/firmware/radioberry-rpi4-i2s.rbf
@@ -58,24 +58,23 @@ if [ "$1" = configure ] && [ -d /run/systemd/system ]; then
 fi
 
 # An upgrade builds the new driver (radioberry-dkms is configured first)
-# but leaves the old one loaded: load the new one now, or say a reboot is
-# needed if the old one is in use.
-if [ "$1" = configure ] && [ -e /sys/module/radioberry/version ]; then
-    loaded=$(cat /sys/module/radioberry/version)
-    built=$(modinfo -F version radioberry 2>/dev/null || true)
-    if [ -n "$built" ] && [ "$loaded" != "$built" ]; then
-        if [ -d /run/systemd/system ]; then
-            deb-systemd-invoke stop radioberry.service >/dev/null || true
-        fi
-        if modprobe -r radioberry 2>/dev/null && modprobe radioberry; then
-            # The driver loads the gateware before /dev/radioberry appears.
-            for i in $(seq 1 30); do
-                [ -c /dev/radioberry ] && break
-                sleep 1
-            done
-        else
-            echo "radioberry: driver $loaded is in use; reboot to load $built." >&2
-        fi
+# and installs new gateware, but leaves the old driver loaded and the old
+# gateware in the FPGA. Load both now (the driver loads the gateware), or
+# say a reboot is needed if the driver is in use. Always: the version
+# string does not change between builds of one release, and new gateware
+# alone needs the reload too.
+if [ "$1" = configure ] && [ -e /sys/module/radioberry ]; then
+    if [ -d /run/systemd/system ]; then
+        deb-systemd-invoke stop radioberry.service >/dev/null || true
+    fi
+    if modprobe -r radioberry 2>/dev/null && modprobe radioberry; then
+        # The driver loads the gateware before /dev/radioberry appears.
+        for i in $(seq 1 30); do
+            [ -c /dev/radioberry ] && break
+            sleep 1
+        done
+    else
+        echo "radioberry: the driver is in use; reboot to load the new driver and gateware." >&2
     fi
 fi
 
