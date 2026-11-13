@@ -17,6 +17,7 @@ module rbv_rpi4_tb;
     logic sck = 1'b1, ce_n = 1'b1, mosi = 1'b0;
     wire  miso, bclk, fs, to_pi;
     logic from_pi = 1'b0;
+    logic jack_tip = 1'b1, jack_ring = 1'b1;
     wire [3:0] pa_out;
     wire ad_rst_n, ad_mode, ad_sen_n, ad_sclk, ad_sdio, ad_txsync, ad_txquiet_n;
     wire [5:0] ad_tx;
@@ -26,7 +27,7 @@ module rbv_rpi4_tb;
     rbv_rpi4_top #(.NR(6), .RESET_CYCLES(64), .LOCK_CYCLES(256)) dut (
         .clk53(clk53), .spi_sck(sck), .spi_ce0_n(ce_n), .spi_mosi(mosi), .spi_miso(miso),
         .i2s_bclk(bclk), .i2s_fs(fs), .i2s_to_pi(to_pi), .i2s_from_pi(from_pi),
-        .pa_out(pa_out), .ad_rst_n(ad_rst_n), .ad_mode(ad_mode), .ad_sen_n(ad_sen_n),
+        .jack_tip(jack_tip), .jack_ring(jack_ring), .pa_out(pa_out), .ad_rst_n(ad_rst_n), .ad_mode(ad_mode), .ad_sen_n(ad_sen_n),
         .ad_sclk(ad_sclk), .ad_sdio(ad_sdio), .ad_rx(ad_rx), .ad_rxsync(ad_rxsync),
         .ad_tx(ad_tx), .ad_txsync(ad_txsync), .ad_txquiet_n(ad_txquiet_n)
     );
@@ -175,8 +176,10 @@ module rbv_rpi4_tb;
         wr(1'b1, 6'h06, {8'd0, 8'd1, div, 7'd0, 1'b1});
         wr(1'b1, 6'h04, 32'h1);
         #(ns);
+        check("AD9866 0x01 running: receive path on, transmit off", ad_regs[5'h01], 8'h60);
         wr(1'b1, 6'h04, 32'h0);
         #40000;
+        check("AD9866 0x01 run clear: idle again", ad_regs[5'h01], 8'h67);
         rd(1'b1, 6'h09, full1);
         expect_idx = 0; bad = 0;
         for (int i = 0; i < got.size(); i++) begin
@@ -220,7 +223,7 @@ module rbv_rpi4_tb;
         #2000;
         rd(1'b1, 6'h03, q); check("STATUS locked, set up, running", q & 32'h7, 32'h7);
         check("first AD9866 write is 0x04", {ad_wlog_a[0], ad_wlog_d[0]}, {5'h04, 8'h36});
-        check("AD9866 0x01 (TxDAC, IAMP off)", ad_regs[5'h01], 8'h40);
+        check("AD9866 0x01 idle: all but PLL, REF, CML off", ad_regs[5'h01], 8'h67);
         check("AD9866 0x0a (TX gain lowest)", ad_regs[5'h0a], 8'h40);
         check("AD9866 0x0d", ad_regs[5'h0d], 8'h03);
 
@@ -242,9 +245,9 @@ module rbv_rpi4_tb;
         #40000;
         rd(1'b1, 6'h0C, q); check("AD_READ 0x08", q, 32'h40);
 
-        // Keying is stored and has no effect.
+        // The receive build refuses keying.
         wr(1'b1, 6'h05, 32'h3);
-        rd(1'b1, 6'h05, q); check("KEYING stored", q, 32'h3);
+        rd(1'b1, 6'h05, q); check("KEYING refused (receive build)", q, 32'h0);
 
         // Stream that fits: two receivers, 4 words per 256 clocks (1.2 M
         // words/s) against I2S at 122.88 MHz / 2 (1.92 M words/s).

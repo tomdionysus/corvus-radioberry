@@ -16,7 +16,7 @@
 //   byte 0     0xA5
 //   byte 1     status
 //   bytes 2-5  the addressed register's value, read before any write
-//   byte 6     sequence number of the last frame accepted
+//   byte 6     status 2
 //   byte 7     CRC-8 of bytes 0 to 6
 //
 // A frame whose CRC does not match is counted and ignored. Accepted frames
@@ -36,6 +36,7 @@ module rbv_spi (
     output logic [5:0]  rd_addr,
     input  logic [31:0] rd_data,     // valid 3 clk after rd_req
     input  logic [7:0]  status,
+    input  logic [7:0]  status2,
     output logic        frame_stb,   // pulse: a frame with a good CRC
     output logic        frame_bad,   // pulse: a frame with a bad CRC
     output logic        f_write,
@@ -86,10 +87,10 @@ module rbv_spi (
     logic [7:0]  ocrc = 8'd0;
     logic [55:0] oword;
     logic [31:0] rhold = 32'd0;
-    logic [7:0]  status_q = 8'd0, seq_last = 8'd0;
+    logic [7:0]  status_q = 8'd0, status2_q = 8'd0;
     logic        obit_now;
 
-    assign oword = {8'hA5, status_q, rhold, seq_last};
+    assign oword = {8'hA5, status_q, rhold, status2_q};
 
     always_ff @(negedge sck or posedge cs_n) begin
         if (cs_n) begin
@@ -105,7 +106,10 @@ module rbv_spi (
 
     // The bit for the coming rising edge, registered on the falling edge.
     always_ff @(negedge sck) begin
-        if (obit == 7'd0) status_q <= status;
+        if (obit == 7'd0) begin
+            status_q  <= status;
+            status2_q <= status2;
+        end
         miso <= obit_now;
     end
 
@@ -136,7 +140,6 @@ module rbv_spi (
             f_space   <= frame_q[54];
             f_addr    <= frame_q[53:48];
             f_data    <= frame_q[47:16];
-            seq_last  <= frame_q[15:8];
             frame_stb <= 1'b1;
         end
         if (bad_s[2] ^ bad_s[1]) frame_bad <= 1'b1;

@@ -21,8 +21,11 @@ out="$top/build/$project"
 # works on a copy with the same depth below the top (the project refers
 # to ../../rtl).
 work="$top/build/work-$project"
-rm -rf "$work"
+# Emptied in place, not removed: Docker Desktop's file sharing can keep a
+# removed directory's old handle, and the next container then starts in
+# a directory that no longer exists.
 mkdir -p "$out" "$work"
+find "$work" -mindepth 1 -delete
 cp "$top/projects/$project/$project.qsf" "$top/projects/$project/$project.sdc" "$work/"
 # Fitter seed: SEED=n tools/build.sh PROJECT (default: the project's own).
 if [ -n "${SEED:-}" ]; then

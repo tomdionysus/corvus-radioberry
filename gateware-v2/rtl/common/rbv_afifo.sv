@@ -4,6 +4,9 @@
 // one-word prefetch on the read side (rd_valid/rd_data show the next word;
 // rd_take consumes it). A clear request from the write side empties it
 // from both sides, each side resetting itself in its own clock domain.
+//
+// wfree is registered and so one write behind: a write is taken only while
+// it shows 2 or more, which keeps one word in hand.
 module rbv_afifo #(
     parameter int W  = 28,
     parameter int AW = 10
@@ -34,23 +37,27 @@ module rbv_afifo #(
 
     // ---- write side ----
     logic [AW:0] wptr = '0, wgray = '0;
-    logic [AW:0] rgray_w1 = '0, rgray_w2 = '0;
+    logic [AW:0] rgray_w1 = '0, rgray_w2 = '0, rbin_w = '0;
+    logic [AW:0] wfree_q = '0;
     logic        wclr_tgl = 1'b0;
 
     always_ff @(posedge wclk) begin
         rgray_w1 <= rgray;
         rgray_w2 <= rgray_w1;
+        rbin_w   <= g2b(rgray_w2);
+        wfree_q  <= (AW+1)'(1 << AW) - (wptr - rbin_w);
         if (wclr) begin
             wptr     <= '0;
             wgray    <= '0;
+            wfree_q  <= '0;
             wclr_tgl <= ~wclr_tgl;
-        end else if (wen && wfree != '0) begin
+        end else if (wen && wfree_q > (AW+1)'(1)) begin
             mem[wptr[AW-1:0]] <= wdata;
             wptr  <= wptr + 1'b1;
             wgray <= b2g(wptr + 1'b1);
         end
     end
-    assign wfree = (1 << AW) - (wptr - g2b(rgray_w2));
+    assign wfree = wfree_q;
 
     // ---- read side ----
     logic [AW:0]  rptr = '0, rgray = '0;

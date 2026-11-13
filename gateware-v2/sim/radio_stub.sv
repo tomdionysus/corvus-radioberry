@@ -27,9 +27,34 @@ module radio #(
     input [5:0] cmd_addr, input [31:0] cmd_data, input cmd_rqst, output cmd_ack,
     output [15:0] debug_out
 );
-    assign tx_on = 1'b0;
+    // Transmit, as the core's state machine starts it: from the jack (key
+    // or PTT), or from the host's PTT only together with a sample carrying
+    // PTT (tx_tuser[3] with tx_tvalid); it stays while run and a keying
+    // input hold. Takes one sample every TX_PERIOD clocks, sending the top
+    // 12 bits of I to the DAC, and drains samples at the same rate outside
+    // transmit, as the core does.
+    parameter TX_PERIOD = 64;
+    logic        txs = 1'b0;
+    int          ttick = 0;
+    logic [31:0] tx_last = 32'd0;
+    int          tx_taken = 0;
+    assign tx_on = txs;
     assign cw_on = 1'b0;
     assign rx_tuser = 2'b00;
+    assign tx_tready = (ttick == 0);
+    assign tx_data_dac = txs ? tx_last[31:20] : 12'd0;
+    always @(posedge clk) begin
+        if (!txs) txs <= run && (ext_ptt || ext_keydown ||
+                                 (ds_cmd_ptt && tx_tuser[3] && tx_tvalid));
+        else      txs <= run && (ext_ptt || ext_keydown || ds_cmd_ptt);
+        ttick <= (ttick == TX_PERIOD - 1) ? 0 : ttick + 1;
+        if (tx_tready && tx_tvalid) begin
+            if (txs) begin
+                tx_last  <= tx_tdata;
+                tx_taken <= tx_taken + 1;
+            end
+        end
+    end
 
     logic [3:0]  last_chan = 4'd0;
     logic [5:0]  last_addr = 6'd0;

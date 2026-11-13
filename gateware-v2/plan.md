@@ -268,6 +268,79 @@ Decided (owner, 2026-11-13):
 3. Capability flag, daemon gate, tools.
 4. Packages, install, acceptance.
 
+## 6b. Transmit on the Raspberry Pi 4
+
+Decided (owner, 2026-11-13): the sample schedule is exact (no rate
+matching); the permission bit and a separate "PA allowed" bit gate all
+four PA lines; the jack's CW key and PTT behave as in Hermes-Lite 2; a
+digital-loopback self-test comes before any transmission into the PA.
+
+### Link, Pi to FPGA
+
+Each 64-bit frame carries a sample (I in bits 31..16, Q in 15..0) and a
+flags word: bit 31 valid, 30..24 the tag 0x2a, 23..16 the XOR of the
+sample's four bytes and the sequence number's two, 15..0 the sequence
+number. The image drops a frame whose flags fail (a word slip in the
+Pi's PCM FIFO would otherwise make Q and the next I a sample) and counts
+it; it counts sequence gaps. The driver puts a sample in a frame when the
+running sum of the divider passes 40: exactly 48 000 samples a second,
+the rate the core takes them, for any divider up to 40. Frames without a
+sample are idle (all zero). The driver keeps the transmit buffer four
+DMA periods (about 8 ms) ahead and restarts both streams if the PCM
+block's transmit FIFO runs dry.
+
+### Gateware
+
+- A transmit FIFO (2048 samples) from the link to the core, which takes
+  PTT from the samples themselves (`tx_tuser[3]` with `tx_tvalid`), drains
+  the FIFO while not transmitting and waits its TX buffer latency after
+  PTT (Hermes-Lite 2 `radio.v`). The daemon sends samples only while MOX
+  is granted.
+- KEYING (PTT, permission) clears itself unless written again within
+  about a second; the driver rewrites it every 250 ms while set.
+- The core transmits with run, PTT and permission. The PA lines need, in
+  addition, PA allowed and loopback clear; envpa and envbias also need PA
+  enable (command 0x09 bit 19), inttr PA enable or T/R disable clear.
+- The AD9866 transmit gain is the drive (command 0x09) only while keyed or
+  transmitting, and its lowest otherwise; TX quiet is high only while the
+  core transmits outside loopback.
+- AD9866 power (register 0x01; the PLL, which clocks the FPGA, and the
+  reference and ADC common mode, which have no published power-up time,
+  stay on): with run clear everything else is off (0x67); with run set the
+  receive path is on (0x60); the transmit path is on (0x00) only while a
+  keying source (host PTT, the jack) or the core's own transmission asks
+  for it; loopback 0x40. Keying reaches the core only 20 us after the
+  TxDAC write has finished (datasheet power-up 13 us), so the core never
+  transmits into a TxDAC that is still powering up.
+- With run clear the receivers are held in reset (`rst_all`, which leaves
+  the command registers and frequencies alone).
+- Loopback (CONTROL bit 3): TxDAC and IAMP powered down before the
+  AD9866's digital loopback goes on, loopback off before they power up;
+  TX quiet and every PA line held low.
+- Status 2 (every reply): the core's CW or the jack's PTT, the jack's key,
+  the jack's PTT, FIFO overflow, watchdog, transmitting, gap, loopback.
+- The receive build (TX = 0) refuses KEYING and never moves a transmit
+  pin.
+
+### Idle
+
+A radio with no client does nothing on any of the three levels:
+
+- Gateware: the link is disabled (no bit clock), the receivers are held,
+  the AD9866 is in 0x67.
+- Driver: with run clear the PCM block and both DMA channels stop and the
+  link is disabled; no interrupts, no work until run is set.
+- Daemon: every thread blocks until it has work (eventfd wakes; no timed
+  polls while nobody owns the radio): no wake-ups at all.
+
+### Driver and daemon
+
+- Command byte 0 gains `RADIOBERRY_CMD_PA_ALLOWED`, which the daemon sets
+  with MOX only when `allow_pa` is set; the PIO gateware ignores it.
+- Reply byte 0 comes from status 2 in the PIO layout.
+- sysfs `tx_loopback` (loopback on or off) and `i2s_counters` (the
+  image's transmit counters and the driver's).
+
 ## 7. Order
 
 1. Link test image on a Raspberry Pi 4. Independent of everything else.
@@ -279,7 +352,9 @@ Steps 1 and 2 can run side by side.
 
 ## 8. Decisions needed
 
-- Whether PA enable should gate every PA line (T5).
+- Whether PA enable should gate every PA line (T5): decided for the
+  Raspberry Pi 4 image, section 6b (permission and PA allowed gate all
+  four; envpa and envbias also follow PA enable).
 - Whether the 10CL016 stays supported (two more images).
 - Whether the reused Hermes-Lite 2 files may be edited or only wrapped.
   Removing the unused VNA scanner needs an edit to `radio.v`; the rest of

@@ -22,6 +22,11 @@ case "$which" in
         files="$files rtl/common/rbv_afifo.sv rtl/common/rbv_i2s.sv rtl/linktest/rbt_adser.sv"
         files="$files rtl/rpi4/rbv_rpi4_top.sv sim/rbt_pll_sim.sv sim/radio_stub.sv sim/rbv_rpi4_tb.sv"
         tb=rbv_rpi4_tb ;;
+    rpi4tx)
+        files="rtl/common/rbv_crc8.sv rtl/common/rbv_spi.sv rtl/common/rbv_adseq.sv"
+        files="$files rtl/common/rbv_afifo.sv rtl/common/rbv_i2s.sv rtl/linktest/rbt_adser.sv"
+        files="$files rtl/rpi4/rbv_rpi4_top.sv sim/rbt_pll_sim.sv sim/radio_stub.sv sim/rbv_rpi4tx_tb.sv"
+        tb=rbv_rpi4tx_tb ;;
     *) echo "unknown testbench $which" >&2; exit 2 ;;
 esac
 mkdir -p "$top/build/sim"

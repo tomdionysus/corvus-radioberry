@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
-# rpi4-i2s receive build for the RadioBerry on a Raspberry Pi 4: the
+# rpi4-i2s build for the RadioBerry on a Raspberry Pi 4, receive and
+# transmit: the
 # Hermes-Lite 2 radio core (read unmodified from gateware/source/ at build
 # time, into hl2/) inside this project's control, AD9866 start-up and I2S
 # transport. Cyclone 10 LP 10CL025, 144-pin.
@@ -33,6 +34,10 @@ set_global_assignment -name MAX_CORE_JUNCTION_TEMP 85
 set_global_assignment -name OPTIMIZATION_MODE "HIGH PERFORMANCE EFFORT"
 set_global_assignment -name ALLOW_REGISTER_RETIMING OFF
 set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_RETIMING OFF
+set_parameter -name TX 1
+# Fitter seed: the one of 1 to 4 that meets timing in every clock domain
+# with this design (seed 1 missed the link domain by 2 ps).
+set_global_assignment -name SEED 3
 
 # The radio core finds its ROM tables by bare file name.
 set_global_assignment -name SEARCH_PATH hl2/Hermes-Lite2-3e467fd/gateware/rtl/nco
@@ -109,6 +114,8 @@ set_location_assignment PIN_33 -to i2s_bclk
 set_location_assignment PIN_44 -to i2s_fs
 set_location_assignment PIN_43 -to i2s_to_pi
 set_location_assignment PIN_42 -to i2s_from_pi
+set_location_assignment PIN_120 -to jack_tip
+set_location_assignment PIN_121 -to jack_ring
 set_location_assignment PIN_144 -to pa_out[0]
 set_location_assignment PIN_143 -to pa_out[1]
 set_location_assignment PIN_136 -to pa_out[2]
@@ -134,5 +141,7 @@ set_location_assignment PIN_106 -to ad_tx[5]
 set_location_assignment PIN_76 -to ad_txsync
 set_location_assignment PIN_72 -to ad_txquiet_n
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to ad_sdio
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to jack_tip
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to jack_ring
 set_instance_assignment -name FAST_INPUT_REGISTER ON -to ad_rx[*]
 set_instance_assignment -name FAST_INPUT_REGISTER ON -to ad_rxsync

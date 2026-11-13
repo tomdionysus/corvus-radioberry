@@ -9,17 +9,38 @@
 // clock, write the rest of the set-up list, then report done. Afterwards it
 // serves receive gain writes and register reads.
 //
-// Receive-only build: the set-up powers the TxDAC and IAMP down
-// (0x01 = 0x40) and sets the transmit gain to its lowest (0x0a = 0x40).
-// Nothing writes either register afterwards.
+// The set-up leaves every block but the PLL, the reference and the ADC
+// common mode powered down (0x01 = 0x67) and the transmit gain at its
+// lowest (0x0a = 0x40). Afterwards three registers are kept where the
+// inputs say, written whenever they differ:
+//   0x01  power-down bits (datasheet Table 24; bit 7, the PLL, is never set:
+//         it makes the clock this module and the FPGA run on):
+//           0x67  rx_on clear: receive and transmit paths off
+//           0x40  loopback (TX set): TxDAC and IAMP off, the rest on
+//           0x00  tx_power (TX set): everything on
+//           0x60  otherwise: receive path on, transmit path off
+//   0x0d  0x43 (digital loopback) with loopback set, else 0x03
+//   0x0a  {01, tx_code} with TX set, else 0x40 (lowest)
+// The TxDAC is powered on only after loopback is off, and loopback goes on
+// only with the TxDAC off. dac_ready rises POWER_UP_CYCLES after the write
+// that powered the TxDAC on has finished (its power-up takes 13 us) and
+// falls as soon as a power-down is wanted. With TX clear (the receive
+// build) the transmit path and 0x0a never leave off and lowest.
 module rbv_adseq #(
+    parameter bit TX = 1'b0,
     parameter int RESET_CYCLES = 4096,
-    parameter int LOCK_CYCLES  = 131072    // about 1.7 ms at 76.8 MHz
+    parameter int LOCK_CYCLES  = 131072,   // about 1.7 ms at 76.8 MHz
+    parameter int POWER_UP_CYCLES = 1536   // 20 us at 76.8 MHz
 ) (
     input  logic        clk,
     input  logic        restart,           // pulse: run the start-up again
     input  logic        pll_locked,        // asynchronous
 
+    input  logic        rx_on,             // asynchronous: the radio is running
+    input  logic        tx_power,          // asynchronous: power the transmit path
+    input  logic        loopback,          // asynchronous: digital loopback, TxDAC and IAMP off
+    output logic        dac_ready = 1'b0,  // TxDAC powered and settled
+    input  logic [5:0]  tx_code,           // transmit gain code wanted now (0: lowest)
     input  logic        gain_req,          // pulse: write gain_code
     input  logic [5:0]  gain_code,         // receive gain code, 0 to 63
     input  logic        rd_req,            // pulse: read rd_addr
@@ -41,7 +62,7 @@ module rbv_adseq #(
     localparam int NINIT = 10;
     logic [12:0] init [0:NINIT-1];
     initial begin
-        init[0] = {5'h01, 8'h40};   // TxDAC and IAMP powered down
+        init[0] = {5'h01, 8'h67};   // all but PLL, reference and ADC common mode off
         init[1] = {5'h06, 8'h14};   // CLKOUT2 off, CLKOUT1 = DAC clock / 2
         init[2] = {5'h07, 8'h21};   // offset calibration, receive filter on
         init[3] = {5'h08, 8'h40};   // receive filter cut-off
@@ -75,6 +96,27 @@ module rbv_adseq #(
     logic [4:0]  rd_addr_q = 5'd0;
     logic        reading = 1'b0;
     state_t      after = S_IDLE;
+    logic [7:0]  r01 = 8'h67, r0d = 8'h03, r0a = 8'h40;   // as written
+    logic [7:0]  w01, w0d, w0a;                            // as wanted
+    logic [1:0]  lb_s = 2'b00, rx_s = 2'b00, txp_s = 2'b00;
+    logic        lb, rxo, txp;
+
+    always_ff @(posedge clk) begin
+        lb_s  <= {lb_s[0], loopback};
+        rx_s  <= {rx_s[0], rx_on};
+        txp_s <= {txp_s[0], tx_power};
+    end
+    assign lb  = TX && lb_s[1];
+    assign rxo = rx_s[1];
+    assign txp = TX && txp_s[1];
+    assign w01 = !rxo ? 8'h67 : lb ? 8'h40 : txp ? 8'h00 : 8'h60;
+    assign w0d = lb ? 8'h43 : 8'h03;
+    assign w0a = TX ? {2'b01, tx_code} : 8'h40;
+
+    // TxDAC settling: counts while the TxDAC is on and no write to 0x01 is
+    // under way.
+    logic        last01 = 1'b0;          // the last write issued was to 0x01
+    logic [11:0] pu_cnt = 12'd0;
 
     // A write: instruction byte {0, 00, address} then data, all driven.
     function automatic logic [15:0] wr(input logic [4:0] a, input logic [7:0] d);
@@ -98,6 +140,10 @@ module rbv_adseq #(
             S_RESET: begin
                 done     <= 1'b0;
                 ad_rst_n <= 1'b0;
+                // The set-up list leaves these as the chip will hold them.
+                r01      <= 8'h67;
+                r0d      <= 8'h03;
+                r0a      <= 8'h40;
                 if (cnt == RESET_CYCLES[17:0]) begin
                     cnt   <= 18'd0;
                     state <= S_RELEASE;
@@ -141,8 +187,38 @@ module rbv_adseq #(
             S_IDLE: begin
                 done <= 1'b1;
                 if (!ser_busy && !ser_start) begin
-                    if (gain_pend) begin
+                    // TxDAC off before loopback on; loopback off before
+                    // TxDAC on.
+                    if (r01 != w01 && (w01[6] || r0d == w0d)) begin
+                        r01       <= w01;
+                        last01    <= 1'b1;
+                        ser_word  <= wr(5'h01, w01);
+                        ser_oe    <= 16'hFFFF;
+                        ser_start <= 1'b1;
+                        writes    <= writes + 16'd1;
+                        after     <= S_IDLE;
+                        state     <= S_WAIT;
+                    end else if (r0d != w0d && (w0d == 8'h03 || r01[6])) begin
+                        r0d       <= w0d;
+                        last01    <= 1'b0;
+                        ser_word  <= wr(5'h0d, w0d);
+                        ser_oe    <= 16'hFFFF;
+                        ser_start <= 1'b1;
+                        writes    <= writes + 16'd1;
+                        after     <= S_IDLE;
+                        state     <= S_WAIT;
+                    end else if (r0a != w0a) begin
+                        r0a       <= w0a;
+                        last01    <= 1'b0;
+                        ser_word  <= wr(5'h0a, w0a);
+                        ser_oe    <= 16'hFFFF;
+                        ser_start <= 1'b1;
+                        writes    <= writes + 16'd1;
+                        after     <= S_IDLE;
+                        state     <= S_WAIT;
+                    end else if (gain_pend) begin
                         gain_pend <= 1'b0;
+                        last01    <= 1'b0;
                         ser_word  <= wr(5'h09, {2'b01, gain_q});
                         ser_oe    <= 16'hFFFF;
                         ser_start <= 1'b1;
@@ -151,6 +227,7 @@ module rbv_adseq #(
                         state     <= S_WAIT;
                     end else if (rd_pend) begin
                         rd_pend   <= 1'b0;
+                        last01    <= 1'b0;
                         ser_word  <= {3'b100, rd_addr_q, 8'h00};
                         ser_oe    <= 16'hFF00;
                         ser_start <= 1'b1;
@@ -177,6 +254,16 @@ module rbv_adseq #(
             cnt   <= 18'd0;
             done  <= 1'b0;
         end
+    end
+
+    always_ff @(posedge clk) begin
+        // Only the write to 0x01 itself holds the count: other writes and
+        // reads while transmitting leave dac_ready alone.
+        if (!TX || !done || r01[6] || w01[6] || (last01 && state == S_WAIT))
+            pu_cnt <= 12'd0;
+        else if (pu_cnt != POWER_UP_CYCLES[11:0])
+            pu_cnt <= pu_cnt + 12'd1;
+        dac_ready <= TX && !w01[6] && pu_cnt == POWER_UP_CYCLES[11:0];
     end
 
 endmodule
