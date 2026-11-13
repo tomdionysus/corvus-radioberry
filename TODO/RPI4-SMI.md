@@ -120,9 +120,13 @@ its behaviour.
 
 ## Where it stands (2026-11-13)
 
-Steps 1 to 4 are done on the Pi 4 (kernel 6.18.60); the acceptance on
-the Pi 4 is met (below). Left: the Pi 5 gate on the radio, the 11-kernel
-matrix on both boards, the release gate on each.
+Steps 1 to 4 are done; the acceptance on the Pi 4 is met (below),
+including the 11-kernel matrix on the Pi 4 (all passed, packages built
+from `c3c96c1`, [docs/kernels.md](../docs/kernels.md#tested-kernels)),
+the CI on both Pis (ASan on the Pi 5, TSan on the Pi 4; each cannot run
+under the other's kernel) and a debug-kernel session on the Pi 4
+([docs/kernel-debug.md](../docs/kernel-debug.md)). Left: the Pi 5 gate on
+the radio and its 11-kernel matrix, then the release gate on each board.
 
 - Driver: `rb_smi_transport` as designed in step 3, with two findings
   from the hardware: the SMI's done interrupt restarts transfers (a

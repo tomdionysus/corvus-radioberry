@@ -8,8 +8,10 @@ driver for it; nothing needs reinstalling.
 
 ## Differences between 6.12 and 6.18
 
-The Raspberry Pi 4 driver clocks the RadioBerry's buses from the CPU and
-uses no interface that differs between the two series. The Raspberry Pi 5
+On the Raspberry Pi 4, neither transport uses an interface that differs
+between the two series: the CPU-clocked one drives the GPIO registers,
+and the SMI one programs the SMI block itself and uses the `bcm2835-dma`
+controller through `dmaengine`, which behaved the same on both. The Raspberry Pi 5
 driver streams through the RP1's PIO with the kernel's `rp1-pio` driver
 and the `dw-axi-dmac` DMA controller, which differ:
 
@@ -33,27 +35,32 @@ RadioBerry and gateware 75.3, passed:
 - `rbcat --seconds 10 --tx-zeros`: 48 000 frames per second, no resyncs
   or dropped words, TX taken at 48 000 words per second
 - `rbdrivertest` ([Driver hardware tests](driver-tests.md)): all tests
+- Pi 4 with SMI also: one receiver at 192 ksps through `radioberryd` for
+  20 s, no packets lost, the driver's thread at 2.0 to 3.6% of a core
 
-| Kernel | Raspberry Pi 4 (`rpi-v8`) | Raspberry Pi 5 (`rpi-2712`) |
-|---|---|---|
-| 6.12.25 | passed | passed |
-| 6.12.34 | passed | passed |
-| 6.12.47 | passed | passed |
-| 6.12.62 | passed | passed |
-| 6.12.75 | passed, one accepted anomaly | passed |
-| 6.18.29 | passed | passed |
-| 6.18.33 | passed | passed |
-| 6.18.34 | passed | passed |
-| 6.18.39 | passed | passed |
-| 6.18.50 | passed | passed |
-| 6.18.60 | passed | passed |
+| Kernel | Raspberry Pi 4, SMI (`rpi-v8`) | Raspberry Pi 4, CPU-clocked | Raspberry Pi 5 (`rpi-2712`) |
+|---|---|---|---|
+| 6.12.25 | passed | passed | passed |
+| 6.12.34 | passed | passed | passed |
+| 6.12.47 | passed | passed | passed |
+| 6.12.62 | passed | passed | passed |
+| 6.12.75 | passed | passed, one accepted anomaly | passed |
+| 6.18.29 | passed | passed | passed |
+| 6.18.33 | passed | passed | passed |
+| 6.18.34 | passed | passed | passed |
+| 6.18.39 | passed | passed | passed |
+| 6.18.50 | passed | passed | passed |
+| 6.18.60 | passed | passed | passed |
 
-Accepted anomaly: on the Pi 4 with 6.12.75, one of 11 `rbdrivertest` runs
-failed one test ("the daemon's device layer streams through the
-driver"): 31 receive blocks overflowed the test's queue between the
-daemon's device layer and the test (`rx-queue-full`). The driver lost
-nothing in that boot (`rbcat` and `ft8rx` above), and the other 10 runs
-on that kernel passed.
+The Pi 4 SMI column is the driver with the `radioberry-smi` overlay; the
+CPU-clocked and Pi 5 columns are release 0.4.1.
+
+Accepted anomaly: on the Pi 4 with 6.12.75 and the CPU-clocked transport,
+one of 11 `rbdrivertest` runs failed one test ("the daemon's device layer
+streams through the driver"): 31 receive blocks overflowed the test's
+queue between the daemon's device layer and the test (`rx-queue-full`).
+The driver lost nothing in that boot (`rbcat` and `ft8rx` above), and the
+other 10 runs on that kernel passed.
 
 The per-board lists are in [Raspberry Pi 4](rpi4.md#tested-kernels) and
 [Raspberry Pi 5](rpi5.md#tested-kernels).

@@ -106,3 +106,32 @@ compositor, the kernel reported "BUG: sleeping function called from
 invalid context" in `bcm2712_iommu_map()`: it allocates memory that may
 sleep while holding its `hw_lock` spinlock. It is unrelated to this
 driver.
+
+## Raspberry Pi 4 with SMI
+
+The same checks for the Pi 4's SMI transport: the kernel above built from
+`bcm2711_defconfig` (4K pages; the Pi 5 kernel's 16K pages do not boot a
+Pi 4) with the same options, `LOCALVERSION="-rbdebug-v8"`, installed as
+`/boot/firmware/kernel8_rbdebug.img` and booted once with tryboot, with
+the `radioberry-smi` overlay. The driver at commit `c3c96c1`.
+
+| Step | Result |
+|---|---|
+| Boot: the driver loads the gateware and binds | gateware 75.3, 10CL025, transport `smi` |
+| `rbdrivertest` (all 12 tests), three runs and one more alone | passed every time |
+| Gateware reload through sysfs, twice; module unload and load, three cycles; `rbload` with the driver out, then `modprobe radioberry load_gateware=0` | all succeeded, transport `smi` each time |
+| `rbcat`: one receiver at 384 ksps; two at 192 ksps; one at 48 ksps with zero TX samples, 5 s each | 383 992, 191 988 and 48 000 frames/s, no resyncs, dropped words or overruns; TX 48 000 words/s |
+| `radioberryd` with `p1probe` (one receiver at 384 ksps; two at 192) and `p2probe` (five DDCs at 96 ksps; one at 384) | 3 046, 2 667, 2 014 and 1 614 packets/s, no sequence breaks, passed |
+| 20 short `p1probe` sessions (RX paused and resumed each time) | no resyncs |
+| `rbcat` at 384 ksps killed after 1 s, five times | closed cleanly |
+| kmemleak scan | nothing |
+
+No KASAN, lockdep, sleep-in-atomic, DMA API or UBSAN report was logged
+during the session, and no RX or SMI stall. At boot, before the driver
+loaded, `DMA_API_DEBUG` reported overlapping mappings from another
+driver's use of the BCM2835 DMA controller (`add_dma_entry`, unrelated).
+
+A first session, with the driver of the day before, logged one SMI stall
+restart with a transfer still active: a DMA callback late under the debug
+kernel, not a stopped stream. The watchdog now restarts only a stopped
+transfer.
