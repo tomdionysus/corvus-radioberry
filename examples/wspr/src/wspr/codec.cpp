@@ -248,8 +248,9 @@ Symbols encode(const Payload& payload) {
         const std::uint32_t bit =
             i < kDataBits ? (payload[static_cast<std::size_t>(i / 8)] >> (7 - i % 8)) & 1u : 0u;
         reg = reg << 1 | bit;
-        coded[static_cast<std::size_t>(2 * i)] = parity(reg & kPoly1);
-        coded[static_cast<std::size_t>(2 * i + 1)] = parity(reg & kPoly2);
+        const auto k = static_cast<std::size_t>(i);
+        coded[2 * k] = parity(reg & kPoly1);
+        coded[2 * k + 1] = parity(reg & kPoly2);
     }
     const auto data = interleave(coded);
     Symbols s{};

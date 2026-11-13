@@ -2,6 +2,7 @@
 #include "wspr/c2file.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
@@ -42,10 +43,11 @@ void write_c2(const std::string& path, const C2File& f) {
     if (!out) {
         throw std::runtime_error("cannot create " + path);
     }
-    char name[14] = {};
-    std::memcpy(name, f.name.data(), std::min(f.name.size(), sizeof name));
+    // A fixed 14-byte field, zero-padded, not a C string.
+    std::array<char, 14> name{};
+    std::copy_n(f.name.begin(), std::min(f.name.size(), name.size()), name.begin());
     const std::int32_t minutes = 2;
-    out.write(name, sizeof name);
+    out.write(name.data(), static_cast<std::streamsize>(name.size()));
     out.write(reinterpret_cast<const char*>(&minutes), sizeof minutes);
     out.write(reinterpret_cast<const char*>(&f.dial_mhz), sizeof f.dial_mhz);
     for (std::size_t i = 0; i < kSlotSamples; ++i) {
