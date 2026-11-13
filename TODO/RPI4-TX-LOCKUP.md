@@ -37,6 +37,7 @@ All on the Pi 4, kernel 6.18.60, gateware 75.3, SMI transport.
 | 11 | released 0.4.1 (driver and daemon), `cpu` transport, SMI overlay removed, same config; piHPSDR and WSJT-X transmitting at 48 ksps and at the higher rate (owner) | owner: noticeable slowdown, but no lock-up of the desktop or the network at either rate |
 | 12 | released 0.4.1, `cpu`, no RF, daemon stopped: `rbcat --rate 192` (a) alone, (b) with `--tx-zeros`, (c) with `--tx-zeros`, `stress-ng --cpu 4` and a stream out over the Wi-Fi | 12 s each, router ping every 0.2 s: 60/60 in each, slowest 128, 5 and 90 ms; (c) carried 7.3 MB/s over the Wi-Fi with every core busy; streams clean |
 | 13 | SMI packages again, no RF: (a) to (c) as step 12, and (d) `p2probe --rate 192` through `radioberryd` with the same load | router ping 60/60 in each, slowest 7, 5, 101 and 69 ms; Wi-Fi stream 7.3 MB/s in (c) and (d); SMI DMA 545 interrupts a second in all four (one per period); CPU 0 in softirq 5.5%, 3.5%, 19% and 22%; streams clean, 48 000 TX words a second taken in (b) and (c) |
+| 14 | SMI, `p2probe --mox --rate 192` through `radioberryd` for 24 s (PTT and T/R relay keyed, drive ceiling 0, PA not allowed, zero samples): (a) alone, (b) with the step 12 load | router ping 60/60 in each, slowest 11 and 105 ms; (b) carried 6.7 MB/s over the Wi-Fi; SMI DMA 545 interrupts a second; 47 997 and 47 991 TX samples a second, 0 TX blocks dropped |
 
 Without a keyed transmitter the Wi-Fi shows single pings of 60 to 200 ms
 now and then on both transports (steps 12 and 13).
@@ -132,9 +133,10 @@ Done: stage A without transmissions (step 12) and stage B without the
 extra counters (step 13). Neither reproduced the stall, so the next
 steps are keyed, in this order, each one capture on SMI:
 
-1. `p2probe --mox --rate 192` through `radioberryd` under the step 13
-   load: PTT and the T/R relay keyed, drive 0, zero samples, PA enable
-   clear. A stall here needs neither RF nor TX data nor the real clients.
+1. Done (step 14): `p2probe --mox --rate 192` through `radioberryd`
+   under the step 13 load, PTT and the T/R relay keyed, drive 0, zero
+   samples, PA not allowed. No stall: the keyed state, Protocol 2 and
+   load together are not enough.
 2. piHPSDR and WSJT-X transmitting with `allow_pa: false` and
    `drive_ceiling: 0`: the real clients and their TX data, no RF.
 3. The same with the PA and drive as in step 10, into the dummy load.
