@@ -54,18 +54,147 @@ the transmissions in steps 1 to 4; none in steps 8 and 10.
   SMI transport.
 - The owner rules out Wi-Fi as the cause.
 
-## Open
+## From the recorded data
 
-1. TX data corruption: compare what the gateware is given with what the
-   client sent (the driver's TX words against the client's samples), and
-   look at the transmitted signal.
-2. How the TX path interacts with the SMI and its DMA while transmitting:
-   what differs between step 7 (TX words clocked, PTT clear) and a real
-   transmission on the SMI side.
-3. The slowdown on the `cpu` transport while transmitting (step 3: the
-   CPU-clocked TX thread holds 55 to 70% of a core).
+Read from the step 3 trace (perf, `/proc/interrupts` before and after,
+`top`, 6 to 8 s of one transmission) and the step 10 per-second log.
 
-Every step that transmits needs the owner's go-ahead at the time.
+- Step 10: while pings to the router were lost or 100 to 900 ms late,
+  `iw station dump` still answered each second with the signal, the rate
+  and `tx failed 0` unchanged. The network's data path stalls; the link
+  statistics do not move.
+- Every device interrupt is serviced on CPU 0: the SMI's DMA channel, the
+  Wi-Fi's SDIO host (`mmc1`, `mmc-bcm2835` with its own DMA channel), v3d.
+  The driver's TX thread ran on CPU 3.
+- Step 3: `memcpy` took 5.9% of all samples (a quarter of one core),
+  nearly all under `rb_smi_dma_done`, and `rb_smi_parse_to_locked` 1.8%;
+  softirq time was 9.2% of the four cores. `rb_bb_tx` took 13.9%.
+- Step 3: the SMI's DMA channel interrupted 7 752 times in the window,
+  against 549 a second for one interrupt per period at 9 million strobes
+  a second. No receive-only figure exists to compare with.
+- No `mmc`, `brcmfmac`, SMI stall or hold-leak message in any saved
+  kernel log.
+- Steps 6 to 8 differ from the failing runs in more than RF: zero TX
+  samples, `rbcat` or `p1probe` as the client, and a ping as the only
+  network traffic. They do not isolate RF.
+- Code: on the `cpu` transport one thread clocks RX and TX in turn, so
+  the two buses never toggle together; with SMI, GPIO 6 strobes at 9 MHz
+  all the time while the thread clocks TX on GPIO 4 and 5. GPIO 5 and 6
+  are neighbours on the header and GPIO 12 (TX ready) faces GPIO 6. TX
+  clocking itself (`rb_bb_tx`) is the same code on both transports. No
+  test sends TX data other than zeros and checks what the gateware took.
+
+## Hypotheses
+
+None is proven. In order of how well the data above supports them:
+
+- H1. The SMI's DMA tasklet (a 64 KB copy from uncached memory and a
+  parse, per period, in softirq on CPU 0) overloads CPU 0 under transmit
+  load and delays what else is serviced there, the Wi-Fi's SDIO
+  completion among it. Not known: why its cost rises on transmit, and
+  whether the DMA then moves more words than the strobes give.
+- H2. RX strobes running while TX is clocked corrupt the TX stream
+  (the owner's assessment). Explains corrupt TX data; needs a further
+  link to explain the stall.
+- H3. The SMI's DMA channel and the SDIO host's contend in the DMA
+  controller or on the peripheral bus.
+- H4. The TX thread's CPU use or priority. Step 4 and step 11 speak
+  against it as the cause.
+- H5. RF pick-up or supply dip. Step 11 has the same RF and supply
+  without a lock-up; only possible as the further link of H2.
+- Excluded: the daemon changes of `6fc7958` (step 5).
+
+## Investigation plan
+
+The owner directs each step. Every step that transmits needs the owner's
+go-ahead at the time. The Pi under test runs the released 0.4.1; stages B
+onward need the SMI packages (`0.4.1+git16.gc3c96c1`) and overlay back on
+it. Each stage states what it decides; stop at the first that settles
+the cause.
+
+### A. Baseline on the `cpu` transport (as installed, with transmissions)
+
+The reference the SMI figures are compared with, and the measure of the
+slowdown.
+
+1. One capture script, used unchanged in every stage: for 10 s, `perf
+   record -a -g`, `/proc/interrupts` and `/proc/softirqs` before and
+   after, `mpstat -P ALL 1`, `top -H`, the per-second monitor (lateness,
+   link statistics, router ping) and a 0.2 s ping from the workstation.
+2. Capture: idle with no client; piHPSDR receiving; piHPSDR and WSJT-X
+   through one transmission at 48 ksps.
+3. Record: per-core user, system and softirq time; the TX thread's share;
+   ping loss and delay.
+
+### B. SMI without transmitting
+
+Decides whether the tasklet's cost and the DMA's word rate are already
+off before any transmission, and gives H1 its receive-only figures.
+
+1. Add counters to the driver's sysfs (a debug build, not for release):
+   DMA callbacks, words taken from the ring, time spent in the tasklet
+   (total and longest), transfer restarts, watchdog restarts, hold leaks.
+2. Capture with the script: idle; `rbcat` at 48 and 192 ksps; piHPSDR
+   receiving at 48 and 192 ksps with WSJT-X decoding.
+3. Compare words per second with the strobe rate (9 million), DMA
+   interrupts per period, tasklet time per second, and CPU 0's softirq
+   share with stage A.
+4. Load without RF: piHPSDR and WSJT-X receiving plus `p1probe`-style MOX
+   is not possible with one client, so instead add CPU and network load
+   by hand (a `stress-ng` CPU load on all cores, an `iperf3` stream over
+   the Wi-Fi) while `rbcat --tx-zeros` runs, and watch the ping. A stall
+   here, with no RF and zero TX data, confirms a host-side cause (H1 or
+   H3) and rules out H2 and H5 as necessary.
+
+### C. SMI, one transmission, measured
+
+Only if B did not reproduce the stall.
+
+1. One transmission with piHPSDR and WSJT-X into the dummy load, the
+   capture script and the stage B counters running.
+2. Decides H1: words per second and tasklet time during the transmission
+   against stage B; CPU 0's softirq share; whether `mmc1` interrupts and
+   the SDIO DMA channel's interrupts stop during ping stalls.
+3. If H1 holds, test it directly, one change per transmission: the DMA
+   channel's interrupt moved to another core (`smp_affinity`); then the
+   period lengthened (fewer, larger callbacks); then the parse moved out
+   of the tasklet to the worker thread. The stall going away with the
+   interrupt moved confirms H1.
+
+### D. TX data integrity on SMI
+
+Decides H2, independently of the stall. Parts 1 and 2 need no RF.
+
+1. A TX test pattern that is not zero: `rbcat` (or a new option) sends a
+   known pattern with PTT clear, on the `cpu` transport and on SMI.
+2. Check what the gateware took. Find first whether the gateware has any
+   read-back of TX words or of its TX FIFO's state over SPI; if not,
+   compare the driver's TX word and clock counters with the gateware's
+   ready behaviour (a slipped bit shows as words taken that do not match
+   words sent, or a ready pattern that drifts), and consider a
+   SignalTap or a spare-pin build that flags a word whose check bits fail.
+3. With the owner's go-ahead: a two-tone or single-tone transmission into
+   the dummy load on each transport, recorded with the HackRF through the
+   attenuated tap, and the spectra compared (carrier, sidebands, noise
+   floor, any products at 9 MHz offsets).
+4. If corrupt on SMI only: repeat with the SMI strobes paused while TX
+   words are clocked (a test build), which separates bus overlap from
+   everything else.
+
+### E. If neither H1 nor H2 holds
+
+1. H3: the SDIO host forced to PIO (its `pio_limit`), or the Wi-Fi off
+   and the wired port used, during one SMI transmission.
+2. H5: the same SMI transmission with the PA disabled (`allow_pa: false`)
+   and with drive 0 through piHPSDR.
+
+### Afterwards
+
+- The `cpu` transport's slowdown on transmit (step 3 and stage A: the
+  TX thread's half core) is its own item, whatever the cause above.
+- Whether `6fc7958` and `f05d897` stay on the branch.
+- The Pi under test goes back to the released 0.4.1 after each session
+  unless the owner says otherwise.
 
 ## Also found
 
