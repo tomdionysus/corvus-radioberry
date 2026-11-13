@@ -33,34 +33,59 @@ value. Reported by a user at 192 ksps and reproduced:
   then sleeps whenever there are no TX words.
 - Nothing found records the pinout as designed for SMI.
 
-## Known about the kernel
+## Step 1 results (2026-11-13, Pi 4, kernel 6.18.60)
 
-On all 11 tested `rpt-rpi-v8` kernels (6.12.25 to 6.18.60) the Pi 4 has
-the modules `bcm2835_smi` and `bcm2835_smi_dev` and the overlays `smi`
-and `smi-dev`. The kernel headers carry
-`include/linux/broadcom/bcm2835_smi.h`, and `bcm2835_smi` exports
-`bcm2835_smi_get`, `bcm2835_smi_set_regs_from_settings`,
-`bcm2835_smi_read_buf` and `bcm2835_smi_user_dma`. None of it has been
-run.
+Measured with `tools/rbsmi` (`rbsmi`, polled reads from userspace, and
+`rbsmi_dma`, a measurement kernel module with DMA;
+[docs/tools.md](../docs/tools.md)), receive only, one receiver unless
+given. Every run was checked frame by frame with the driver's parser.
 
-## Unknowns
-
-Step 1 answers each before any driver work.
-
-1. Strobe timing: where in the strobe SMI latches the data relative to
-   the gateware's advance on the rising edge; at which strobe rates the
-   words are clean; whether the clock's idle level changing when SMI
-   takes GPIO 6 gives a spurious edge (the parser resyncs on
-   sample-ready; check that it does).
-2. Continuity: whether the strobes run without a gap from one DMA
-   transfer to the next. The gateware's RX FIFO holds 1012 values, 2.6 ms
-   at one receiver at 192 ksps, so any gap must be shorter and the strobe
-   rate high enough to catch up after it.
-3. Word layout: how 18-bit reads land in memory, which sets the buffer
-   size and the parse cost.
-4. Whether the `smi` overlay's pin claims (it takes the whole SMI pin
-   set) leave SPI, I2C and the TX and control pins usable, or a narrower
-   pin group is needed.
+- The kernel's `/dev/smi` cannot be used: `bcm2835_smi` reads only 8 and
+  16 bits wide ("Unsupported data width for read"), and the RX bus needs
+  SD17. Its DMA timed out. The stock `smi` overlay takes GPIO 2 to 25.
+  So the driver programs the SMI registers and a DMA channel itself and
+  uses no `bcm2835_smi` symbol, which also removes any load-time
+  dependency on the Pi 5. A six-pin overlay
+  (`tools/rbsmi/rbsmi-measure-overlay.dts`) leaves SPI, I2C and the TX
+  pins alone.
+- Layout and sampling: RWIDTH 2 gives 18-bit reads, one word per strobe,
+  SD0 to SD17 in bits 0 to 17; only bits 10 to 13 and 17 ever toggle.
+  `rb_smi.h` parses them with no resyncs or dropped words at one receiver
+  at 48, 192 and 384 ksps and two at 192. Switching GPIO 6 to SMI made no
+  stray value: 5 words discarded while the parser settled, as with the
+  other transports.
+- DMA: a cyclic `dmaengine` transfer from the SMI FIFO into coherent
+  memory works, on the channel the SMI node names (`dmas`, request 4).
+  The slave address must be the CPU physical address (0xfe60000c): the
+  bus address fails in `dma_map_phys`.
+- Strobe rate: timing 2,10,2,16 (setup, strobe, hold, pace) gives 8.9 to
+  9.0 million strobes a second, clean; that caps the bus at about 1.12
+  million values a second (8 strobes a value), so two receivers at 384
+  ksps and six at 96 come out short of frames, without resyncs. Faster
+  timings reached at most 10.6 million strobes a second with resyncs and
+  a core held busy: not usable.
+- Continuity: an SMI transfer has a length (SMIL) and the strobes stop at
+  its end, and then so does the DMA. START written while a transfer is
+  active is ignored (polled reads: a second START before the end gave N
+  words, after it 2N). With DMA a transfer sometimes ends at its length
+  and sometimes runs on (runs of 1 000 000-word transfers: ends every
+  0.14 s in bursts, or none for 60 s), cause unknown; and an end does not
+  fall on a DMA period boundary, so its last period never completes and
+  no DMA callback follows. Restarting from the callback therefore stalls
+  the stream (seen in 2 runs at about 330 s, and in bursts with short
+  transfers). The SMI's own interrupt on DONE (CS bit 9, the SMI node's
+  interrupt) restarts it: 1 000 000-word transfers, 421 restarts in 60 s,
+  no stall, every frame (384 000 a second) with no resyncs or drops.
+- The DMA callback finds the position from the transfer's residue, not by
+  counting callbacks, which can arrive merged.
+- CPU: the coherent buffer is uncached on the Pi 4, and reading it word
+  by word cost about 19 ns a word (4 to 7% of the four cores at 384
+  ksps). One bulk copy of each period into cached memory, then parsing
+  there: all four cores together, idle baseline 0.05%, 20 s each, 1.13%
+  at one receiver at 48 ksps, 0.53% at 192, 0.64% at 384, 1.33% at the
+  1.12 million ceiling. The CPU transport takes 14 to 17% of one core at
+  48 ksps and all of one at 96 and above.
+- Not yet run on a 6.12 kernel.
 
 ## Keeping the Pi 5 working
 
@@ -82,11 +107,8 @@ its behaviour.
 - The Pi 4's `cpu` transport stays, and stays the fallback: without the
   second overlay, or if SMI fails to start, the Pi 4 runs as it does in
   0.4.1.
-- The SMI symbols must not become a load-time dependency on the Pi 5: its
-  kernel has to load `radioberry.ko` whether or not `bcm2835_smi` exists
-  there. Check on a `rpt-rpi-2712` kernel at step 2 before anything else;
-  if the dependency cannot be made optional, the driver programs the SMI
-  registers and the DMA channel itself.
+- No `bcm2835_smi` symbol is used (step 1), so the module loads on the
+  Pi 5 as now; the Pi 5 gate checks it.
 - Gate at the end of every driver step, on the Pi 5 with the radio:
   `tools/ci-pi.sh` (unit tests, checkpatch, sparse, clang-tidy),
   `rbdrivertest`, `ft8rx` over Protocol 1 and 2 with no packets lost,
@@ -101,32 +123,32 @@ its behaviour.
 One branch, `item/rpi4-smi`; each step is one or more commits that leave
 both boards working.
 
-1. Measurement from userspace, no driver change. On the Pi 4 with the
-   `smi` and `smi-dev` overlays and the gateware loaded by `rbload`, a
-   tool beside `rbbus` sets the SMI timing, reads buffers through
-   `/dev/smi`, parses them and reports clean words, parse errors, resyncs
-   and values per second across strobe rates, receiver counts and rates,
-   with its CPU cost. Run on one 6.12 and one 6.18 kernel. It answers the
-   four unknowns. Acceptance: clean words at 384 000 values per second or
-   more for 10 minutes, or a recorded reason SMI cannot do it, in which
-   case this plan stops and the finding says so.
-2. Parser. `driver/kernel/rb_smi.h`: SMI words in, `index << 24 | value`
-   words out, resync on sample-ready, counters for idle words and
-   resyncs. Plain C with no kernel dependencies, as `rb_bitbang.h`;
-   tested in the userspace driver test binary against captured buffers
-   from step 1 and against the gateware simulator. No hardware, nothing
-   the Pi 5 runs.
-3. Transport. `rb_smi_transport` in the driver: `up` claims the SMI
-   instance and a DMA channel, allocates the RX periods and starts the
-   thread for TX; RX periods are parsed and handed to `rb_rx_consume` as
-   the other transports do; `rx_hold` and `rx_pause` stop the transfer
-   (and so the clock), `rx_release` and `rx_resume` restart it; `down`
-   undoes all of it and is safe after a failed `up`. Sysfs `transport`
-   reads `smi`. The RX clock hold around receiver-count changes and the
-   stall check must work as on the other transports. Acceptance on the
-   Pi 4 with the SMI overlay: `rbdrivertest` passes; and without the
-   overlay the Pi 4 comes up on `cpu` and passes as before. Then the Pi 5
-   gate.
+1. Measurement, no driver change: done on 6.18.60 (results above); the
+   10-minute acceptance run is recorded there. Still to do: the same on
+   a 6.12 kernel.
+2. Parser: done. `driver/kernel/rb_smi.h`, plain C as `rb_bitbang.h`,
+   tested in `rbsmi_tests` against the gateware simulator (sampling
+   before each edge, as SMI does), split buffers, a lost value and a
+   strobe rate too slow. Move or copy those tests into the driver test
+   binary with step 3.
+3. Transport. `rb_smi_transport` in the driver, built on what
+   `rbsmi_dma` does: the SMI node from a phandle in the Pi 4 overlay, its
+   registers mapped, its clock (125 MHz, assigned in the device tree)
+   taken with `clk_prepare_enable`, its DMA channel, a cyclic transfer
+   into coherent memory, the position from the residue, each period
+   copied to cached memory before parsing, SMI transfers restarted by the
+   SMI's done interrupt, a watchdog that counts and restarts a stalled
+   stream, and timing 2,10,2,16. The SMI node
+   stays disabled so `bcm2835_smi` does not bind it. RX periods are
+   parsed and handed to `rb_rx_consume` as the other transports do;
+   `rx_hold` and `rx_pause` stop the SMI transfer (and so the clock),
+   `rx_release` and `rx_resume` restart it; `down` undoes all of it and
+   is safe after a failed `up`. The thread stays for TX only. Sysfs
+   `transport` reads `smi`. The RX clock hold around receiver-count
+   changes and the stall check must work as on the other transports.
+   Acceptance on the Pi 4 with the SMI overlay: `rbdrivertest` passes;
+   and without the overlay the Pi 4 comes up on `cpu` and passes as
+   before. Then the Pi 5 gate.
 4. Overlay and packaging. `radioberry-smi.dtbo` for the Pi 4 (SMI block,
    pin functions, DMA), built and installed by the packages and checked
    by `tools/check-overlay.sh` against the Pi 4 tree; `config.txt` takes
@@ -135,7 +157,8 @@ both boards working.
    says how to enable SMI. The DKMS package builds on every tested
    kernel of both boards. Then the Pi 5 gate.
 5. Capacity and documents. Measure the SMI transport's ceiling and CPU
-   cost, set its `rx_values_max` from the measurement, and bring
+   cost (step 1 suggests about 1.1 million values a second), set its
+   `rx_values_max` from the measurement, and bring
    [docs/rpi4.md](../docs/rpi4.md), the quickstart, the driver, design
    and troubleshooting pages and the finding up to date. The quickstart
    makes SMI the Pi 4 default only after the acceptance below.

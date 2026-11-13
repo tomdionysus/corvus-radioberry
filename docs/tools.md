@@ -127,6 +127,38 @@ Exit status: 0 every frame arrived in sequence (at least 98% of those
 expected) and, with `--tx`, the TX word rate kept up, 1 frames were lost
 or the run could not start, 2 a usage error or the wrong board.
 
+## rbsmi and rbsmi_dma (development, Pi 4)
+
+Measurements for reading the RX bus with the BCM2711's SMI
+([TODO/RPI4-SMI.md](https://github.com/tomdionysus/corvus-radioberry/blob/main/TODO/RPI4-SMI.md)).
+Built from source only; not installed. Both need the gateware loaded with
+`rbload`, `dtoverlay=radioberry` removed, `dtparam=spi=on`, and the
+measurement overlay, which puts only the RX bus pins (GPIO 6, 18 to 21,
+25) in their SMI function:
+
+```
+dtc -@ -I dts -O dtb -o /boot/firmware/overlays/rbsmi-measure.dtbo tools/rbsmi/rbsmi-measure-overlay.dts
+echo dtoverlay=rbsmi-measure | sudo tee -a /boot/firmware/config.txt
+```
+
+- `rbsmi` reads the SMI FIFO by polling it through `/dev/mem` and parses
+  the words with `driver/kernel/rb_smi.h`. It checks the sampling and the
+  word layout; polling costs a whole core, so it says nothing about the
+  CPU cost of SMI. Options as `rbbus`, without `--settle`,
+  `--idle-sleep` and `--tx`, and with `--timing S,T,H,P` (read setup,
+  strobe, hold and pace in SMI clock cycles, default 2,10,2,16) and
+  `--read-words N` (words per SMI transfer, default 16384). Exit status
+  as `rbbus`.
+- `rbsmi_dma` (`tools/rbsmi/kmod`, `make` there with the kernel headers)
+  is a kernel module that streams the SMI into memory with a cyclic DMA
+  transfer, restarts each SMI transfer from the SMI's done interrupt, and
+  parses each DMA period, as a driver would. Loading starts the stream
+  (module parameters `setup`, `strobe`, `hold`, `pace`, `receivers`,
+  `period_words`, `transfer_words`), `/sys/kernel/debug/rbsmi_dma/stats`
+  reports, unloading stops it. The gateware must already be streaming:
+  send it a general command with run set over spidev first. It never sends
+  a command itself.
+
 ## p1probe and p2probe
 
 Minimal openHPSDR clients for checking a radio or `radioberryd`:

@@ -1,0 +1,35 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+//
+// Raspberry Pi 4 only, for rbsmi's measurement (TODO/RPI4-SMI.md step 1):
+// the SMI block enabled, so the kernel's bcm2835_smi driver runs its clock
+// (125 MHz), with only the RadioBerry's RX bus pins in its function
+// (ALT1). GPIO 6 is SOE_N, the read strobe and so the RX clock; GPIO 18 to
+// 21 are SD10 to SD13, the data nibble; GPIO 25 is SD17, sample-ready.
+// Unlike the stock smi overlay, which takes GPIO 2 to 25, SPI, I2C and the
+// TX bus pins stay as they are. Not for use with the radioberry overlay.
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "brcm,bcm2711";
+
+	fragment@0 {
+		target = <&smi>;
+		__overlay__ {
+			pinctrl-names = "default";
+			pinctrl-0 = <&rbsmi_pins>;
+			status = "okay";
+		};
+	};
+
+	fragment@1 {
+		target = <&gpio>;
+		__overlay__ {
+			rbsmi_pins: rbsmi_pins {
+				brcm,pins = <6 18 19 20 21 25>;
+				brcm,function = <5 5 5 5 5 5>; /* ALT1 */
+				brcm,pull = <0 1 1 1 1 1>; /* inputs pulled down */
+			};
+		};
+	};
+};
