@@ -16,14 +16,17 @@ if [ "$1" = configure ]; then
 
     # The firmware reads overlays from /boot/firmware/overlays, a FAT
     # file system dpkg cannot manage files on.
+    # radioberry-smi.dtbo is the Pi 4's SMI overlay (docs/rpi4.md).
     if [ -d /boot/firmware/overlays ]; then
-        cp /usr/share/radioberry/overlays/radioberry.dtbo \
-            /boot/firmware/overlays/radioberry.dtbo.new
-        mv /boot/firmware/overlays/radioberry.dtbo.new \
-            /boot/firmware/overlays/radioberry.dtbo
+        for overlay in radioberry radioberry-smi; do
+            cp "/usr/share/radioberry/overlays/$overlay.dtbo" \
+                "/boot/firmware/overlays/$overlay.dtbo.new"
+            mv "/boot/firmware/overlays/$overlay.dtbo.new" \
+                "/boot/firmware/overlays/$overlay.dtbo"
+        done
     else
-        echo "radioberry: /boot/firmware/overlays not found; copy" \
-            "/usr/share/radioberry/overlays/radioberry.dtbo there." >&2
+        echo "radioberry: /boot/firmware/overlays not found; copy the files in" \
+            "/usr/share/radioberry/overlays there." >&2
     fi
 
     # The radioberry user and group, then /dev/radioberry's group.

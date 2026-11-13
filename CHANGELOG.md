@@ -5,8 +5,16 @@ packages carry the same number.
 
 ## Unreleased
 
+- Raspberry Pi 4: RX read by SMI with DMA with the new `radioberry-smi`
+  overlay; receive costs about 1% of the CPU instead of a whole core,
+  and up to 1 000 000 RX values per second (one receiver at 384 ksps).
+  Falls back to the CPU-clocked bus without the overlay.
+- ABI: `RADIOBERRY_TRANSPORT_SMI`; `rbctl` and `rbprobe` report the SMI
+  transport, and `rbprobe` advises the overlay on a Pi 4.
+- `rbsmi` and `rbsmi_dma`: SMI measurement tools (development).
+- CI: ThreadSanitizer build and tests.
 - `wsprrx`: example WSPR receive client, the sister of `ft8rx`; also
-  decodes `.c2` files.
+  decodes `.c2` files and saves received slots as them.
 - Docs: frequency calibration procedure; the Raspberry Pi 4 receive CPU
   finding; Code of Conduct.
 

@@ -1,0 +1,48 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+/*
+ * RadioBerry 2.x on the Raspberry Pi 4: RX read by the BCM2711's Secondary
+ * Memory Interface with DMA instead of clocked by the CPU. Installed as
+ * radioberry-smi.dtbo and enabled after the radioberry overlay, in a [pi4]
+ * section of config.txt:
+ *
+ *   dtoverlay=radioberry
+ *   [pi4]
+ *   dtoverlay=radioberry-smi
+ *   [all]
+ *
+ * It names the Pi 4's SMI block, which the Pi 5's tree does not have, so
+ * it is a separate overlay. It gives the driver's node a phandle to the
+ * SMI node, whose registers, clock, DMA channel and interrupt the driver
+ * takes itself (the node stays disabled, so the kernel's bcm2835_smi
+ * driver does not bind), and a pin state "smi" that switches only the RX
+ * pins to their SMI function (ALT1): GPIO 6 SOE_N, the RX clock; GPIO 18
+ * to 21 SD10 to SD13, the data nibble; GPIO 25 SD17, sample-ready. SPI,
+ * I2C and the TX pins stay as they are. Without this overlay, or if SMI
+ * cannot start, the driver clocks RX with the CPU.
+ */
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "brcm,bcm2711";
+
+	fragment@0 {
+		target = <&gpio>;
+		__overlay__ {
+			radioberry_smi_pins: radioberry_smi_pins {
+				brcm,pins = <6 18 19 20 21 25>;
+				brcm,function = <5 5 5 5 5 5>; /* ALT1 */
+				brcm,pull = <0 1 1 1 1 1>; /* inputs pulled down */
+			};
+		};
+	};
+
+	fragment@1 {
+		target-path = "/soc/spi@7e204000/radioberry@0";
+		__overlay__ {
+			brcm,smi = <&smi>;
+			pinctrl-names = "smi";
+			pinctrl-0 = <&radioberry_smi_pins>;
+		};
+	};
+};

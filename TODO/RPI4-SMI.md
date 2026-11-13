@@ -118,6 +118,38 @@ its behaviour.
   gate on each (clean-down, install per the README, FT8 receive, the
   board owner's contact).
 
+## Where it stands (2026-11-13)
+
+Steps 1 to 4 are done on the Pi 4 (kernel 6.18.60); the acceptance on
+the Pi 4 is met (below). Left: the Pi 5 gate on the radio, the 11-kernel
+matrix on both boards, the release gate on each.
+
+- Driver: `rb_smi_transport` as designed in step 3, with two findings
+  from the hardware: the SMI's done interrupt restarts transfers (a
+  restart from the DMA callback stalls, since a transfer's end does not
+  fall on a period boundary), and RX hold and pause parse every word
+  read before the stop and drop the value in progress on release (pause
+  and resume otherwise gave one resync in 3 of 20 client sessions; none
+  in 40 after).
+- `RADIOBERRY_TRANSPORT_SMI` (3) in the ABI header, an added value only;
+  `rbctl` prints `smi`; `rbprobe` advises the overlay on a Pi 4 running
+  `cpu` and warns when the overlay is there but SMI did not start.
+- Overlay `driver/radioberry-smi.dts`, built and installed with the
+  first, copied by the package's postinst, checked by
+  `tools/check-overlay.sh` on the Pi 4 tree; it does not apply to the
+  Pi 5 tree ("can't find symbol 'smi'"), and the `[pi4]` section keeps
+  the firmware from trying.
+- CI: `rb_smi.h` and the measurement module under checkpatch; a TSan
+  build beside ASan.
+- Measured on the Pi 4 with the board ([docs/finding-rpi4-cpu.md](../docs/finding-rpi4-cpu.md#the-fix)):
+  `rbdrivertest` passed (12 test cases, 2 runs, no stalls); `ft8rx` over
+  Protocol 1 and 2 on 40 m, no packets lost; one receiver at 192 ksps
+  through `radioberryd` for 10 minutes, none lost; the driver's thread
+  4% under Protocol 1 (TX) and 0% under Protocol 2; piHPSDR at 192 ksps
+  every core below 30%. Without the overlay the Pi 4 came up on `cpu`
+  and passed `rbdrivertest` 7 times in 8 (the failure's test not
+  captured), `ft8rx` with no packets lost.
+
 ## Steps
 
 One branch, `item/rpi4-smi`; each step is one or more commits that leave

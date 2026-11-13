@@ -3,7 +3,8 @@
 #
 # The merge gate. Builds and tests everything on a Raspberry Pi 5:
 # format and SPDX checks, the release build with its tests, the ASan and
-# UBSan build with the same tests, the coverage build with a summary,
+# UBSan build and the TSan build with the same tests, the coverage build
+# with a summary,
 # where the ABI header is installed the userspace build against it, and
 # where /dev/radioberry is present and free the driver's hardware tests.
 #
@@ -69,7 +70,8 @@ step "SPDX headers"
 sh tools/check-spdx.sh
 
 kernel_sources="driver/kernel/radioberry.c driver/kernel/rb_logic.h driver/kernel/rb_pio.h
-    driver/kernel/rb_bitbang.h driver/include/radioberry_ioctl.h"
+    driver/kernel/rb_bitbang.h driver/kernel/rb_smi.h driver/include/radioberry_ioctl.h
+    tools/rbsmi/kmod/rbsmi_dma.c"
 kbuild=/lib/modules/$(uname -r)/build
 checkpatch=${CHECKPATCH:-$kbuild/scripts/checkpatch.pl}
 if [ -f "$checkpatch" ]; then
@@ -102,8 +104,8 @@ ctest --preset default
 
 if command -v dtmerge >/dev/null && [ -f build/driver/radioberry.dtbo ] &&
     [ -f /boot/firmware/bcm2711-rpi-4-b.dtb ]; then
-    step "overlay on the Pi 4 and Pi 5 device trees"
-    sh tools/check-overlay.sh build/driver/radioberry.dtbo
+    step "overlays on the Pi 4 and Pi 5 device trees"
+    sh tools/check-overlay.sh build/driver/radioberry.dtbo build/driver/radioberry-smi.dtbo
 else
     step "overlay check: skipped, needs dtmerge and the boards' trees in /boot/firmware"
 fi
@@ -124,6 +126,11 @@ step "ASan and UBSan build and tests"
 cmake --preset asan >/dev/null
 cmake --build --preset asan -j "$jobs"
 ctest --preset asan
+
+step "ThreadSanitizer build and tests"
+cmake --preset tsan >/dev/null
+cmake --build --preset tsan -j "$jobs"
+ctest --preset tsan
 
 step "coverage"
 # Test discovery runs the binaries while building; clear stale counters first.

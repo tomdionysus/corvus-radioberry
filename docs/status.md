@@ -3,7 +3,8 @@
 | Component | Directory | Working | Notes |
 |---|---|---|---|
 | Kernel driver `radioberry.ko`, overlay, ABI header | `driver/` | ✓ | Loads the gateware at boot; receive and transmit streams |
-| Raspberry Pi 4 transport (CPU-clocked) | `driver/` | ✓ | Two receivers at 48 ksps or one at 96 |
+| Raspberry Pi 4 transport (SMI with DMA) | `driver/` | ✓ | One receiver at 384 ksps, two at 192 or five at 96, about 1% of the CPU; `radioberry-smi` overlay |
+| Raspberry Pi 4 transport (CPU-clocked) | `driver/` | ✓ | Two receivers at 48 ksps or one at 96; without the SMI overlay |
 | Raspberry Pi 5 transport (RP1 PIO) | `driver/` | ✓ | Six receivers at 192 ksps or three at 384 |
 | `radioberryd`, Protocol 1 | `daemon/` | ✓ | Hermes-Lite 2 dialect, receive and transmit, UDP and TCP; FT8 contacts with piHPSDR and WSJT-X |
 | `radioberryd`, Protocol 2 | `daemon/` | ✓ | Receive and transmit; FT8 contacts with piHPSDR and WSJT-X; no wideband, diversity, PureSignal or radio-side CW keyer |

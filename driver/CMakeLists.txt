@@ -13,20 +13,25 @@ radioberry_add_kernel_module(radioberry
         ${CMAKE_CURRENT_SOURCE_DIR}/kernel/rb_logic.h
         ${CMAKE_CURRENT_SOURCE_DIR}/kernel/rb_pio.h
         ${CMAKE_CURRENT_SOURCE_DIR}/kernel/rb_bitbang.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/kernel/rb_smi.h
         ${CMAKE_CURRENT_SOURCE_DIR}/include/radioberry_ioctl.h)
 
 find_program(DTC_EXECUTABLE dtc)
 if(DTC_EXECUTABLE)
-    set(_dtbo ${CMAKE_CURRENT_BINARY_DIR}/radioberry.dtbo)
-    add_custom_command(
-        OUTPUT ${_dtbo}
-        COMMAND ${DTC_EXECUTABLE} -@ -q -I dts -O dtb -o ${_dtbo}
-                ${CMAKE_CURRENT_SOURCE_DIR}/radioberry.dts
-        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/radioberry.dts
-        COMMENT "Building device tree overlay radioberry.dtbo"
-        VERBATIM)
-    add_custom_target(radioberry_overlay ALL DEPENDS ${_dtbo})
-    install(FILES ${_dtbo} DESTINATION ${RADIOBERRY_OVERLAY_DIR})
+    set(_dtbos)
+    foreach(_overlay radioberry radioberry-smi)
+        set(_dtbo ${CMAKE_CURRENT_BINARY_DIR}/${_overlay}.dtbo)
+        add_custom_command(
+            OUTPUT ${_dtbo}
+            COMMAND ${DTC_EXECUTABLE} -@ -q -I dts -O dtb -o ${_dtbo}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/${_overlay}.dts
+            DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${_overlay}.dts
+            COMMENT "Building device tree overlay ${_overlay}.dtbo"
+            VERBATIM)
+        list(APPEND _dtbos ${_dtbo})
+    endforeach()
+    add_custom_target(radioberry_overlay ALL DEPENDS ${_dtbos})
+    install(FILES ${_dtbos} DESTINATION ${RADIOBERRY_OVERLAY_DIR})
 else()
     message(WARNING "dtc not found; the device tree overlay is not built")
 endif()

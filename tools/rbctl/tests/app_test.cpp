@@ -139,6 +139,13 @@ TEST_CASE("info shows the driver's transport and RX limit", "[rbctl]") {
     CHECK(j["info"]["transport"] == "rp1-pio");
     CHECK(j["info"]["rx_values_max"] == 2370000);
 
+    FakeDevice smi;
+    smi.transport = RADIOBERRY_TRANSPORT_SMI;
+    smi.rx_values_max = 1000000;
+    j = json(run({"--json"}, &smi));
+    CHECK(j["info"]["transport"] == "smi");
+    CHECK(j["info"]["rx_values_max"] == 1000000);
+
     FakeDevice odd;
     odd.transport = 9;
     j = json(run({"--json"}, &odd));

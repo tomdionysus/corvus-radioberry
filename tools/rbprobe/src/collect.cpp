@@ -349,8 +349,24 @@ private:
         n.set("loaded", loaded_);
         const bool device = src_.exists(kDevicePath);
         n.set("device", device);
-        // "rp1-pio" (Pi 5) or "cpu" (Pi 4); absent up to release 0.3.0.
-        n.set("transport", file_trimmed("/sys/bus/spi/devices/spi0.0/transport"));
+        // "rp1-pio" (Pi 5), "smi" or "cpu" (Pi 4); absent up to release 0.3.0.
+        const auto transport = file_trimmed("/sys/bus/spi/devices/spi0.0/transport");
+        n.set("transport", transport);
+        // The Pi 4's radioberry-smi overlay gives the driver's node this.
+        const bool smi_overlay = src_.exists("/sys/bus/spi/devices/spi0.0/of_node/brcm,smi");
+        n.set("smi_overlay", smi_overlay);
+        if (board_ == Board::kPi4 && transport.value_or("") == "cpu") {
+            if (smi_overlay) {
+                add(Severity::kWarning, "driver.smi",
+                    "the radioberry-smi overlay is loaded but SMI did not start, so the CPU "
+                    "clocks RX; the kernel log says why (dmesg | grep radioberry)");
+            } else {
+                add(Severity::kInfo, "driver.smi",
+                    "RX is clocked by the CPU, which takes a whole core from one receiver at 96 "
+                    "ksps; add dtoverlay=radioberry-smi in a [pi4] section of config.txt to read "
+                    "it with SMI and DMA");
+            }
+        }
 
         Node holders = Node::seq();
         if (device) {

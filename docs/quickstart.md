@@ -24,9 +24,14 @@ Add to `/boot/firmware/config.txt`:
 ```
 dtparam=i2c_arm=on
 dtoverlay=radioberry
+[pi4]
+dtoverlay=radioberry-smi
+[all]
 ```
 
-Reboot, then check:
+The `[pi4]` lines let a Raspberry Pi 4 receive with SMI and DMA instead of
+a CPU core ([Raspberry Pi 4](rpi4.md)); a Pi 5 ignores them. Reboot, then
+check:
 
 ```
 rbprobe

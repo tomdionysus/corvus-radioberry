@@ -8,13 +8,18 @@ interface it drives is in
 
 ## Transports
 
-The streams reach the gateware one of two ways, chosen when the driver
-binds, from the SoC; everything else is shared:
+The streams reach the gateware one of three ways, chosen when the driver
+binds, from the SoC and, on a Pi 4, the `radioberry-smi` overlay;
+everything else is shared:
 
 | Board | Transport | sysfs `transport` | Details |
 |---|---|---|---|
+| Raspberry Pi 4 (BCM2711) with `radioberry-smi` | RX by SMI with DMA, TX by a kernel thread | `smi` | [Raspberry Pi 4](rpi4.md) |
 | Raspberry Pi 4 (BCM2711) | CPU-clocked kernel thread | `cpu` | [Raspberry Pi 4](rpi4.md) |
 | Raspberry Pi 5 (BCM2712) | RP1 PIO with DMA | `rp1-pio` | [Raspberry Pi 5](rpi5.md) |
+
+A Pi 4 whose SMI cannot start falls back to `cpu`, and the kernel log
+says why.
 
 The driver reports its transport and RX limit in `struct radioberry_info`
 (`transport`, `rx_values_max`); `radioberryd` runs no more receivers than
@@ -32,6 +37,14 @@ another SPI clock; the gateware's timing constraints allow up to
 15.625 MHz. `tools/check-overlay.sh` checks that it applies to both
 boards' trees.
 
+`dtoverlay=radioberry-smi` ([driver/radioberry-smi.dts](https://github.com/tomdionysus/corvus-radioberry/blob/main/driver/radioberry-smi.dts))
+is for the Pi 4 only, after the first, in a `[pi4]` section of
+`config.txt`. It gives the driver's node a phandle to the SMI block, whose
+registers, clock, DMA channel and interrupt the driver takes itself (the
+block stays disabled, so the kernel's own SMI driver does not bind), and
+a pin state that switches GPIO 6, 18 to 21 and 25 to SMI.
+`tools/check-overlay.sh` checks it on the Pi 4's tree.
+
 ## `/dev/radioberry`
 
 - Exclusive open (EBUSY while another program holds it).
@@ -46,8 +59,8 @@ boards' trees.
   the TX permission bit, PA enable and drive.
 - Receive moves only while the last command sent had run set. With run
   clear (from boot, while closed, and while `radioberryd` has no client
-  streaming) the RX clock stands still, so the bus and the driver's thread
-  are idle. When run is set again the stream restarts and the parser
+  streaming) the RX clock stands still, so the bus, the DMA and the
+  driver's thread are idle. When run is set again the stream restarts and the parser
   settles to whole frames, as after a receiver-count change.
 
 ## Gateware loading and sysfs

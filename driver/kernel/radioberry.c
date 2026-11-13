@@ -24,16 +24,24 @@
  * - Pi 4 (BCM2711), which has no PIO: a FIFO-priority kernel thread
  *   clocks both buses through the GPIO block's set, clear and level
  *   registers with the same handshakes (rb_bitbang.h), at a lower rate.
+ * - Pi 4 with the radioberry-smi overlay: the BCM2711's Secondary Memory
+ *   Interface reads the RX bus, each read strobe one RX clock, and a
+ *   cyclic DMA transfer moves the words to memory (rb_smi.h); the thread
+ *   clocks TX only. If SMI cannot start, the Pi 4 falls back to the
+ *   CPU-clocked buses.
  *
  * The PIO programs and the overall design follow the original RadioBerry
  * Pi 5 driver, released into the public domain under the Unlicense.
  */
 
+#include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/dma-mapping.h>
+#include <linux/dmaengine.h>
 #include <linux/firmware.h>
 #include <linux/fs.h>
 #include <linux/gpio/consumer.h>
+#include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/kthread.h>
 #include <linux/miscdevice.h>
@@ -41,7 +49,10 @@
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
+#include <linux/of_dma.h>
+#include <linux/of_irq.h>
 #include <linux/of_platform.h>
+#include <linux/pinctrl/consumer.h>
 #include <linux/pio_rp1.h>
 #include <linux/platform_device.h>
 #include <linux/poll.h>
@@ -81,6 +92,7 @@ static inline u32 rb_bb_lev(struct rb_bb_io *io)
 }
 
 #include "rb_bitbang.h"
+#include "rb_smi.h"
 
 #define RB_DRIVER_VERSION ((0u << 16) | (4u << 8) | 1u)
 #define RB_DRIVER_VERSION_STRING "0.4.1"
@@ -135,6 +147,45 @@ MODULE_PARM_DESC(bb_settle_reads, "Pi 4: extra pin reads after each bus clock pu
 
 /* The PIO bus's RX ceiling, measured (gateware/README.md section 5). */
 #define RB_PIO_RX_VALUES_MAX 2370000
+
+/*
+ * Pi 4 with SMI (TODO/RPI4-SMI.md, measured with tools/rbsmi). Registers
+ * as the Raspberry Pi kernel's bcm2835_smi.h names them; that driver does
+ * not bind, since the SMI node stays disabled, and is not used: it reads
+ * only 8 and 16 bits wide, and the RX bus needs SD17.
+ */
+#define RB_SMI_CS 0x00
+#define RB_SMI_L 0x04
+#define RB_SMI_A 0x08
+#define RB_SMI_D 0x0c
+#define RB_SMI_DSR0 0x10
+#define RB_SMI_DC 0x30
+#define RB_SMI_CS_ENABLE BIT(0)
+#define RB_SMI_CS_DONE BIT(1) /* written 1 to clear */
+#define RB_SMI_CS_START BIT(3)
+#define RB_SMI_CS_CLEAR BIT(4)
+#define RB_SMI_CS_INTD BIT(9) /* interrupt when a transfer is done */
+#define RB_SMI_CS_RUN (RB_SMI_CS_ENABLE | RB_SMI_CS_INTD)
+#define RB_SMI_CLOCK_HZ 125000000
+/* 18-bit reads (RWIDTH 2), setup 2, hold 2, pace 16, strobe 10 cycles. */
+#define RB_SMI_DSR0_VALUE (2u << 30 | 2u << 24 | 2u << 16 | 16u << 8 | 10u)
+/* DMA requests on, thresholds as bcm2835_smi sets them. */
+#define RB_SMI_DC_VALUE (BIT(28) | 32u << 18 | 32u << 12 | 1u << 6 | 63u)
+/*
+ * A transfer's length: the strobes stop at its end, and START written while
+ * one runs is ignored, so the done interrupt starts the next; 2^30 strobes
+ * last about two minutes.
+ */
+#define RB_SMI_TRANSFER_WORDS (1u << 30)
+#define RB_SMI_PERIOD_WORDS 16384 /* 1.8 ms of strobes */
+#define RB_SMI_PERIODS 32
+/* No DMA period for this long with RX running: restart the transfer. */
+#define RB_SMI_WATCHDOG_MS 20
+/*
+ * About 9 million strobes a second, 8 a value: 1.12 million values a
+ * second measured clean; offered with a margin.
+ */
+#define RB_SMI_RX_VALUES_MAX 1000000
 
 /* rp1-pio's own values (drivers/misc/rp1-pio.c): FIFO depth, DMACTRL base. */
 #define RB_PIO_FIFO_DEPTH 8
@@ -247,6 +298,28 @@ struct rb_dev {
 	u32 *bb_rx_words;
 	u32 *bb_tx_words;
 	unsigned int bb_tx_count, bb_tx_pos; /* words in bb_tx_words, words sent */
+
+	/* Pi 4 with SMI: RX by SMI and DMA, TX as above. */
+	void __iomem *smi_regs;
+	struct clk *smi_clk;
+	struct dma_chan *smi_chan;
+	dma_cookie_t smi_cookie;
+	u32 *smi_buf; /* coherent: the DMA ring */
+	dma_addr_t smi_buf_dma;
+	size_t smi_buf_bytes;
+	u32 *smi_copy; /* one period, cached */
+	u32 *smi_values;
+	spinlock_t smi_parse_lock; /* smi_read, smi_parser, smi_copy, smi_values */
+	unsigned int smi_read; /* the next ring word to parse */
+	struct rb_smi_parser smi_parser;
+	int smi_irq;
+	struct pinctrl *smi_pinctrl;
+	spinlock_t smi_lock; /* SMI control register, smi_strobing */
+	bool smi_strobing; /* RX wanted: the done interrupt restarts transfers */
+	u64 smi_periods; /* DMA callback only */
+	u64 smi_seen_periods; /* worker only */
+	unsigned long smi_last_progress; /* worker only */
+	u64 smi_restarts, smi_stalls;
 
 	spinlock_t rx_lock; /* parser, rx ring, rx statistics */
 	struct rb_rx_parser parser;
@@ -1207,6 +1280,458 @@ static const struct rb_transport rb_bb_transport = {
 	.rx_resume = rb_bb_rx_resume,
 };
 
+/* ---- SMI with DMA (Pi 4 with the radioberry-smi overlay) -------------- */
+
+/* Starts a transfer; with smi_lock held. DONE is cleared by writing 1. */
+static void rb_smi_start_locked(struct rb_dev *rb)
+{
+	lockdep_assert_held(&rb->smi_lock);
+	writel(RB_SMI_CS_RUN | RB_SMI_CS_DONE | RB_SMI_CS_START, rb->smi_regs + RB_SMI_CS);
+}
+
+/* A transfer ended: start the next at once, while RX is wanted. */
+static irqreturn_t rb_smi_irq(int irq, void *arg)
+{
+	struct rb_dev *rb = arg;
+	irqreturn_t ret = IRQ_NONE;
+
+	spin_lock(&rb->smi_lock);
+	if (readl(rb->smi_regs + RB_SMI_CS) & RB_SMI_CS_DONE) {
+		if (rb->smi_strobing) {
+			rb_smi_start_locked(rb);
+			rb->smi_restarts++;
+		} else {
+			writel(RB_SMI_CS_DONE, rb->smi_regs + RB_SMI_CS);
+		}
+		ret = IRQ_HANDLED;
+	}
+	spin_unlock(&rb->smi_lock);
+	return ret;
+}
+
+#define RB_SMI_RING_WORDS (RB_SMI_PERIOD_WORDS * RB_SMI_PERIODS)
+
+/*
+ * The word the DMA writes next, from the transfer's residue: callbacks can
+ * arrive late and merged, so the position is read, not counted.
+ */
+static unsigned int rb_smi_written(struct rb_dev *rb)
+{
+	struct dma_tx_state state;
+	size_t pos;
+
+	dmaengine_tx_status(rb->smi_chan, rb->smi_cookie, &state);
+	pos = rb->smi_buf_bytes - min_t(size_t, state.residue, rb->smi_buf_bytes);
+	return (pos / 4) % RB_SMI_RING_WORDS;
+}
+
+/*
+ * Parses the ring from where the last call stopped up to @end; with
+ * smi_parse_lock held. The ring is coherent and so uncached on the Pi 4:
+ * reading it word by word cost four times a bulk copy into cached memory
+ * and parsing there. Returns true if a reader should be woken.
+ */
+static bool rb_smi_parse_to_locked(struct rb_dev *rb, unsigned int end)
+{
+	unsigned int n, got;
+	bool wake = false;
+
+	lockdep_assert_held(&rb->smi_parse_lock);
+	while (rb->smi_read != end) {
+		n = (end > rb->smi_read ? end : RB_SMI_RING_WORDS) - rb->smi_read;
+		n = min_t(unsigned int, n, RB_SMI_PERIOD_WORDS);
+		memcpy(rb->smi_copy, rb->smi_buf + rb->smi_read, (size_t)n * 4);
+		rb->smi_read = (rb->smi_read + n) % RB_SMI_RING_WORDS;
+		got = rb_smi_parse(&rb->smi_parser, rb->smi_copy, n, rb->smi_values);
+		if (got && rb_rx_consume(rb, rb->smi_values, got))
+			wake = true;
+	}
+	return wake;
+}
+
+/* DMA callback, in a tasklet: parses up to where the DMA has written. */
+static void rb_smi_dma_done(void *param)
+{
+	struct rb_dev *rb = param;
+	bool wake;
+
+	spin_lock(&rb->smi_parse_lock);
+	wake = rb_smi_parse_to_locked(rb, rb_smi_written(rb));
+	spin_unlock(&rb->smi_parse_lock);
+	WRITE_ONCE(rb->smi_periods, rb->smi_periods + 1);
+	if (wake)
+		wake_up_interruptible(&rb->rx_wait);
+}
+
+/*
+ * Stops the strobes, so the RX clock stands still; false if not running.
+ * Then parses every word read before the stop, so that none is parsed
+ * after a later reset of the parsers (rb_smi_rx_release(), rb_rx_gate()).
+ */
+static bool rb_smi_rx_hold(struct rb_dev *rb)
+{
+	unsigned long flags;
+	bool wake;
+
+	if (!rb->smi_regs)
+		return false;
+	spin_lock_irqsave(&rb->smi_lock, flags);
+	rb->smi_strobing = false;
+	writel(0, rb->smi_regs + RB_SMI_CS);
+	spin_unlock_irqrestore(&rb->smi_lock, flags);
+	/*
+	 * A strobe in progress lasts at most 30 cycles of 8 ns; the DMA then
+	 * empties the SMI FIFO at about 9 million words a second.
+	 */
+	udelay(10);
+	spin_lock_bh(&rb->smi_parse_lock);
+	wake = rb_smi_parse_to_locked(rb, rb_smi_written(rb));
+	spin_unlock_bh(&rb->smi_parse_lock);
+	if (wake)
+		wake_up_interruptible(&rb->rx_wait);
+	return true;
+}
+
+/*
+ * Resumes the strobes. Stopping them can cut a value short (a strobe ended
+ * early, or its word not taken), so the value in progress is dropped: its
+ * remaining nibbles carry no sample-ready and pass as idle words, and the
+ * parser settling after a pause or a receiver-count change counts it as
+ * discarded.
+ */
+static void rb_smi_rx_release(struct rb_dev *rb)
+{
+	unsigned long flags;
+
+	spin_lock_bh(&rb->smi_parse_lock);
+	rb_smi_init(&rb->smi_parser);
+	spin_unlock_bh(&rb->smi_parse_lock);
+	spin_lock_irqsave(&rb->smi_lock, flags);
+	rb->smi_strobing = true;
+	rb_smi_start_locked(rb);
+	spin_unlock_irqrestore(&rb->smi_lock, flags);
+	rb->smi_last_progress = jiffies;
+}
+
+static void rb_smi_rx_pause(struct rb_dev *rb)
+{
+	rb_smi_rx_hold(rb);
+}
+
+static void rb_smi_rx_resume(struct rb_dev *rb)
+{
+	if (rb->smi_regs)
+		rb_smi_rx_release(rb);
+}
+
+/*
+ * A stream that should run but has completed no DMA period for
+ * RB_SMI_WATCHDOG_MS has stopped: restart the transfer and count it. Not
+ * seen once the done interrupt restarted transfers; kept as a safety net.
+ * Worker only.
+ */
+static void rb_smi_watchdog(struct rb_dev *rb)
+{
+	u64 periods = READ_ONCE(rb->smi_periods);
+	unsigned long flags;
+	bool restart = false;
+	u32 cs = 0;
+
+	if (periods != rb->smi_seen_periods || !READ_ONCE(rb->smi_strobing)) {
+		rb->smi_seen_periods = periods;
+		rb->smi_last_progress = jiffies;
+		return;
+	}
+	if (time_before(jiffies, rb->smi_last_progress + msecs_to_jiffies(RB_SMI_WATCHDOG_MS)))
+		return;
+	spin_lock_irqsave(&rb->smi_lock, flags);
+	if (rb->smi_strobing) {
+		cs = readl(rb->smi_regs + RB_SMI_CS);
+		rb_smi_start_locked(rb);
+		rb->smi_stalls++;
+		restart = true;
+	}
+	spin_unlock_irqrestore(&rb->smi_lock, flags);
+	rb->smi_last_progress = jiffies;
+	if (restart)
+		dev_warn_ratelimited(rb->dev, "SMI stream stalled (CS 0x%08x); restarted\n", cs);
+}
+
+/* With RX by SMI the thread has only TX to clock: it sleeps without it. */
+static bool rb_smi_tx_wake(struct rb_dev *rb)
+{
+	unsigned long flags;
+	bool tx_data;
+
+	if (kthread_should_stop())
+		return true;
+	spin_lock_irqsave(&rb->tx_lock, flags);
+	tx_data = rb_ring_used(&rb->tx_ring) != 0;
+	spin_unlock_irqrestore(&rb->tx_lock, flags);
+	return tx_data;
+}
+
+static int rb_smi_worker(void *arg)
+{
+	struct rb_dev *rb = arg;
+	bool tx_busy;
+
+	while (!kthread_should_stop()) {
+		mutex_lock(&rb->bb_lock);
+		tx_busy = rb_bb_tx(rb);
+		mutex_unlock(&rb->bb_lock);
+		rb_check_stall(rb);
+		rb_smi_watchdog(rb);
+		if (tx_busy)
+			cond_resched();
+		else
+			wait_event_interruptible_timeout(rb->work_wait, rb_smi_tx_wake(rb),
+							 msecs_to_jiffies(RB_SMI_WATCHDOG_MS));
+	}
+	return 0;
+}
+
+static void rb_smi_down(struct rb_dev *rb)
+{
+	unsigned long flags;
+
+	if (rb->smi_regs) {
+		spin_lock_irqsave(&rb->smi_lock, flags);
+		rb->smi_strobing = false;
+		writel(0, rb->smi_regs + RB_SMI_CS);
+		spin_unlock_irqrestore(&rb->smi_lock, flags);
+	}
+	/* The thread and the TX bus, as for the CPU-clocked transport. */
+	rb_bb_down(rb);
+	if (rb->smi_irq > 0)
+		free_irq(rb->smi_irq, rb);
+	rb->smi_irq = 0;
+	if (rb->smi_chan) {
+		dmaengine_terminate_sync(rb->smi_chan);
+		if (rb->smi_buf)
+			dma_free_coherent(rb->smi_chan->device->dev, rb->smi_buf_bytes, rb->smi_buf,
+					  rb->smi_buf_dma);
+		dma_release_channel(rb->smi_chan);
+	}
+	rb->smi_chan = NULL;
+	rb->smi_buf = NULL;
+	if (rb->smi_regs)
+		writel(0, rb->smi_regs + RB_SMI_DC);
+	if (!IS_ERR_OR_NULL(rb->smi_clk)) {
+		clk_disable_unprepare(rb->smi_clk);
+		clk_put(rb->smi_clk);
+	}
+	rb->smi_clk = NULL;
+	if (!IS_ERR_OR_NULL(rb->smi_pinctrl))
+		pinctrl_put(rb->smi_pinctrl);
+	rb->smi_pinctrl = NULL;
+	if (rb->smi_regs)
+		iounmap(rb->smi_regs);
+	rb->smi_regs = NULL;
+	kvfree(rb->smi_copy);
+	kfree(rb->smi_values);
+	rb->smi_copy = NULL;
+	rb->smi_values = NULL;
+}
+
+/* The TX bus as rb_bb_up() sets it up, without the RX pins, which are SMI's. */
+static int rb_smi_tx_up(struct rb_dev *rb)
+{
+	struct device_node *np;
+
+	rb->bb_tx_clk = gpiod_get(rb->dev, "tx-clk", GPIOD_OUT_LOW);
+	rb->bb_tx_data = gpiod_get(rb->dev, "tx-data", GPIOD_OUT_LOW);
+	rb->bb_tx_ready = gpiod_get(rb->dev, "tx-ready", GPIOD_IN);
+	if (IS_ERR(rb->bb_tx_clk) || IS_ERR(rb->bb_tx_data) || IS_ERR(rb->bb_tx_ready)) {
+		dev_err(rb->dev, "cannot claim the TX GPIOs\n");
+		return -ENODEV;
+	}
+	np = of_parse_phandle(rb->dev->of_node, "tx-clk-gpios", 0);
+	if (!np || !of_device_is_compatible(np, "brcm,bcm2711-gpio")) {
+		of_node_put(np);
+		dev_err(rb->dev, "the stream GPIOs are not on the BCM2711 GPIO block\n");
+		return -ENODEV;
+	}
+	rb->bbio.base = of_iomap(np, 0);
+	of_node_put(np);
+	if (!rb->bbio.base)
+		return -ENOMEM;
+	rb->bb_tx_words = kzalloc(RB_TX_SLOT_BYTES, GFP_KERNEL);
+	if (!rb->bb_tx_words)
+		return -ENOMEM;
+	memset(&rb->bb, 0, sizeof(rb->bb));
+	rb->bb.io = &rb->bbio;
+	rb->bb.settle_reads = bb_settle_reads;
+	rb->bb_tx_count = 0;
+	rb->bb_tx_pos = 0;
+	return 0;
+}
+
+/*
+ * The SMI node from the overlay's brcm,smi phandle: its registers, its
+ * clock (stopped while the node is disabled, set here), its DMA channel
+ * and its interrupt; the "smi" pin state switches GPIO 6, 18 to 21 and 25
+ * to SMI.
+ */
+static int rb_smi_up(struct rb_dev *rb)
+{
+	struct dma_slave_config cfg = {
+		.direction = DMA_DEV_TO_MEM,
+		.src_addr_width = DMA_SLAVE_BUSWIDTH_4_BYTES,
+		.src_maxburst = 1,
+	};
+	struct dma_async_tx_descriptor *desc;
+	struct pinctrl_state *state;
+	struct device_node *np;
+	struct resource res;
+	unsigned long flags;
+	int ret;
+
+	np = of_parse_phandle(rb->dev->of_node, "brcm,smi", 0);
+	if (!np)
+		return -ENODEV;
+	ret = of_address_to_resource(np, 0, &res);
+	if (ret)
+		goto fail_node;
+	rb->smi_regs = ioremap(res.start, resource_size(&res));
+	rb->smi_copy = kvcalloc(RB_SMI_PERIOD_WORDS, sizeof(u32), GFP_KERNEL);
+	rb->smi_values = kcalloc(rb_smi_max_values(RB_SMI_PERIOD_WORDS), sizeof(u32), GFP_KERNEL);
+	if (!rb->smi_regs || !rb->smi_copy || !rb->smi_values) {
+		ret = -ENOMEM;
+		goto fail_node;
+	}
+	writel(0, rb->smi_regs + RB_SMI_CS);
+
+	rb->smi_clk = of_clk_get(np, 0);
+	if (IS_ERR(rb->smi_clk)) {
+		ret = PTR_ERR(rb->smi_clk);
+		dev_err(rb->dev, "no SMI clock: %d\n", ret);
+		goto fail_node;
+	}
+	ret = clk_set_rate(rb->smi_clk, RB_SMI_CLOCK_HZ);
+	if (!ret)
+		ret = clk_prepare_enable(rb->smi_clk);
+	if (ret) {
+		dev_err(rb->dev, "cannot run the SMI clock at %u Hz: %d\n", RB_SMI_CLOCK_HZ, ret);
+		clk_put(rb->smi_clk);
+		rb->smi_clk = NULL;
+		goto fail_node;
+	}
+
+	rb->smi_chan = of_dma_request_slave_channel(np, "rx-tx");
+	if (IS_ERR(rb->smi_chan)) {
+		ret = PTR_ERR(rb->smi_chan);
+		rb->smi_chan = NULL;
+		dev_err(rb->dev, "no SMI DMA channel: %d\n", ret);
+		goto fail_node;
+	}
+	/* bcm2835-dma maps a slave address itself: the CPU physical one. */
+	cfg.src_addr = res.start + RB_SMI_D;
+	ret = dmaengine_slave_config(rb->smi_chan, &cfg);
+	if (ret)
+		goto fail_node;
+	rb->smi_buf_bytes = (size_t)RB_SMI_PERIOD_WORDS * 4 * RB_SMI_PERIODS;
+	rb->smi_buf = dma_alloc_coherent(rb->smi_chan->device->dev, rb->smi_buf_bytes,
+					 &rb->smi_buf_dma, GFP_KERNEL);
+	if (!rb->smi_buf) {
+		ret = -ENOMEM;
+		goto fail_node;
+	}
+
+	rb->smi_irq = of_irq_get(np, 0);
+	if (rb->smi_irq <= 0) {
+		ret = rb->smi_irq ? rb->smi_irq : -ENODEV;
+		rb->smi_irq = 0;
+		dev_err(rb->dev, "no SMI interrupt: %d\n", ret);
+		goto fail_node;
+	}
+	ret = request_irq(rb->smi_irq, rb_smi_irq, 0, "radioberry-smi", rb);
+	if (ret) {
+		rb->smi_irq = 0;
+		dev_err(rb->dev, "cannot have the SMI interrupt: %d\n", ret);
+		goto fail_node;
+	}
+	of_node_put(np);
+	np = NULL;
+
+	rb->smi_pinctrl = pinctrl_get(rb->dev);
+	if (IS_ERR(rb->smi_pinctrl)) {
+		ret = PTR_ERR(rb->smi_pinctrl);
+		goto fail;
+	}
+	state = pinctrl_lookup_state(rb->smi_pinctrl, "smi");
+	if (IS_ERR(state)) {
+		ret = PTR_ERR(state);
+		dev_err(rb->dev, "no \"smi\" pin state: %d\n", ret);
+		goto fail;
+	}
+	ret = rb_smi_tx_up(rb);
+	if (ret)
+		goto fail;
+	ret = pinctrl_select_state(rb->smi_pinctrl, state);
+	if (ret)
+		goto fail;
+
+	desc = dmaengine_prep_dma_cyclic(rb->smi_chan, rb->smi_buf_dma, rb->smi_buf_bytes,
+					 RB_SMI_PERIOD_WORDS * 4, DMA_DEV_TO_MEM,
+					 DMA_PREP_INTERRUPT);
+	if (!desc) {
+		ret = -EIO;
+		goto fail;
+	}
+	desc->callback = rb_smi_dma_done;
+	desc->callback_param = rb;
+	rb->smi_read = 0;
+	rb->smi_periods = 0;
+	rb->smi_seen_periods = 0;
+	rb->smi_last_progress = jiffies;
+	rb->smi_restarts = 0;
+	rb->smi_stalls = 0;
+	rb_smi_init(&rb->smi_parser);
+
+	writel(0, rb->smi_regs + RB_SMI_A);
+	writel(RB_SMI_DSR0_VALUE, rb->smi_regs + RB_SMI_DSR0);
+	writel(RB_SMI_DC_VALUE, rb->smi_regs + RB_SMI_DC);
+	writel(RB_SMI_TRANSFER_WORDS, rb->smi_regs + RB_SMI_L);
+	writel(RB_SMI_CS_ENABLE | RB_SMI_CS_CLEAR, rb->smi_regs + RB_SMI_CS);
+	rb->smi_cookie = dmaengine_submit(desc);
+	dma_async_issue_pending(rb->smi_chan);
+
+	rb->worker = kthread_run(rb_smi_worker, rb, "radioberry");
+	if (IS_ERR(rb->worker)) {
+		ret = PTR_ERR(rb->worker);
+		rb->worker = NULL;
+		goto fail;
+	}
+	sched_set_fifo(rb->worker);
+	if (!READ_ONCE(rb->rx_paused)) {
+		spin_lock_irqsave(&rb->smi_lock, flags);
+		rb->smi_strobing = true;
+		rb_smi_start_locked(rb);
+		spin_unlock_irqrestore(&rb->smi_lock, flags);
+	}
+	dev_info(rb->dev, "RX read by SMI with DMA, up to %u RX values per second; TX clocked by the CPU\n",
+		 RB_SMI_RX_VALUES_MAX);
+	return 0;
+
+fail_node:
+	of_node_put(np);
+fail:
+	rb_smi_down(rb);
+	return ret;
+}
+
+static const struct rb_transport rb_smi_transport = {
+	.name = "smi",
+	.rx_values_max = RB_SMI_RX_VALUES_MAX,
+	.up = rb_smi_up,
+	.down = rb_smi_down,
+	.rx_hold = rb_smi_rx_hold,
+	.rx_release = rb_smi_rx_release,
+	.rx_pause = rb_smi_rx_pause,
+	.rx_resume = rb_smi_rx_resume,
+};
+
 /* The transport for this SoC, or NULL. */
 static const struct rb_transport *rb_select_transport(void)
 {
@@ -1224,7 +1749,15 @@ static u32 rb_rx_values_max(const struct rb_dev *rb)
 
 static int rb_streams_up(struct rb_dev *rb)
 {
-	return rb->tp->up(rb);
+	int ret = rb->tp->up(rb);
+
+	/* SMI that cannot start leaves the Pi 4 on its CPU-clocked buses. */
+	if (ret && rb->tp == &rb_smi_transport) {
+		dev_warn(rb->dev, "SMI did not start (%d); RX clocked by the CPU instead\n", ret);
+		rb->tp = &rb_bb_transport;
+		ret = rb->tp->up(rb);
+	}
+	return ret;
 }
 
 static void rb_stop_streams(struct rb_dev *rb)
@@ -1509,8 +2042,9 @@ static long rb_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		info.fpga_type = rb->id.fpga_type;
 		info.receivers = rb->id.receivers;
 		info.transmitters = rb->id.transmitters;
-		info.transport = rb->tp == &rb_bb_transport ? RADIOBERRY_TRANSPORT_CPU
-							     : RADIOBERRY_TRANSPORT_PIO;
+		info.transport = rb->tp == &rb_bb_transport  ? RADIOBERRY_TRANSPORT_CPU :
+				 rb->tp == &rb_smi_transport ? RADIOBERRY_TRANSPORT_SMI :
+							       RADIOBERRY_TRANSPORT_PIO;
 		info.rx_values_max = rb_rx_values_max(rb);
 		spin_lock_irqsave(&rb->rx_lock, flags);
 		info.active_receivers = (u8)rb->receivers;
@@ -1693,7 +2227,7 @@ static ssize_t rx_stalls_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(rx_stalls);
 
-/* How the streams reach the gateware: "rp1-pio" (Pi 5) or "cpu" (Pi 4). */
+/* How the streams reach the gateware: "rp1-pio" (Pi 5), "smi" or "cpu" (Pi 4). */
 static ssize_t transport_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct rb_dev *rb = dev_get_drvdata(dev);
@@ -1780,6 +2314,9 @@ static int rb_probe(struct spi_device *spi)
 	if (!rb->tp)
 		return dev_err_probe(rb->dev, -ENODEV,
 				     "not a Raspberry Pi 4 or 5 (BCM2711 or BCM2712)\n");
+	/* A Pi 4 with the radioberry-smi overlay reads RX with SMI. */
+	if (rb->tp == &rb_bb_transport && of_property_present(rb->dev->of_node, "brcm,smi"))
+		rb->tp = &rb_smi_transport;
 	rb_stream_reset(&rb->rx);
 	rb_stream_reset(&rb->tx);
 	mutex_init(&rb->cmd_lock);
@@ -1787,6 +2324,8 @@ static int rb_probe(struct spi_device *spi)
 	mutex_init(&rb->bb_lock);
 	spin_lock_init(&rb->rx_lock);
 	spin_lock_init(&rb->tx_lock);
+	spin_lock_init(&rb->smi_lock);
+	spin_lock_init(&rb->smi_parse_lock);
 	init_waitqueue_head(&rb->rx_wait);
 	init_waitqueue_head(&rb->tx_wait);
 	init_waitqueue_head(&rb->work_wait);

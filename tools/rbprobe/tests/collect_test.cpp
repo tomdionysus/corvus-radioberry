@@ -335,7 +335,27 @@ TEST_CASE("a Pi 4 needs no RP1 PIO and has no PMIC", "[collect]") {
     CHECK(str(r, "driver.module_file") ==
           "/lib/modules/6.18.60+rpt-rpi-v8/updates/dkms/radioberry.ko.xz");
     CHECK(str(r, "driver.transport") == "cpu");
+    CHECK_FALSE(flag(r, "driver.smi_overlay"));
+    CHECK(has(r, "driver.smi", Severity::kInfo));
     CHECK(r.radio_can_run());
+
+    // With the SMI overlay and SMI running: nothing to say.
+    FakeSource smi = working_pi4();
+    smi.files["/sys/bus/spi/devices/spi0.0/of_node/brcm,smi"] = "";
+    smi.files["/sys/bus/spi/devices/spi0.0/transport"] = "smi\n";
+    const Report rs = collect(smi, test_options());
+    CHECK(str(rs, "driver.transport") == "smi");
+    CHECK(flag(rs, "driver.smi_overlay"));
+    CHECK_FALSE(has_id(rs, "driver.smi"));
+    CHECK(rs.radio_can_run());
+
+    // The overlay without SMI running: the driver fell back to the CPU.
+    smi.files["/sys/bus/spi/devices/spi0.0/transport"] = "cpu\n";
+    CHECK(has(collect(smi, test_options()), "driver.smi", Severity::kWarning));
+
+    // A Pi 5 is never told about SMI.
+    FakeSource pi5 = working_pi();
+    CHECK_FALSE(has_id(collect(pi5, test_options()), "driver.smi"));
 
     // A driver up to release 0.3.0 has no transport attribute.
     FakeSource old = working_pi();

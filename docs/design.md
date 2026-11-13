@@ -81,9 +81,45 @@ These come from hardware and gateware this project does not change.
 ## Transports
 
 The `rpi-v8` kernel boots on both boards and DKMS builds one module per
-kernel, so the module carries both transports and chooses at probe from
-the SoC compatible (`brcm,bcm2711` or `brcm,bcm2712`). Both feed the same
-RX parser and drain the same TX ring.
+kernel, so the module carries every transport and chooses at probe from
+the SoC compatible (`brcm,bcm2711` or `brcm,bcm2712`) and, on a Pi 4,
+the `brcm,smi` property the `radioberry-smi` overlay adds. All feed the
+same RX parser and drain the same TX ring.
+
+### Raspberry Pi 4: SMI with DMA
+
+- The Secondary Memory Interface reads the RX bus: each read strobe on
+  SOE_N (GPIO 6) is one RX clock, and 18-bit reads store SD0 to SD17 in a
+  word, the nibble on SD10 to SD13 (GPIO 18 to 21) and sample-ready on
+  SD17 (GPIO 25). Timing 2, 10, 2, 16 cycles of the 125 MHz SMI clock
+  gives about 9 million strobes a second, 1.12 million values a second
+  measured clean.
+- The driver programs the SMI block itself: the kernel's `bcm2835_smi`
+  reads only 8 and 16 bits wide. The overlay keeps the block disabled so
+  that driver does not bind; the driver maps its registers, sets and
+  enables its clock, and takes its DMA channel and interrupt from the
+  node.
+- A cyclic DMA transfer moves the FIFO into a 2 MiB coherent ring in
+  periods of 16 384 words. The callback reads the DMA position from the
+  residue (callbacks can arrive merged), copies the new words into cached
+  memory (the ring is uncached; reading it word by word cost four times
+  as much) and parses them
+  ([driver/kernel/rb_smi.h](https://github.com/tomdionysus/corvus-radioberry/blob/main/driver/kernel/rb_smi.h)):
+  a word with sample-ready starts a value, the next seven give its
+  nibbles, and the rest are idle.
+- An SMI transfer has a length and the strobes stop at its end; START
+  while one runs is ignored, and an end need not fall on a period
+  boundary. The SMI's done interrupt starts the next transfer at once. A
+  check in the thread restarts a stream that completed no period for
+  20 ms and logs it.
+- RX clock hold and pause: the SMI is disabled, so SOE_N stands still;
+  the words read before are parsed at once, and on release the value in
+  progress is dropped (a disabled strobe can cut one short), which the
+  parser's settling counts as discarded.
+- TX stays CPU-clocked by the thread, which sleeps while there are no TX
+  words.
+- Measured in [CPU cost of receive](finding-rpi4-cpu.md#the-fix) and
+  [TODO/RPI4-SMI.md](https://github.com/tomdionysus/corvus-radioberry/blob/main/TODO/RPI4-SMI.md).
 
 ### Raspberry Pi 4: CPU-clocked
 
@@ -102,12 +138,9 @@ RX parser and drain the same TX ring.
   gives the index nibble and six data nibbles. Pausing the clock pauses
   the bus; the FIFO (1012 values) absorbs about 10 ms at one receiver at
   48 ksps.
-- Not implemented, if more receivers or less CPU are wanted: SMI
-  programmed reads with DMA for RX (read strobe GPIO 6, SD10 to SD13 on
-  GPIO 18 to 21, SD17 on GPIO 25), which needs a Pi 4-only overlay because
-  any fragment naming the SMI block fails to merge onto the Pi 5 tree; or
-  DMA writing the GPIO set and clear registers paced by PWM or PCM, which
-  cannot react to TX ready.
+- Without the `radioberry-smi` overlay, or when SMI cannot start. Not
+  implemented for TX: DMA writing the GPIO set and clear registers paced
+  by PWM or PCM, which cannot react to TX ready.
 
 ### Raspberry Pi 5: RP1 PIO
 

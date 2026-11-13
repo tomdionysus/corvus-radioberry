@@ -9,14 +9,15 @@ that core is spent polling the RX bus for the next value, not moving
 data: at one receiver at 192 ksps, 63% of the bus clocks find no value
 ready.
 
-A second effect is open: piHPSDR at one receiver at 48 ksps also held the
-thread at 100%, where `p1probe` at the same rate costs 17%.
+A second effect: piHPSDR at one receiver at 48 ksps also held the thread
+at 100%, where `p1probe` at the same rate costs 17%; its cause was not
+found on the CPU transport.
 
-The planned fix reads the RX bus with the BCM2711's SMI peripheral and
-DMA
-([TODO/RPI4-SMI.md](https://github.com/tomdionysus/corvus-radioberry/blob/main/TODO/RPI4-SMI.md)).
-The Raspberry Pi 5 is not affected: its RX bus is clocked by RP1 PIO, not
-the CPU.
+The fix reads the RX bus with the BCM2711's SMI peripheral and DMA, with
+the `radioberry-smi` overlay ([The fix](#the-fix)): piHPSDR at 192 ksps
+now leaves every core below 30%, and the driver's thread takes about 4%,
+for TX. The Raspberry Pi 5 is not affected: its RX bus is clocked by RP1
+PIO, not the CPU.
 
 ## Report
 
@@ -134,3 +135,48 @@ section 2).
   core while the thread polls. A CPU transport that sleeps between
   bursts was not tried; the SMI transport removes the CPU from the RX bus
   altogether.
+
+## The fix
+
+With the `radioberry-smi` overlay ([Raspberry Pi 4](rpi4.md)) the
+BCM2711's Secondary Memory Interface strobes the RX clock and a DMA
+transfer moves the words to memory; the driver parses them in the DMA
+callback ([Design](design.md#raspberry-pi-4-smi-with-dma)). Same Pi 4,
+kernel 6.18.60, receive only, 40 m.
+
+piHPSDR on the Pi's desktop, Protocol 1, one receiver at 192 ksps, 60 s:
+
+| | CPU transport | SMI |
+|---|---|---|
+| Cores | 19%, 100%, 20%, 19% | 28%, 14%, 16%, 21% |
+| Driver's thread | 101.5% | 3.9% |
+
+piHPSDR at one receiver at 48 ksps (one session, 60 s): the driver's
+thread 4.8%, against 102 to 104% on the CPU transport.
+
+Through `radioberryd` with `p1probe` and `p2probe`, 30 s each, no packets
+lost:
+
+| Setting | Driver's thread, CPU transport | Driver's thread, SMI |
+|---|---|---|
+| P1, 1 receiver at 48 ksps | 17% | 4.1% |
+| P1, 1 at 96 | 100% | 4.3% |
+| P1, 1 at 192 | 100% | 4.2% |
+| P1, 1 at 384 | 100% | 4.2% |
+| P1, 2 at 192 | 100% | 4.1% |
+| P2, 1 at 192 | 100% | 0.1% |
+| P2, 1 at 384 | 100% | 0.0% |
+
+With SMI the thread clocks only TX, which Protocol 1 clients always send
+(zeros while receiving) and Protocol 2 receive-only clients do not. The
+receive work itself is in the DMA callback: with the measurement module
+`rbsmi_dma`, all four cores together, 0.53% at one receiver at 192 ksps,
+0.64% at 384, 1.33% at 1.12 million values a second, the bus's ceiling at
+this timing.
+
+Continuity: one receiver at 192 ksps through `radioberryd` for 10
+minutes, 914 308 packets, none lost; `rbsmi_dma` at 768 000 values a
+second for 10 minutes twice, with SMI transfers ending every 0.14 s in
+the second (1 424 restarts), every frame in sequence. `rbdrivertest`
+passed (12 test cases, 2 runs) and `ft8rx` decoded over both protocols
+with no packets lost.

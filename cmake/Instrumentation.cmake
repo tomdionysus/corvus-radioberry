@@ -5,16 +5,29 @@
 # test binary.
 
 option(RADIOBERRY_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+option(RADIOBERRY_TSAN "Build with ThreadSanitizer" OFF)
 option(RADIOBERRY_COVERAGE "Build with gcov instrumentation and add a coverage target" OFF)
 
-if(RADIOBERRY_SANITIZE AND RADIOBERRY_COVERAGE)
-    message(FATAL_ERROR "RADIOBERRY_SANITIZE and RADIOBERRY_COVERAGE are separate builds")
+set(_instrumented 0)
+foreach(_option RADIOBERRY_SANITIZE RADIOBERRY_TSAN RADIOBERRY_COVERAGE)
+    if(${_option})
+        math(EXPR _instrumented "${_instrumented} + 1")
+    endif()
+endforeach()
+if(_instrumented GREATER 1)
+    message(FATAL_ERROR "RADIOBERRY_SANITIZE, RADIOBERRY_TSAN and RADIOBERRY_COVERAGE are "
+                        "separate builds")
 endif()
 
 if(RADIOBERRY_SANITIZE)
     add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer
                         -fno-sanitize-recover=all)
     add_link_options(-fsanitize=address,undefined)
+endif()
+
+if(RADIOBERRY_TSAN)
+    add_compile_options(-fsanitize=thread -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=thread)
 endif()
 
 if(RADIOBERRY_COVERAGE)

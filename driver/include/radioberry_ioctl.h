@@ -59,6 +59,7 @@ struct radioberry_info {
 
 #define RADIOBERRY_TRANSPORT_PIO 1 /* Raspberry Pi 5: RP1 PIO state machines */
 #define RADIOBERRY_TRANSPORT_CPU 2 /* Raspberry Pi 4: clocked by a kernel thread */
+#define RADIOBERRY_TRANSPORT_SMI 3 /* Raspberry Pi 4: RX by SMI with DMA, TX by a thread */
 
 /*
  * One gateware command. tx[0] holds RADIOBERRY_CMD_* flags, tx[1..5] the

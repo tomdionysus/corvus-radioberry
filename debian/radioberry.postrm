@@ -7,7 +7,8 @@ case "$1" in
         if [ -L /usr/lib/firmware/radioberry.rbf ]; then
             rm -f /usr/lib/firmware/radioberry.rbf
         fi
-        rm -f /boot/firmware/overlays/radioberry.dtbo
+        rm -f /boot/firmware/overlays/radioberry.dtbo \
+            /boot/firmware/overlays/radioberry-smi.dtbo
         ;;
 esac
 

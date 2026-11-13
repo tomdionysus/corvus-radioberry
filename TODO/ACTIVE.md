@@ -30,13 +30,14 @@ item is removed from here and recorded at the top of
   floor about 46 dB down).
 - `ft8rx` (`examples/ft8`, optional): receive-only FT8 decoder over
   Protocol 1 or 2.
-- Known limits: on the Pi 4, one receiver at 96 ksps or more, or three
-  or more at 48, holds the driver's thread at 100% of one CPU core,
-  mostly polling (SMI item, section 2), and so did piHPSDR at one
-  receiver at 48 ksps (section 2); each Pi 4 FT8 TX period drops some TX
-  blocks (section 2).
-- Next, in order: the Pi 4 SMI measurement (section 2,
-  [RPI4-SMI.md](RPI4-SMI.md) step 1); `rbprobe` reporting an install of
+- Known limits: on the Pi 4 without the `radioberry-smi` overlay, one
+  receiver at 96 ksps or more holds the driver's thread at 100% of a CPU
+  core; with it (branch `item/rpi4-smi`, not released), receive costs
+  about 1% (section 2). Each Pi 4 FT8 TX period drops some TX blocks
+  (section 2).
+- Next, in order: the SMI item's remaining gate (the Pi 5 on the radio,
+  the 11-kernel matrix on both boards, the release gate), then release;
+  `rbprobe` reporting an install of
   the original software (section 4); the integration test's fault
   injection (section 3). Fuzzing the packet parsers, servers and the
   driver's ioctl and sysfs interface waits until the code settles. The
@@ -115,18 +116,20 @@ item is removed from here and recorded at the top of
 
 - [ ] Raspberry Pi 4 RX over SMI with DMA, so receive no longer holds a
       CPU core ([docs/finding-rpi4-cpu.md](../docs/finding-rpi4-cpu.md)):
-      plan, steps and acceptance in [RPI4-SMI.md](RPI4-SMI.md). Additive
-      beside the working transports; the Pi 5 is rechecked on the radio
-      after every driver step.
-- [ ] Raspberry Pi 4 at 48 ksps with piHPSDR: the driver's thread at
-      102 to 104% of a core and `radioberryd`'s RX threads at about 90%
-      together (2 sessions), against 17% for the driver's thread with
-      `p1probe` at the same rate and packet rate
+      plan, steps and acceptance in [RPI4-SMI.md](RPI4-SMI.md). Done and
+      accepted on the Pi 4 on branch `item/rpi4-smi`; left: the Pi 5 gate
+      on the radio and the 11-kernel matrix on both boards.
+- [ ] Raspberry Pi 4 at 48 ksps with piHPSDR on the `cpu` transport: the
+      driver's thread at 102 to 104% of a core and `radioberryd`'s RX
+      threads at about 90% together (2 sessions), against 17% for the
+      driver's thread with `p1probe` at the same rate and packet rate
       ([docs/finding-rpi4-cpu.md](../docs/finding-rpi4-cpu.md)). A client
       replaying `p1probe`'s commands gave 100% once, right after
-      piHPSDR, and 17% once. Find what puts the driver in that state.
-      Acceptance: piHPSDR at one receiver at 48 ksps costs the driver's
-      thread what `p1probe` does.
+      piHPSDR, and 17% once. With SMI the thread took 4.8% (one session).
+      Find what puts the CPU transport in that state, or settle that the
+      Pi 4 runs SMI. Acceptance: piHPSDR at one receiver at 48 ksps costs
+      the driver's thread what `p1probe` does, on the transport the Pi 4
+      ships with.
 - [ ] Raspberry Pi 4 TX drops: in the 0.4.0 acceptance test each FT8 TX
       period logged 5 to 30 "TX blocks dropped" and 0 to 1 underruns, at
       about 47.6k samples/s. Not investigated. Find the cause and fix it.
@@ -136,8 +139,10 @@ item is removed from here and recorded at the top of
 - [ ] Raspberry Pi 4 on 6.12.75: the harness test "the daemon's device
       layer streams through the driver" failed once in 11 runs (a gap,
       `rx_blocks_dropped` 31, RX queue full); the other 10 passed. It was
-      accepted as an anomaly for 0.4.1. Find the cause. Acceptance: the
-      cause identified, and fixed if it is ours.
+      accepted as an anomaly for 0.4.1. On 6.18.60 with the `cpu`
+      transport (branch `item/rpi4-smi`, 2026-11-13) `rbdrivertest` failed
+      3 assertions in 1 run of 8, test not captured. Find the cause.
+      Acceptance: the cause identified, and fixed if it is ours.
 - [ ] Upstream review: the driver has not been through review on the
       kernel mailing lists.
 
