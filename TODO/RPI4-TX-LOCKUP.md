@@ -30,9 +30,43 @@ settings and the same assumption; what it radiated is not known.
 - "No RF" is a claim that needs a measurement on the build in question.
 
 Open from step 15: why a transmission the daemon logged as drive 0
-produced output (the drive command not reaching or not being obeyed by
-the gateware on SMI, corrupt TX data, or the drive level not scaling the
-output to nothing), measured into the dummy load on both transports.
+produced output. The gateware source gives a likely cause (next
+section); not yet measured.
+
+## Drive 0 does not reach the AD9866 (from the gateware source)
+
+Found by reading the gateware source, not measured. The CL025 build
+uses `rtl/radioberry/ad9866ctrl.v` (`radioberry.qsf`), instantiated in
+`rtl/radioberry/pi-pio/radioberry_core.v` with the gateware reset.
+
+- Command 0x09 maps the drive byte `d` to a TX gain code
+  `((d + 4) >> 3) + (d >> 5)`, 0 to 39 (255 gives 39).
+- The code is written to the AD9866 (register 0x0A, as `{2'b01, code}`)
+  only when it differs from the module's own copy, `tx_gain`.
+- `tx_gain` starts at 0 when the FPGA is configured and has no reset.
+- The gateware reset also resets the AD9866 (`rffe_ad9866_rst_n =
+  ~reset`), and the module's start-up sequence then writes 0x7f to
+  register 0x0A: code 63, above the 39 of full drive.
+
+So after the FPGA is loaded, drive 0 to 3 (code 0, equal to the stale
+copy) is never written and the AD9866 stays at the start-up gain, the
+highest. After any later gateware reset the same holds for the drive
+that was last in use. The daemon's `drive_ceiling` cannot lower the
+output below that, on either transport: it is the same gateware.
+
+Fits step 15: the Pi had rebooted at about 15:20, and steps 14 and 15
+after it only ever sent drive 0, so step 15 most likely transmitted at
+the start-up gain while the daemon logged drive 0. Step 14 sent zero
+samples. Steps 9 and 10 used drive 150 (code 23), which differs from the
+copy and was written; this does not explain the lock-up.
+
+To confirm (keyed, into the dummy load, owner's go-ahead and physical
+state first): output at drive 0 straight after an FPGA load against
+drive 8 then 0, recorded with the HackRF.
+
+Possible fixes: the gateware clears `tx_gain` on reset (or always writes
+on 0x09); or the host sends a different drive and then the wanted one,
+with PTT clear, whenever it opens the device or the gateware was reset.
 
 ## The owner's assessment
 
@@ -164,7 +198,11 @@ steps are keyed, in this order, each one capture on SMI:
    Safety). One transmission: pings delayed, none lost; the owner did
    not report on the desktop.
 3. Not run. Whatever follows is the owner's decision, with the physical
-   state confirmed first.
+   state confirmed first. Candidates: the drive measurement above; one
+   piHPSDR and WSJT-X transmission on SMI with the capture script (stage
+   C); and, without keying, an `rbcat` option that clocks a non-zero TX
+   pattern with PTT clear, run on SMI under the step 13 load (bus
+   coupling, H2, without RF).
 
 The first of these to stall names what the stall needs; stages C to E
 below then apply to that case.
