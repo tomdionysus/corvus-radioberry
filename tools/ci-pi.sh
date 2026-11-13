@@ -122,10 +122,20 @@ else
     step "clang-tidy: skipped, run-clang-tidy-19 not installed"
 fi
 
-step "ASan and UBSan build and tests"
-cmake --preset asan >/dev/null
-cmake --build --preset asan -j "$jobs"
-ctest --preset asan
+# GCC's AddressSanitizer cannot map its shadow under a kernel with a 39-bit
+# address space (the Pi 4's rpi-v8 kernel); it runs on the Pi 5's.
+asan_probe=$(mktemp -d)
+printf 'int main(void) { return 0; }\n' >"$asan_probe/a.c"
+if cc -fsanitize=address -o "$asan_probe/a" "$asan_probe/a.c" 2>/dev/null &&
+    "$asan_probe/a" 2>/dev/null; then
+    step "ASan and UBSan build and tests"
+    cmake --preset asan >/dev/null
+    cmake --build --preset asan -j "$jobs"
+    ctest --preset asan
+else
+    step "ASan and UBSan: skipped, AddressSanitizer cannot run under this kernel ($(uname -r))"
+fi
+rm -rf "$asan_probe"
 
 step "ThreadSanitizer build and tests"
 cmake --preset tsan >/dev/null
