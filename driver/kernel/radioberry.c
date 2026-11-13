@@ -1058,7 +1058,17 @@ static const struct rb_transport rb_pio_transport = {
 
 /* ---- CPU-clocked buses (Pi 4) --------------------------------------- */
 
-/* Moves TX words from the ring to the gateware; called with bb_lock held. */
+/* Whether TX words wait for room in the gateware's FIFO; bb_lock held. */
+static bool rb_bb_tx_blocked(struct rb_dev *rb)
+{
+	return rb->bb_tx_pos < rb->bb_tx_count;
+}
+
+/*
+ * Moves TX words from the ring to the gateware; called with bb_lock held.
+ * Returns whether any moved: with the gateware's FIFO full none do, and
+ * the caller sleeps instead of polling (the FIFO then holds 85 ms).
+ */
 static bool rb_bb_tx(struct rb_dev *rb)
 {
 	unsigned long flags;
@@ -1091,7 +1101,7 @@ static bool rb_bb_tx(struct rb_dev *rb)
 	spin_lock_irqsave(&rb->tx_lock, flags);
 	rb->stats.tx_words += sent;
 	spin_unlock_irqrestore(&rb->tx_lock, flags);
-	return true;
+	return sent != 0;
 }
 
 /* While RX is paused: wake for TX words, for resume, or to stop. */
@@ -1112,7 +1122,7 @@ static int rb_bb_worker(void *arg)
 {
 	struct rb_dev *rb = arg;
 	unsigned int got;
-	bool paused, tx_busy;
+	bool paused, tx_moved, tx_blocked;
 
 	while (!kthread_should_stop()) {
 		mutex_lock(&rb->bb_lock);
@@ -1121,14 +1131,15 @@ static int rb_bb_worker(void *arg)
 		got = paused ? 0 :
 			       rb_bb_rx_run(&rb->bb, rb->bb_rx_words, RB_BB_RX_BATCH,
 					    RB_BB_RX_MAX_IDLE);
-		tx_busy = rb_bb_tx(rb);
+		tx_moved = rb_bb_tx(rb);
+		tx_blocked = rb_bb_tx_blocked(rb);
 		mutex_unlock(&rb->bb_lock);
 		if (got && rb_rx_consume(rb, rb->bb_rx_words, got))
 			wake_up_interruptible(&rb->rx_wait);
 		rb_check_stall(rb);
-		if (got || tx_busy)
+		if (got || tx_moved)
 			cond_resched();
-		else if (paused)
+		else if (paused && !tx_blocked)
 			wait_event_interruptible_timeout(rb->work_wait, rb_bb_paused_wake(rb),
 							 msecs_to_jiffies(100));
 		else
@@ -1521,17 +1532,21 @@ static bool rb_smi_tx_wake(struct rb_dev *rb)
 static int rb_smi_worker(void *arg)
 {
 	struct rb_dev *rb = arg;
-	bool tx_busy;
+	bool tx_moved, tx_blocked;
 
 	while (!kthread_should_stop()) {
 		mutex_lock(&rb->bb_lock);
-		tx_busy = rb_bb_tx(rb);
+		tx_moved = rb_bb_tx(rb);
+		tx_blocked = rb_bb_tx_blocked(rb);
 		mutex_unlock(&rb->bb_lock);
 		rb_check_stall(rb);
 		rb_smi_watchdog(rb);
 		rb_smi_report_stall(rb);
-		if (tx_busy)
+		if (tx_moved)
 			cond_resched();
+		else if (tx_blocked)
+			/* The gateware's FIFO is full: it holds 85 ms. */
+			usleep_range(RB_BB_IDLE_MIN_US, RB_BB_IDLE_MAX_US);
 		else
 			wait_event_interruptible_timeout(rb->work_wait, rb_smi_tx_wake(rb),
 							 msecs_to_jiffies(RB_SMI_WATCHDOG_MS));
