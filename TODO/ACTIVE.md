@@ -130,6 +130,10 @@ item is removed from here and recorded at the top of
       Pi 4 runs SMI. Acceptance: piHPSDR at one receiver at 48 ksps costs
       the driver's thread what `p1probe` does, on the transport the Pi 4
       ships with.
+- [ ] Raspberry Pi 4 desktop lost while transmitting (Wi-Fi link down
+      from PTT on to PTT off; the Pi itself stays responsive): blocks the
+      release. Sequence, results and next steps in
+      [RPI4-TX-LOCKUP.md](RPI4-TX-LOCKUP.md).
 - [ ] Raspberry Pi 4 `cpu` transport (no SMI overlay, or SMI failed):
       drain in bursts and sleep on a timer instead of polling. The
       original driver sleeps on a GPIO 25 interrupt, but its GPIO-mode
