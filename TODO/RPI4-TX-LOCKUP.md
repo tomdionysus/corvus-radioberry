@@ -28,6 +28,11 @@ All on the Pi 4, kernel 6.18.60, gateware 75.3.
 | 7 | same, no RF: `rbcat --rate 192 --seconds 15 --tx-zeros` (TX clocked by the CPU at 48 000 words/s, PTT clear) | Wi-Fi ping 90/90, slowest 9 ms |
 | 8 | same: `p1probe --rate 192 --mox --seconds 15` through `radioberryd` (PTT and T/R relay keyed, drive 0, PA enable clear, zero samples) | Wi-Fi ping 100/100, slowest 9 ms; no under-voltage; 48 120 TX samples/s, 0 TX blocks dropped |
 
+| 9 | morning packages, piHPSDR and WSJT-X calling on Protocol 2 (owner) | six transmissions, each ended normally after 13.6 to 13.9 s with 0 TX blocks dropped, WSJT-X starting one each period; pings lost from PTT on for 6 s in the first, 0.4 to 7 s late in the next four, and lost from the sixth onward, also in the 17 s between transmissions, until the owner cut the power; the Pi's wake-up lateness stayed at 1 to 10 ms throughout (one 20.7 ms); the kernel logged `sched: DL replenish lagged too much` once, in a 5 s ping stall |
+
+In step 9 the transmitter was not stuck: the desktop was unreachable, so
+WSJT-X's calling could not be halted.
+
 The Pi reported under-voltage (`hwmon1: Undervoltage detected!`) during
 every transmission with RF in steps 1 to 4, with the CPU clock held at
 1.5 GHz; none in step 8.
