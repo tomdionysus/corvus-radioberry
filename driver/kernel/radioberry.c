@@ -1790,6 +1790,31 @@ static int rb_open(struct inode *inode, struct file *file)
 	return stream_open(inode, file);
 }
 
+/*
+ * The general settings a fresh client assumes: one receiver at 48 ksps.
+ * Sent on close by transports with their own command path (the I2S one),
+ * so a client that left more receivers or another rate behind, or was
+ * killed, cannot leave the next one reading frames of the wrong layout:
+ * a client that wants the defaults never sends them.
+ */
+static void rb_observe_command(struct rb_dev *rb, const u8 *tx);
+
+static void rb_command_defaults(struct rb_dev *rb)
+{
+	u8 tx[RB_CMD_BYTES] = { 0 }; /* address 0, data 0, run clear */
+	int ret;
+
+	mutex_lock(&rb->cmd_lock);
+	ret = rb_command_locked(rb, tx, NULL);
+	if (!ret) {
+		rb_observe_command(rb, tx);
+		rb_rx_gate(rb, 0);
+	}
+	mutex_unlock(&rb->cmd_lock);
+	if (ret)
+		dev_err(rb->dev, "default settings on close failed: %d\n", ret);
+}
+
 static int rb_release(struct inode *inode, struct file *file)
 {
 	struct rb_dev *rb = rb_from_file(file);
@@ -1803,6 +1828,8 @@ static int rb_release(struct inode *inode, struct file *file)
 	ret = rb_command_safe(rb, NULL);
 	if (ret)
 		dev_err(rb->dev, "safe command on close failed: %d\n", ret);
+	if (rb->tp->command)
+		rb_command_defaults(rb);
 	atomic_set(&rb->open, 0);
 	return 0;
 }

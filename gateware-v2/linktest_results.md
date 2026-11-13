@@ -150,8 +150,10 @@ So an FPGA reload is a pause, not a fault, for this transport.
 - The I2S link works in both directions at once with the frame format
   above, with the PCM block driven directly by DMA and no ALSA.
 - It is loss-free in both directions at every bit clock tried, up to
-  61.44 MHz, on one wire each way. That carries six receivers at
-  192 ksps on a Raspberry Pi 4, which the plan had assumed impossible.
+  61.44 MHz, on one wire each way: 61.4 Mbit/s, more than the
+  55.3 Mbit/s of six receivers' 24-bit values at 192 ksps. How many
+  receivers that gives depends on the word format; with one value per
+  32-bit word, as the first receive image sends, it is four at 192 ksps.
 - The Pi-to-FPGA direction needs its sampling point set by design.
 
 ## What it does not establish

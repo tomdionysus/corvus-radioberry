@@ -164,10 +164,14 @@ GPIO 4, 5, 6 and 12 carry nothing.
 - Capacity, measured with the link test image and DMA
   ([Link test results](linktest_results.md)): loss-free both ways at a
   61.44 MHz bit clock for 10 minutes, idle and under full load. That is
-  61.4 Mbit/s each way on one wire, enough for six receivers at 192 ksps
-  (55.3 Mbit/s), the same as the Raspberry Pi 5 carries today. The
+  61.4 Mbit/s each way on one wire. Six receivers at 192 ksps are
+  55.3 Mbit/s of 24-bit values, but the first receive image sends one
+  value per 32-bit word (24 bits of value, a valid bit and the index),
+  1.92 million values a second; with a quarter kept spare the driver
+  offers 1.536 million: four receivers at 192 ksps, two at 384, six at
+  96. Six at 192 needs a denser word (four values in three words). The
   FPGA must sample the Pi's data about two bit periods after its own
-  clock edge at that rate.
+  clock edge at 61.44 MHz.
 - Host: a third transport in the driver beside `pio` and `cpu`, which
   programs the PCM block's registers and runs cyclic DMA in both
   directions through `dmaengine`. A Raspberry Pi 4-only overlay gives the
