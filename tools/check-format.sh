@@ -2,9 +2,11 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 # Checks C and C++ formatting against .clang-format with clang-format 19.
-# With --fix, rewrites the files instead. The kernel module and the ABI
-# header it shares with userspace follow the kernel's own style and are not
-# checked here, nor is vendored third-party code (*/ft8_lib/).
+# With --fix, rewrites the files instead. The kernel module, the ABI
+# header it shares with userspace and the SMI measurement module
+# (tools/rbsmi/kmod/) follow the kernel's own style and are not checked
+# here (checkpatch checks them), nor is vendored third-party code
+# (*/ft8_lib/).
 set -eu
 
 cd "$(git rev-parse --show-toplevel)"
@@ -25,7 +27,8 @@ if ! "$clang_format" --version | grep -q 'version 19\.'; then
 fi
 
 files=$(git ls-files -co --exclude-standard -- '*.c' '*.h' '*.cpp' '*.hpp' |
-    grep -v -e '^driver/kernel/' -e '^driver/include/' -e '/ft8_lib/' || true)
+    grep -v -e '^driver/kernel/' -e '^driver/include/' -e '^tools/rbsmi/kmod/' \
+        -e '/ft8_lib/' || true)
 if [ -z "$files" ]; then
     echo "format: no files"
     exit 0
