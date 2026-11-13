@@ -35,6 +35,11 @@ All on the Pi 4, kernel 6.18.60, gateware 75.3, SMI transport.
 | 9 | same, piHPSDR and WSJT-X calling on Protocol 2 | six transmissions of 13.6 to 13.9 s, 0 TX blocks dropped, WSJT-X starting one each period; pings lost for 6 s from PTT on in the first, 0.4 to 7 s late in the next four, lost from the sixth onward including the 17 s between transmissions, until the owner cut the power; wake-up lateness on the Pi 1 to 10 ms (one 20.7 ms); the kernel logged `sched: DL replenish lagged too much` once, in a 5 s ping stall |
 | 10 | same, piHPSDR and WSJT-X, 192 then 48 ksps (owner) | ten transmissions from 14:32:15, 13.8 to 14.0 s, 47 633 to 48 024 samples/s; the first dropped 100 TX blocks, the rest none. The Pi's own ping to its router, each second: 1 to 11 ms outside transmissions; during each, lost in 1 to 4 seconds and 50 to 981 ms in others. Wi-Fi signal unchanged (-61 to -62 dBm), TX bitrate 72.2 Mb/s dipping to 65; throttle flags 0x0 throughout (no under-voltage) and no kernel message; wake-up lateness 1 to 16 ms, 44.7 to 79.5 ms in the second after PTT on. Owner: the desktop locked at 48 ksps too, and the TX data looked corrupt |
 | 11 | released 0.4.1 (driver and daemon), `cpu` transport, SMI overlay removed, same config; piHPSDR and WSJT-X transmitting at 48 ksps and at the higher rate (owner) | owner: noticeable slowdown, but no lock-up of the desktop or the network at either rate |
+| 12 | released 0.4.1, `cpu`, no RF, daemon stopped: `rbcat --rate 192` (a) alone, (b) with `--tx-zeros`, (c) with `--tx-zeros`, `stress-ng --cpu 4` and a stream out over the Wi-Fi | 12 s each, router ping every 0.2 s: 60/60 in each, slowest 128, 5 and 90 ms; (c) carried 7.3 MB/s over the Wi-Fi with every core busy; streams clean |
+| 13 | SMI packages again, no RF: (a) to (c) as step 12, and (d) `p2probe --rate 192` through `radioberryd` with the same load | router ping 60/60 in each, slowest 7, 5, 101 and 69 ms; Wi-Fi stream 7.3 MB/s in (c) and (d); SMI DMA 545 interrupts a second in all four (one per period); CPU 0 in softirq 5.5%, 3.5%, 19% and 22%; streams clean, 48 000 TX words a second taken in (b) and (c) |
+
+Without a keyed transmitter the Wi-Fi shows single pings of 60 to 200 ms
+now and then on both transports (steps 12 and 13).
 
 The Pi reported under-voltage (`hwmon1: Undervoltage detected!`) during
 the transmissions in steps 1 to 4; none in steps 8 and 10.
@@ -69,9 +74,14 @@ Read from the step 3 trace (perf, `/proc/interrupts` before and after,
 - Step 3: `memcpy` took 5.9% of all samples (a quarter of one core),
   nearly all under `rb_smi_dma_done`, and `rb_smi_parse_to_locked` 1.8%;
   softirq time was 9.2% of the four cores. `rb_bb_tx` took 13.9%.
-- Step 3: the SMI's DMA channel interrupted 7 752 times in the window,
-  against 549 a second for one interrupt per period at 9 million strobes
-  a second. No receive-only figure exists to compare with.
+- Step 3: the SMI's DMA channel interrupted 7 752 times in the window.
+  The window was not timed (it ended when `perf` had finished writing);
+  at the 545 a second measured in step 13 it would have been 14 s, which
+  the other counters allow. No sign from this that the DMA moved more
+  words than the strobes give.
+- Step 13 against step 3: the SMI tasklet costs 5.5% of CPU 0 receiving
+  at 192 ksps on an idle system, and about a quarter of a core during
+  the step 3 transmission.
 - No `mmc`, `brcmfmac`, SMI stall or hold-leak message in any saved
   kernel log.
 - Steps 6 to 8 differ from the failing runs in more than RF: zero TX
@@ -86,7 +96,13 @@ Read from the step 3 trace (perf, `/proc/interrupts` before and after,
 
 ## Hypotheses
 
-None is proven. In order of how well the data above supports them:
+None is proven. In order of how well the data above supports them, as
+ranked before steps 12 and 13. Step 13 then loaded the SMI transport
+with every core busy, 7.3 MB/s over the Wi-Fi, CPU 0 at 22% softirq and
+TX words clocked, without keying, and the network held: load alone does
+not cause the stall, which weakens H1 and H3 as stated. What remains
+needs the transmitter keyed: the keyed state itself, non-zero TX data,
+the real clients, or RF.
 
 - H1. The SMI's DMA tasklet (a 64 KB copy from uncached memory and a
   parse, per period, in softirq on CPU 0) overloads CPU 0 under transmit
@@ -111,6 +127,20 @@ go-ahead at the time. The Pi under test runs the released 0.4.1; stages B
 onward need the SMI packages (`0.4.1+git16.gc3c96c1`) and overlay back on
 it. Each stage states what it decides; stop at the first that settles
 the cause.
+
+Done: stage A without transmissions (step 12) and stage B without the
+extra counters (step 13). Neither reproduced the stall, so the next
+steps are keyed, in this order, each one capture on SMI:
+
+1. `p2probe --mox --rate 192` through `radioberryd` under the step 13
+   load: PTT and the T/R relay keyed, drive 0, zero samples, PA enable
+   clear. A stall here needs neither RF nor TX data nor the real clients.
+2. piHPSDR and WSJT-X transmitting with `allow_pa: false` and
+   `drive_ceiling: 0`: the real clients and their TX data, no RF.
+3. The same with the PA and drive as in step 10, into the dummy load.
+
+The first of these to stall names what the stall needs; stages C to E
+below then apply to that case.
 
 ### A. Baseline on the `cpu` transport (as installed, with transmissions)
 
