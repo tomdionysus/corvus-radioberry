@@ -295,7 +295,7 @@ struct rb_dev {
 	u32 *pcm_copy, *pcm_values;	/* one period each, cached */
 	bool pcm_streaming;
 	u64 pcm_tx_late;	/* TX DMA reached periods not yet filled */
-	u64 pcm_tx_fifo_errors;	/* PCM TX FIFO ran dry: stream resynchronised */
+	u64 pcm_tx_fifo_errors;	/* PCM TX FIFO ran dry (the image realigns) */
 	unsigned int i2s_div;		/* the divider the streams run at */
 	unsigned int i2s_div_want;	/* for the current receivers and rate */
 	u8 *frame_tx, *frame_rx;	/* DMA-safe */
@@ -307,7 +307,6 @@ struct rb_dev {
 	bool i2s_control_sent;
 	bool i2s_loopback;	/* sysfs tx_loopback */
 	struct delayed_work i2s_keepalive; /* rewrites KEYING while it is set */
-	struct work_struct i2s_resync;	   /* restarts the streams after a TX FIFO error */
 	u8 i2s_reply[RB_CMD_BYTES]; /* identity in the PIO reply layout, once valid */
 	bool i2s_identified;
 
@@ -1614,12 +1613,10 @@ static void rb_i2s_dma_done(void *param)
 	if (cs & RB_PCM_CS_TXERR) {
 		/*
 		 * The PCM block sent zeros and may have slipped a word between
-		 * its two channels. The image drops frames whose flags fail
-		 * their check; restart the streams to put the words back.
+		 * its two channels; the image finds the new word phase itself.
 		 */
 		rb->pcm_tx_fifo_errors++;
-		rb_debug(rb, "PCM TX FIFO ran dry: restarting the streams\n");
-		schedule_work(&rb->i2s_resync);
+		rb_debug(rb, "PCM TX FIFO ran dry\n");
 	}
 
 	if (rb_i2s_tx_fill(rb, period, bytes))
@@ -1673,17 +1670,6 @@ static void rb_i2s_keepalive(struct work_struct *work)
 	mutex_unlock(&rb->cmd_lock);
 	if (keying)
 		schedule_delayed_work(&rb->i2s_keepalive, msecs_to_jiffies(RB_I2S_KEEPALIVE_MS));
-}
-
-/* After the PCM TX FIFO ran dry: both streams from the start. */
-static void rb_i2s_resync(struct work_struct *work)
-{
-	struct rb_dev *rb = container_of(work, struct rb_dev, i2s_resync);
-
-	mutex_lock(&rb->cmd_lock);
-	if (rb->pcm_streaming && !rb->rx_paused && rb_i2s_set_div(rb, rb->i2s_div, true))
-		dev_err_ratelimited(rb->dev, "restarting the I2S streams failed\n");
-	mutex_unlock(&rb->cmd_lock);
 }
 
 /*
@@ -1755,7 +1741,6 @@ static int rb_i2s_command(struct rb_dev *rb, const u8 *tx, u8 *rx)
 
 static void rb_i2s_down(struct rb_dev *rb)
 {
-	cancel_work_sync(&rb->i2s_resync);
 	if (rb->pcm) {
 		mutex_lock(&rb->cmd_lock);
 		if (rb_i2s_link_stop(rb, rb->i2s_div_want))
@@ -2488,7 +2473,8 @@ static ssize_t i2s_counters_show(struct device *dev, struct device_attribute *at
 		{ RB_BREG_I2S_TX, "words_to_pi" },  { RB_BREG_I2S_RX, "tx_samples" },
 		{ RB_BREG_SEQ_GAPS, "tx_seq_gaps" }, { RB_BREG_TX_BAD, "tx_bad_frames" },
 		{ RB_BREG_TX_OVF, "tx_overflows" },  { RB_BREG_TX_UNDER, "tx_underruns" },
-		{ RB_BREG_STATUS2, "status2" },	     { RB_BREG_CONTROL, "control" },
+		{ RB_BREG_REALIGNS, "tx_realigns" }, { RB_BREG_STATUS2, "status2" },
+		{ RB_BREG_CONTROL, "control" },
 		{ RB_BREG_KEYING, "keying" },	     { RB_BREG_I2S, "i2s" },
 	};
 	struct rb_dev *rb = dev_get_drvdata(dev);
@@ -2609,7 +2595,6 @@ static int rb_probe(struct spi_device *spi)
 	init_waitqueue_head(&rb->tx_wait);
 	init_waitqueue_head(&rb->work_wait);
 	INIT_DELAYED_WORK(&rb->i2s_keepalive, rb_i2s_keepalive);
-	INIT_WORK(&rb->i2s_resync, rb_i2s_resync);
 	atomic_set(&rb->rx.inflight, 0);
 	atomic_set(&rb->tx.inflight, 0);
 	spi_set_drvdata(spi, rb);

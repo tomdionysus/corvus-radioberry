@@ -65,6 +65,7 @@
 #define RB_BREG_TX_UNDER 0x11 /* radio clocks the core found the FIFO empty */
 #define RB_BREG_STATUS2 0x12  /* write 1s to clear RB_FS2_KEY_WD */
 #define RB_BREG_TX_BAD 0x13   /* frames dropped: flags failed their check */
+#define RB_BREG_REALIGNS 0x14 /* times the sample/flags word phase moved */
 
 #define RB_CONTROL_RUN (1u << 0)
 #define RB_CONTROL_RESTART (1u << 1)

@@ -280,14 +280,22 @@ digital-loopback self-test comes before any transmission into the PA.
 Each 64-bit frame carries a sample (I in bits 31..16, Q in 15..0) and a
 flags word: bit 31 valid, 30..24 the tag 0x2a, 23..16 the XOR of the
 sample's four bytes and the sequence number's two, 15..0 the sequence
-number. The image drops a frame whose flags fail (a word slip in the
-Pi's PCM FIFO would otherwise make Q and the next I a sample) and counts
-it; it counts sequence gaps. The driver puts a sample in a frame when the
+number. The Pi's PCM block, a frame-sync consumer with its first channel
+at bit 0, can start a stream one word out (its Linux driver warns that
+this setup may swap channels; measured here: from one start to the next,
+every frame or none), so the image does not assume the pair's phase:
+every word end is a candidate flags word checked against the word before
+it, the image locks to the phase whose candidates pass, and moves after
+two passes in a row at the other phase with none at the locked phase in
+between, losing no sample. Candidates at the locked phase that fail are
+dropped and counted; so are sequence gaps and realignments. The driver puts a sample in a frame when the
 running sum of the divider passes 40: exactly 48 000 samples a second,
 the rate the core takes them, for any divider up to 40. Frames without a
 sample are idle (all zero). The driver keeps the transmit buffer four
-DMA periods (about 8 ms) ahead and restarts both streams if the PCM
-block's transmit FIFO runs dry.
+DMA periods (about 8 ms) ahead and counts the PCM block's transmit FIFO
+running dry (the image realigns by itself). Every PCM FIFO clear and
+every start happens with the image's bit clock running: in slave mode the
+clear acts on bit clock edges.
 
 ### Gateware
 

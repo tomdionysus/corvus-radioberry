@@ -218,7 +218,8 @@ module rbv_rpi4tx_tb;
                     tx_frame = {tx_i, ~tx_i, 1'b1, 7'h2a,
                                 tx_i[15:8] ^ tx_i[7:0] ^ ~tx_i[15:8] ^ ~tx_i[7:0] ^
                                 tx_seq[15:8] ^ tx_seq[7:0], tx_seq};
-                    if (slip) tx_frame = {tx_frame[31:0], tx_i + 16'h0101, ~tx_i};
+                    // Slipped: this sample's flags, then the next sample.
+                    if (slip) tx_frame = {tx_frame[31:0], tx_i + 16'h0101, ~(tx_i + 16'h0101)};
                     tx_seq   = tx_seq + 16'd1;
                     tx_i     = tx_i + 16'h0101;
                 end else tx_frame = 64'd0;
@@ -231,7 +232,16 @@ module rbv_rpi4tx_tb;
         return ad_regs[a];
     endfunction
 
-    logic [31:0] q, q2;
+    logic [31:0] q, q2, gaps0;
+
+    // Every sample the image passes on must be one the host sent: I in the
+    // high half and its complement in the low half (the host model's
+    // pattern), never a flags word or a mix of two samples.
+    logic wrong_words = 1'b0;
+    always @(posedge dut.clk_f)
+        if (dut.txf_wr && dut.txf_wdata[15:0] !== ~dut.txf_wdata[31:16]) begin
+            $display("FAIL image passed on %h at %0t", dut.txf_wdata, $time); wrong_words = 1'b1;
+        end
 
     initial begin
         #3000;
@@ -253,20 +263,27 @@ module rbv_rpi4tx_tb;
         rd(1'b1, 6'h0F, q); check("no sequence gaps", q, 32'h0);
         rd(1'b1, 6'h13, q); check("no frames failed their check", q, 32'h0);
 
-        // A one-word slip: Q and the next I arrive as the flags. With I
-        // negative bit 31 is set; every such frame must be dropped.
+        // A one-word slip, as the Pi's PCM block can start a stream: each
+        // frame carries a flags word, then the next sample. With I negative
+        // the sample word has bit 31 set, so a receiver that assumed the
+        // phase would take Q and the next I as a sample. The image must move
+        // its lock to the new phase and keep taking samples, none of them
+        // from the wrong words.
         tx_i = 16'h8000;
         slip = 1'b1;
-        #5000;
+        #20000;
+        rd(1'b1, 6'h14, q); check("realigned to the slipped phase", q, 32'h1);
         rd(1'b1, 6'h0B, q2);
+        rd(1'b1, 6'h0F, gaps0);
         #100000;
         rd(1'b1, 6'h0B, q);
+        if (q - q2 < 32'd20) begin $display("FAIL samples while slipped: %0d", q - q2); errors++; end
+        else $display("ok   samples taken while slipped: %0d", q - q2);
+        rd(1'b1, 6'h0F, q); check("no sequence gaps while locked to the slip", q - gaps0, 32'h0);
+        check("no sample from the wrong words", {31'd0, wrong_words}, 32'h0);
         slip = 1'b0;
-        check("slipped frames passed on", q - q2, 32'h0);
-        rd(1'b1, 6'h13, q);
-        if (q == 32'd0) begin $display("FAIL slipped frames not counted"); errors++; end
-        else $display("ok   slipped frames dropped and counted: %0d", q);
-        rd(1'b1, 6'h12, q); check("check failure in status 2", q & 32'h40, 32'h40);
+        #20000;
+        rd(1'b1, 6'h14, q); check("realigned back", q, 32'h2);
         tx_i = 16'h1000;
         check("PA lines low, not keyed", {28'd0, pa_out}, 32'h0);
         check("TX quiet low, not keyed", {31'd0, ad_txquiet_n}, 32'h0);

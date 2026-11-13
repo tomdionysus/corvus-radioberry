@@ -59,6 +59,7 @@
 //                    since the image was loaded)
 //   13 TX_BAD    ro  frames from the Pi with bit 31 set whose flags failed
 //                    their check (dropped)
+//   14 REALIGNS  ro  times the sample/flags word phase from the Pi moved
 // Status 2 (reply byte 6): 0 the core's CW or jack PTT, 1 jack CW key,
 //   2 jack PTT, 3 transmit FIFO overflowed, 4 keying watchdog cleared
 //   KEYING, 5 the core is transmitting, 6 a sequence gap or a frame that
@@ -158,6 +159,7 @@ module rbv_rpi4_top #(
     logic [31:0] full_count_c = 32'd0;
     logic        full_prev = 1'b0;
     logic [31:0] i2s_tx_words, i2s_rx_words, seq_gaps, tx_ovf_count, tx_under_count, tx_bad_count;
+    logic [31:0] realign_count;
     logic        tx_on, cw_on;
     logic        jack_key = 1'b0, jack_ptt = 1'b0;
     logic        ovf_flag_l, gap_flag_l;
@@ -269,6 +271,7 @@ module rbv_rpi4_top #(
             6'h11: rd_data <= tx_under_count;
             6'h12: rd_data <= {24'd0, status2_byte};
             6'h13: rd_data <= tx_bad_count;
+            6'h14: rd_data <= realign_count;
             default: rd_data <= 32'hDEADBEEF;
         endcase
     end
@@ -524,7 +527,8 @@ module rbv_rpi4_top #(
         .word_valid(lk_valid), .word({3'b000, lk_word}), .word_take(lk_take),
         .bclk(i2s_bclk), .fs(i2s_fs), .sd_out(i2s_to_pi), .sd_in(i2s_from_pi),
         .tx_words(i2s_tx_words), .rx_words(i2s_rx_words),
-        .tx_wr(txf_wr), .tx_sample(txf_wdata), .seq_gaps(seq_gaps_f), .tx_bad(bad_f)
+        .tx_wr(txf_wr), .tx_sample(txf_wdata), .seq_gaps(seq_gaps_f), .tx_bad(bad_f),
+        .realigns(realign_count)
     );
     always_ff @(posedge clk_f)
         if (txf_wr && txf_free < 12'd2) begin
