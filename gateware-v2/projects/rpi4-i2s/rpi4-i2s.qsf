@@ -1,0 +1,138 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# rpi4-i2s receive build for the RadioBerry on a Raspberry Pi 4: the
+# Hermes-Lite 2 radio core (read unmodified from gateware/source/ at build
+# time, into hl2/) inside this project's control, AD9866 start-up and I2S
+# transport. Cyclone 10 LP 10CL025, 144-pin.
+
+set_global_assignment -name FAMILY "Cyclone 10 LP"
+set_global_assignment -name DEVICE 10CL025YE144C8G
+set_global_assignment -name TOP_LEVEL_ENTITY rbv_rpi4_top
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY build
+set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
+set_global_assignment -name VERILOG_INPUT_VERSION SYSTEMVERILOG_2005
+set_global_assignment -name VERILOG_MACRO "USE_ALTSYNCRAM=1"
+set_global_assignment -name SDC_FILE rpi4-i2s.sdc
+set_global_assignment -name CYCLONEIII_CONFIGURATION_SCHEME "PASSIVE SERIAL"
+set_global_assignment -name USE_CONFIGURATION_DEVICE OFF
+set_global_assignment -name GENERATE_RBF_FILE ON
+set_global_assignment -name CRC_ERROR_OPEN_DRAIN OFF
+set_global_assignment -name FORCE_CONFIGURATION_VCCIO ON
+set_global_assignment -name ENABLE_OCT_DONE OFF
+set_global_assignment -name ENABLE_CONFIGURATION_PINS OFF
+set_global_assignment -name ENABLE_BOOT_SEL_PIN OFF
+set_global_assignment -name CYCLONEII_RESERVE_NCEO_AFTER_CONFIGURATION "USE AS REGULAR IO"
+set_global_assignment -name RESERVE_DATA0_AFTER_CONFIGURATION "USE AS REGULAR IO"
+set_global_assignment -name RESERVE_DATA1_AFTER_CONFIGURATION "USE AS REGULAR IO"
+set_global_assignment -name RESERVE_FLASH_NCE_AFTER_CONFIGURATION "USE AS REGULAR IO"
+set_global_assignment -name RESERVE_DCLK_AFTER_CONFIGURATION "USE AS REGULAR IO"
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS "AS INPUT TRI-STATED WITH WEAK PULL-UP"
+set_global_assignment -name STRATIX_DEVICE_IO_STANDARD "3.3-V LVCMOS"
+set_global_assignment -name MIN_CORE_JUNCTION_TEMP 0
+set_global_assignment -name MAX_CORE_JUNCTION_TEMP 85
+set_global_assignment -name OPTIMIZATION_MODE "HIGH PERFORMANCE EFFORT"
+set_global_assignment -name ALLOW_REGISTER_RETIMING OFF
+set_global_assignment -name PHYSICAL_SYNTHESIS_REGISTER_RETIMING OFF
+
+# The radio core finds its ROM tables by bare file name.
+set_global_assignment -name SEARCH_PATH hl2/Hermes-Lite2-3e467fd/gateware/rtl/nco
+set_global_assignment -name SEARCH_PATH hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/firrom
+set_global_assignment -name SEARCH_PATH hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/receiver2
+set_global_assignment -name SEARCH_PATH hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/qs1r
+
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/common/rbv_crc8.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/common/rbv_spi.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/common/rbv_adseq.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/common/rbv_afifo.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/common/rbv_i2s.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/linktest/rbt_adser.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/linktest/rbt_pll.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/rpi4/rbv_rpi4_top.sv
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/radio.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/varcic.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/cic.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/cic_comb.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/cic_integrator.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/cordic.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/cpl_cordic.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/receiver.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/FirInterp5_1025_EER.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/counter.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/firrom/firrom1_1025.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/firram36I_205.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/square.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/sqroot.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/receiver2/recv2_cic.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/receiver2/recv2_cordic.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/receiver2/receiver2.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/receiver2/recv2_firromH.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/receiver2/recv2_firram48.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/receiver2/recv2_firx2r2.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/firfilt.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/CicInterpM5.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/firram36I_1024.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/FirInterp8_1024.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/firram36.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/vna_scanner.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/firrom/firromH.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/firrom/firromI_1024.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/qs1r/qs1r_cic_comb.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/qs1r/qs1r_cic_integrator.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/qs1r/qs1r_cordic.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/qs1r/qs1r_fir.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/qs1r/qs1r_fir_coeffs.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/qs1r/qs1r_fir_coeffs_rom.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/qs1r/qs1r_fir_mac.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/qs1r/qs1r_fir_shiftreg.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/qs1r/qs1r_memcic.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/qs1r/qs1r_memcic_ram.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/qs1r/qs1r_receiver.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/qs1r/qs1r_varcic.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/qs1r/qs1r_mult_24Sx24S.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/receiver_nco.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/primitives/intel/multipliers.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/nco/coarserom.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/nco/finerom.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/nco/sincos.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/nco/nco2.v
+set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/nco/mix2.v
+
+# Pins. I2S: GPIO 18 bit clock (33), 19 frame sync (44), 20 to the Pi (43),
+# 21 from the Pi (42). Every other pin is an input with a weak pull-up,
+# GPIO 13 (FPGA pin 13) included.
+set_location_assignment PIN_53 -to clk53
+set_location_assignment PIN_58 -to spi_sck
+set_location_assignment PIN_51 -to spi_ce0_n
+set_location_assignment PIN_60 -to spi_mosi
+set_location_assignment PIN_59 -to spi_miso
+set_location_assignment PIN_33 -to i2s_bclk
+set_location_assignment PIN_44 -to i2s_fs
+set_location_assignment PIN_43 -to i2s_to_pi
+set_location_assignment PIN_42 -to i2s_from_pi
+set_location_assignment PIN_144 -to pa_out[0]
+set_location_assignment PIN_143 -to pa_out[1]
+set_location_assignment PIN_136 -to pa_out[2]
+set_location_assignment PIN_137 -to pa_out[3]
+set_location_assignment PIN_114 -to ad_rst_n
+set_location_assignment PIN_111 -to ad_mode
+set_location_assignment PIN_65 -to ad_sen_n
+set_location_assignment PIN_66 -to ad_sclk
+set_location_assignment PIN_68 -to ad_sdio
+set_location_assignment PIN_80 -to ad_rx[0]
+set_location_assignment PIN_83 -to ad_rx[1]
+set_location_assignment PIN_85 -to ad_rx[2]
+set_location_assignment PIN_86 -to ad_rx[3]
+set_location_assignment PIN_87 -to ad_rx[4]
+set_location_assignment PIN_98 -to ad_rx[5]
+set_location_assignment PIN_77 -to ad_rxsync
+set_location_assignment PIN_99 -to ad_tx[0]
+set_location_assignment PIN_100 -to ad_tx[1]
+set_location_assignment PIN_101 -to ad_tx[2]
+set_location_assignment PIN_103 -to ad_tx[3]
+set_location_assignment PIN_105 -to ad_tx[4]
+set_location_assignment PIN_106 -to ad_tx[5]
+set_location_assignment PIN_76 -to ad_txsync
+set_location_assignment PIN_72 -to ad_txquiet_n
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to ad_sdio
+set_instance_assignment -name FAST_INPUT_REGISTER ON -to ad_rx[*]
+set_instance_assignment -name FAST_INPUT_REGISTER ON -to ad_rxsync
