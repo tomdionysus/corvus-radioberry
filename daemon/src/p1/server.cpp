@@ -187,10 +187,6 @@ void Server::start_locked(const Peer& from) {
     packer_.reset();
     status_address_ = 0;
     pending_ack_.reset();
-    Command timing;
-    timing.address = kTxTiming;
-    timing.data = kPttHangMs << 8 | kMinTxLatencyMs;
-    control_.set(timing);
 }
 
 void Server::apply_locked(const HostCommand& c) {
@@ -222,8 +218,6 @@ void Server::apply_locked(const HostCommand& c) {
         policy_.set_cwx((data & kCwxEnable) != 0);
     } else if (is_frequency_address(c.address)) {
         data = corrected_frequency(data, frequency_ppm_);
-    } else if (c.address == kTxTiming && (data & kTxLatencyMask) < kMinTxLatencyMs) {
-        data = (data & ~kTxLatencyMask) | kMinTxLatencyMs;
     }
     if (control_.value(c.address) == data || refused_[c.address] == data) {
         return;

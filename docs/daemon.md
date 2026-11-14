@@ -56,10 +56,9 @@ Stop the service before running anything else that opens
   logged and do not drop MOX. Driver TX underruns are logged at debug
   level only: the driver counts one each time its short ring empties
   between client bursts while the gateware's FIFO still holds samples.
-- TX buffer: each Protocol 1 stream starts with a 40 ms TX buffer
-  latency and the gateware's 12 ms PTT hang time (address 0x17); a
-  client's lower latency is raised to 40 ms. Protocol 2 streams use
-  100 ms and 20 ms.
+- TX buffer: the daemon never sets the PTT hang time or TX buffer
+  latency (address 0x17). A Protocol 1 client's value is passed on as
+  sent; otherwise the gateware's defaults apply.
 - TX samples go to the driver only while MOX is granted. Clients send
   them between overs too, as zeros; those are dropped in the daemon.
   Protocol 2 samples still pass through the decimator, so its filter holds

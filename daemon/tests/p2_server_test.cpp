@@ -483,13 +483,14 @@ TEST_CASE("unsupported requests are reported and do no harm", "[p2server]") {
     CHECK(rig.server.counters().ignored == 1);
 }
 
-TEST_CASE("starting a stream sets the TX cushion and hang time", "[p2server]") {
+TEST_CASE("starting a stream leaves the TX timing to the gateware", "[p2server]") {
     Rig rig;
     Command earlier;  // left by another client
     earlier.address = 0x17;
     earlier.data = 4u << 8 | 40u;
     rig.control.set(earlier);
     rig.start({{0, 48}});
-    // 20 ms PTT hang, 100 ms TX latency: more than the gateware's 85 ms FIFO.
-    CHECK(rig.control.value(0x17) == (20u << 8 | 100u));
+    // The TX buffer latency and PTT hang are the gateware's business: the
+    // server does not write address 0x17.
+    CHECK(rig.control.value(0x17) == (4u << 8 | 40u));
 }
