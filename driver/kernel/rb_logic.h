@@ -5,7 +5,7 @@
  * and TX packing. No kernel dependencies, so the same code is compiled
  * into the userspace unit tests (driver/tests).
  *
- * Formats are described in gateware/README.md.
+ * Formats are described in gateware/docs/interfaces.md.
  */
 #ifndef RB_LOGIC_H
 #define RB_LOGIC_H

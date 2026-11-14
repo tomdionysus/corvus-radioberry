@@ -32,12 +32,20 @@ TEST_CASE("threads are named and made real-time where allowed", "[realtime]") {
 }
 
 #if !defined(__SANITIZE_ADDRESS__)
-// Under ASan the shadow memory is too large to lock.
+// Under ASan the shadow memory is too large to lock, and ASan's own
+// mlockall() does not pass the call to the kernel.
 TEST_CASE("memory is locked where allowed", "[realtime]") {
     if (const auto failed = lock_memory()) {
         CHECK(failed->find("locking memory: ") == 0);
     } else {
         ::munlockall();
     }
+}
+
+TEST_CASE("a refused memory lock says why", "[realtime]") {
+    // MCL_ONFAULT alone is invalid, for root too.
+    const auto failed = lock_memory(MCL_ONFAULT);
+    REQUIRE(failed);
+    CHECK(failed->find("locking memory: ") == 0);
 }
 #endif

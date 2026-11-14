@@ -30,15 +30,18 @@ void TxPolicy::set_cwx(bool requested) {
 
 void TxPolicy::update(const Owner& client, bool mox_requested, std::chrono::nanoseconds now) {
     const std::lock_guard lock(mutex_);
-    if (mox_requested && !options_.allow_tx) {
+    const bool may_transmit = options_.allow_tx && options_.tx_available;
+    if (mox_requested && !may_transmit) {
         if (!refusal_logged_) {
-            spdlog::warn("MOX refused: transmit is not allowed (radioberryd --allow-tx)");
+            spdlog::warn(options_.tx_available
+                             ? "MOX refused: transmit is not allowed (radioberryd --allow-tx)"
+                             : "MOX refused: the gateware has no transmitter (receive-only image)");
             refusal_logged_ = true;
         }
     } else if (!mox_requested) {
         refusal_logged_ = false;
     }
-    session_.mox(client, mox_requested && options_.allow_tx,
+    session_.mox(client, mox_requested && may_transmit,
                  [&](bool granted) { apply_locked(granted, now); });
 }
 
@@ -104,7 +107,8 @@ void TxPolicy::apply_locked(bool granted, std::chrono::nanoseconds now) {
         spdlog::info("PTT off");
     }
     granted_ = granted;
-    control_.set_transmit({granted, granted, granted && cwx_requested_});
+    control_.set_transmit(
+        {granted, granted, granted && cwx_requested_, granted && options_.allow_pa});
     if (control_.value(Control::kTxDrive) != drive_word) {
         Command c;
         c.address = Control::kTxDrive;

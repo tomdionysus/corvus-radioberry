@@ -54,8 +54,8 @@ struct ServerCounters {
 // when their value changes, except the transmit controls: the owner's
 // MOX, address 0x09 (drive, PA enable) and the CWX bit of address 0x0f
 // go through the TxPolicy. The owner's TX samples go to the TX ring.
-// Address 0x17 is set at every stream start and its TX buffer latency is
-// raised to at least kMinTxLatencyMs.
+// Address 0x17 (PTT hang time, TX buffer latency) passes through as the
+// client sends it: what suits the gateware is the gateware's business.
 class Server {
 public:
     Server(Identity identity, Control& control, SpscRing<TxBlock>& tx, Session& session,
@@ -64,17 +64,6 @@ public:
     // Address 0x0f bit 24: CWX enable, as the HL2 reads it.
     static constexpr std::uint8_t kCwConfig = 0x0f;
     static constexpr std::uint32_t kCwxEnable = 1u << 24;
-    // Address 0x17: PTT hang time (bits 12..8) and TX buffer latency (bits
-    // 6..0), in ms. piHPSDR does not send it, which leaves the gateware's
-    // 20 ms latency; its TX samples arrive in bursts that fell up to 17.4 ms
-    // behind a steady 48 ksps (measured receive-only on a Pi 5), so the
-    // latency is raised to 40 ms. That and twice the bursts' 17.4 ms swing
-    // stay inside the gateware's 85 ms FIFO. The hang time is the
-    // gateware's default.
-    static constexpr std::uint8_t kTxTiming = 0x17;
-    static constexpr std::uint32_t kTxLatencyMask = 0x7f;
-    static constexpr std::uint32_t kPttHangMs = 12;
-    static constexpr std::uint32_t kMinTxLatencyMs = 40;
 
     void on_packet(std::span<const std::uint8_t> packet, const Peer& from,
                    std::chrono::nanoseconds now);

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #pragma once
 
+#include <sys/mman.h>
+
 #include <optional>
 #include <string>
 
@@ -20,9 +22,10 @@ void name_thread(const char* name);
 // CAP_SYS_NICE, for example).
 std::optional<std::string> make_thread_realtime(const char* name, int priority);
 
-// Locks the process's memory now and in the future (mlockall), so a
-// page fault cannot stall a stream thread. Nothing on success; otherwise
-// why it failed (without CAP_IPC_LOCK, for example).
-std::optional<std::string> lock_memory();
+// Locks the process's memory now and in the future (mlockall with
+// MCL_CURRENT | MCL_FUTURE, or `flags`), so a page fault cannot stall a
+// stream thread. Nothing on success; otherwise why it failed (without
+// CAP_IPC_LOCK, for example).
+std::optional<std::string> lock_memory(int flags = MCL_CURRENT | MCL_FUTURE);
 
 }  // namespace radioberry::daemon

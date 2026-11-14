@@ -125,12 +125,19 @@ TEST_CASE("info and statistics without a command", "[rbctl]") {
 }
 
 TEST_CASE("info shows the driver's transport and RX limit", "[rbctl]") {
-    FakeDevice pi4;
-    pi4.transport = RADIOBERRY_TRANSPORT_CPU;
-    pi4.rx_values_max = 192000;
-    auto j = json(run({"--json"}, &pi4));
+    FakeDevice old_pi4;  // drivers up to release 0.4.1
+    old_pi4.transport = RADIOBERRY_TRANSPORT_CPU;
+    old_pi4.rx_values_max = 192000;
+    auto j = json(run({"--json"}, &old_pi4));
     CHECK(j["info"]["transport"] == "cpu");
     CHECK(j["info"]["rx_values_max"] == 192000);
+
+    FakeDevice pi4;
+    pi4.transport = RADIOBERRY_TRANSPORT_I2S;
+    pi4.rx_values_max = 1536000;
+    j = json(run({"--json"}, &pi4));
+    CHECK(j["info"]["transport"] == "i2s");
+    CHECK(j["info"]["rx_values_max"] == 1536000);
 
     FakeDevice pi5;
     pi5.transport = RADIOBERRY_TRANSPORT_PIO;

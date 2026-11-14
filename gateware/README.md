@@ -1,205 +1,114 @@
 # Gateware
 
-The FPGA runs the Hermes-Lite 2 gateware in its RadioBerry PIO variants,
-`radioberry_pio_cl025` and `radioberry_pio_cl016`, version 75.3. The
-bitfiles in `rpi-5/<type>/radioberry.rbf` are built from the unmodified
-source in `source/` with Quartus Prime Lite on an x86-64 machine
-([tools/build-gateware.sh](../tools/build-gateware.sh)) and committed, so
-the Pi only installs them. [gateware/PROVENANCE.md](PROVENANCE.md) records
-the source commit, fitter seeds, hashes and timing;
-[gateware/QUARTUS.md](QUARTUS.md) describes the toolchain.
+The FPGA images for the RadioBerry 2.x: one for each Raspberry Pi, for
+the Cyclone 10 LP 10CL025. The driver loads the image for its board at
+boot; the Pi never compiles gateware. The images here are built from this
+directory with Quartus Prime Lite in Docker and committed.
 
-Everything below is read from that source (paths relative to
-`gateware/rtl/` in the archive; `variants/` is beside it) and from the
-original Pi 5 driver's PIO programs. Statements marked *not yet measured* follow from the source and
-have not been checked on hardware.
+| Image | Board | Link to the Pi | File |
+|---|---|---|---|
+| `rpi5-pio` | Raspberry Pi 5 | RP1 PIO: a 4-bit receive bus and a 1-bit transmit bus, each clocked by the Pi | `images/rpi5-pio/CL025/radioberry-rpi5-pio.rbf` |
+| `rpi4-i2s` | Raspberry Pi 4 | I2S into the BCM2711 PCM block, the FPGA as clock master | `images/rpi4-i2s/CL025/radioberry-rpi4-i2s.rbf` |
+| `linktest` | Raspberry Pi 4 | a test image for measuring the board and the I2S link; not a radio | built only |
 
-Only the PIO variants work with this project's driver. The older
-GPIO-mode images (73.3: an 8-bit RX bus and TX over a second SPI chip
-select) are recognised by `rbprobe` and reported as unusable.
+Both radio images control the board through the same framed SPI protocol
+(8-byte frames with a CRC) and the same registers, and receive with six
+receivers and transmit with one.
 
-## 1. Variants
+## Source
 
-| | CL025 | CL016 |
-|---|---|---|
-| Device | 10CL025YE144C8G | 10CL016YE144C8G |
-| Version | 75.3 | 75.3 |
-| Receivers (`NR`) | 6 | 4 |
-| Transmitters (`NT`) | 1 | 1 |
-| CW (`CW`) | 1, basic: key and PTT from the jack | 1, basic |
-| `FPGA_TYPE` reported | 2 | 1 |
-| TX FIFO (`DSIQ_FIFO_DEPTH`) | 16384 bytes | 16384 bytes |
+- `rtl/`: this project's own RTL, SystemVerilog, GPL-2.0-or-later:
+  control registers and the SPI protocol, AD9866 start-up, keying and PA
+  lines, and the links to the Pi.
+- `source/`: the Hermes-Lite 2 radio core (receivers, decimation, NCOs,
+  transmit DSP), a `git archive` of the Hermes-Lite 2 repository used
+  unmodified: [docs/provenance.md](docs/provenance.md) has the commit,
+  hashes, licences and the fitter seed of each image.
 
-Source: `variants/radioberry_pio_cl0xx/radioberry.v` and
-`radioberry/pi-pio/radioberry_core.v`. The receiver count is reported over
-SPI (section 4) and is the authority at run time.
+## Layout
 
-## 2. Configuration and reset
+| Directory | Contents |
+|---|---|
+| `rtl/common/` | shared modules: SPI protocol, CRC, AD9866 sequencer, dual-clock FIFO, I2S link |
+| `rtl/rpi4/`, `rtl/rpi5/` | each image's top level and its link to the Pi |
+| `rtl/linktest/` | the link test image |
+| `projects/` | Quartus project (`.qsf`) and timing constraints (`.sdc`) per image |
+| `sim/` | testbenches, the radio-core stand-in and a model of the RP1 PIO running the driver's programs |
+| `images/` | the committed bitfiles |
+| `source/` | the Hermes-Lite 2 source archive |
+| `tools/` | build, simulation and timing scripts, and the two Dockerfiles |
+| `host/` | Pi-side programs for the link test image |
+| `docs/` | provenance, toolchain, interfaces, design and test records |
 
-- Passive serial on GPIO 13 (DATA), 24 (DCLK), 27 (nCONFIG), read back on
-  22 (CONF_DONE) and 26 (nSTATUS). Bytes least significant bit first. A
-  bitstream for the other device leaves CONF_DONE low (measured on the
-  development board, see [docs/testing.md](../docs/testing.md)).
-- After configuration `radioberry/reset_handler.v` holds the design in
-  reset for 2^24 - 16 cycles of the 10 MHz internal clock, about 1.68 s.
-  During reset the SPI slave is held in reset and answers with its reset
-  pattern (all zero bits except the last byte, `0xff`), so the version
-  reads as 0.255. The driver must wait at least 1.7 s after CONF_DONE
-  before trusting the identity word, and should poll until the major
-  version is non-zero. Measured: the driver waits 1.8 s and the identity
-  is valid on its first poll.
+## Building
 
-## 3. Clocks
+You need an x86-64 machine with Docker (Linux, or an Intel Mac with
+Docker Desktop): Quartus does not run on ARM. The simulator runs anywhere
+Docker does.
 
-- The AD9866 runs from the 76.8 MHz reference; `clk_internal` (command
-  and control logic) is 10 MHz.
-- Both stream clocks are driven by the Pi. The gateware never times out
-  waiting for a Pi clock edge.
+1. **Quartus.** Download Quartus Prime Lite 23.1std.1 for Linux from the
+   Altera download centre, as two files:
+   `QuartusLiteSetup-23.1std.1.993-linux.run` and
+   `cyclone10lp-23.1std.1.993.qdz`. Read the licence agreement on the
+   download page. Then, from this directory:
 
-## 4. SPI command path
+   ```
+   tools/quartus-image.sh --installers ~/Downloads --accept-quartus-eula
+   ```
 
-`radioberry/spi_slave.v`, instantiated with `WIDTH` 48, `mlb` 1:
+   This builds the Docker image `radioberry-quartus:23.1std.1` once (about
+   10 GB). The flag states that you accept the Quartus licence; nothing in
+   this repository accepts it for you. Details and a build without Docker:
+   [docs/toolchain.md](docs/toolchain.md).
 
-- `spi0` chip select 0 only (`pi_spi_ce[0]`); CE1 is unused. SPI mode 3:
-  the slave changes MISO on the falling edge and samples MOSI on the rising
-  edge. 48 bits per transfer, most significant bit first. Every completed
-  48-bit transfer is one command (`cmd_cnt` toggles on `done`), whether or
-  not its content changed.
-- Transfer bytes, Pi to FPGA:
+2. **Simulate.** Each testbench prints `PASS`:
 
-  | Byte | Bits | Meaning |
-  |---|---|---|
-  | 0 | 47..43 | unused |
-  | 0 | 42 | TX permission (`temp_enabletx`): gates every CN301 TX output |
-  | 0 | 41 | CWX enable (CW keying from TX I/Q LSBs) |
-  | 0 | 40 | run |
-  | 1 | 39 | unused |
-  | 1 | 38..33 | command address (Hermes-Lite 2 C0 bits 7..1) |
-  | 1 | 32 | PTT (Hermes-Lite 2 C0 bit 0, MOX) |
-  | 2..5 | 31..0 | command data (Hermes-Lite 2 C1..C4) |
+   ```
+   tools/sim.sh rpi5
+   tools/sim.sh rpi4
+   tools/sim.sh rpi4tx
+   ```
 
-  Bytes 1 to 5 are therefore exactly a Hermes-Lite 2 Protocol 1 C0..C4
-  command block, and byte 0 carries run, CWX and the TX permission bit.
-  **PTT travels in every command**, so any command sent with bit 32 set
-  keys the transmitter (subject to section 6).
-- Reply bytes, FPGA to Pi, captured when the transfer starts:
+3. **Compile.** A few minutes each:
 
-  | Byte | Meaning |
-  |---|---|
-  | 0 | bit 2: external CW key (jack tip, debounced); bit 0: `cw_on` or external PTT; others 0 |
-  | 1, 2 | 0 |
-  | 3 | bits 7..6 transmitters, 5..2 receivers, 1..0 FPGA type (1 = CL016, 2 = CL025) |
-  | 4 | gateware major version (75) |
-  | 5 | gateware minor version (3) |
+   ```
+   tools/build.sh rpi5-pio
+   tools/build.sh rpi4-i2s
+   ```
 
-- Command address 0x00, data bits 6..3, is the number of receivers minus
-  one. Changing it clears the RX FIFO and restarts the receivers. The rest
-  of the command set is the Hermes-Lite 2 one
-  (https://github.com/softerhardware/Hermes-Lite2/wiki/Protocol); address
-  0x09 bit 19 is PA enable and bit 18 T/R relay disable, as used in
-  section 6; address 0x17 bits 6..0 are the TX buffer latency and 12..8 the
-  PTT hang time (section 7).
+   The bitfile goes to `images/<image>/CL025/` with its size and SHA-256
+   printed; Quartus's reports go to `build/<image>/`.
 
-## 5. RX stream (FPGA to Pi)
+4. **Check timing.** Every clock must show positive setup and hold slack:
 
-`radioberry/pi-pio/rx_pi_pio.v` and the `usiq_fifo` in `fifos.v`:
+   ```
+   tools/worst.sh rpi5-pio
+   ```
 
-- Pins: data GPIO 18 to 21 (D0 to D3, four bits wide), clock GPIO 6 (Pi
-  output), sample-ready GPIO 25 (FPGA output). State changes on the rising
-  edge of the Pi's clock; the Pi samples the data while the clock is low.
-- One 24-bit value takes eight clocks: a start nibble (0, with
-  sample-ready high, emitted only when the FIFO holds more than 12
-  values), then the metadata nibble, then the 24 data bits as six nibbles
-  most significant first.
-- The metadata nibble is the index of the value within the current frame
-  (0, 1, 2 ...), reset to 0 after the frame's last value. A frame is one
-  sample period for all receivers in the order I0, Q0, I1, Q1, ... and
-  holds 2 x receivers values, so the index runs 0 to 2n - 1 (at most 11 on
-  the CL025). Values are signed 24-bit two's complement.
-- The original PIO program (`rb2-rx-stream.c`) toggles the clock while
-  waiting, jumps on sample-ready, clocks seven nibbles (metadata and data)
-  and autopushes at 28 bits, shifting left. Each 32-bit word the Pi reads
-  is `index << 24 | sample`, top four bits zero.
-- The RX FIFO holds 1024 values; the gateware stops writing (drops) above
-  1012. One receiver needs 2 x rate values per second; what each board's
-  clocking carries is in [docs/rpi5.md](../docs/rpi5.md) and
-  [docs/rpi4.md](../docs/rpi4.md).
-- Every receiver-count change asynchronously clears the RX FIFO, whose
-  read side and the `rx_pi_pio` state machine run on the Pi's clock. If
-  the Pi's clock is running while the clear is asserted and released, the
-  read-out can lock up for good until the gateware is reloaded
-  ([docs/fault-rx-lockup.md](../docs/fault-rx-lockup.md)). The driver therefore holds its RX clock
-  still across every receiver-count command.
+   The `strict` lines give the AD9866 transmit bus without its one
+   relaxed constraint; TX bit 4 (FPGA pin 105) is negative there in both
+   images, a known risk ([docs/review.md](docs/review.md), finding 1.3).
+   If a clock fails, try another fitter seed (`SEED=2 tools/build.sh
+   rpi5-pio`) and record the one used in the project file.
 
-## 6. CN301 outputs and what keys the transmitter
+5. **Commit** the new bitfile together with its row in
+   [docs/provenance.md](docs/provenance.md).
 
-`radioberry/control.v` and `radio_openhpsdr1/radio.v`:
+To install a new image on a Pi without rebuilding the packages, copy it
+over `/usr/lib/firmware/radioberry-<image>.rbf` and write 1 to
+`/sys/bus/spi/devices/spi0.0/reload` with `radioberry.service` stopped.
 
-- `int_tx_on = (tx_on | ext_ptt) & run & tx_permission`, where `tx_on`
-  comes from the radio's transmit state machine, `ext_ptt` is the debounced
-  jack ring (PTT on the PA board's MIC jack), `run` is SPI bit 40 and
-  `tx_permission` is SPI bit 42. `ext_ptt` also feeds the radio's transmit
-  state machine.
-- `exttr` (CN301 pin 3, `ptt_out`) = `int_tx_on`.
-- `inttr` (CN301 pin 4) = `int_tx_on & (pa_enable | ~tr_disable)`.
-- `envpa` (CN301 pin 8) and `envbias` = `int_tx_on & pa_enable`.
-- `pa_enable` and `tr_disable` latch from command address 0x09, data bits
-  19 and 18, and keep their value until the next 0x09 command.
-- The radio leaves its idle state on any of: SPI PTT (bit 32) together
-  with valid TX FIFO data, which transmits the FIFO's samples; the CW key
-  on the jack tip (`ext_keydown`, unconditional in the basic CW build),
-  which transmits a CW carrier; CWX keying; external PTT on the jack ring,
-  which holds the radio in its pre-transmit state with the DAC enabled and
-  no samples flowing until one of the others follows. **None of these needs
-  `run` or the TX permission bit.** Those two gate only the CN301 lines,
-  which switch the T/R relay and bias the PA. A key on the jack therefore
-  drives the DAC with the PA unswitched whenever the gateware is loaded.
-  *Not yet measured.*
-- Consequences for software: keep SPI bit 42 clear except while a client
-  is allowed to transmit, clear bit 32 in every command unless MOX is
-  wanted, and send address 0x09 with bit 19 clear whenever PA control is
-  not allowed. External PTT on the jack is honoured by the gateware itself
-  while bit 42 and run are set.
+## Documents
 
-## 7. TX stream (Pi to FPGA)
-
-`radioberry/pi-pio/tx_pi_pio.v`, the `dsiq_fifo` in `fifos.v` and the TX
-state machine in `radio.v`:
-
-- Pins: data GPIO 5 (Pi output), clock GPIO 4 (Pi output), ready GPIO 12
-  (FPGA output, registered on the Pi's clock).
-- With ready high, the rising clock edge that finds the shifter idle starts
-  a word and carries no data; the next 32 rising edges carry 32 bits, most
-  significant first. The original PIO program uses its ready-polling edge
-  as that start edge, then pulls one 32-bit word and shifts it out.
-- Word format: I in bits 31..16 and Q in bits 15..0, each signed 16-bit.
-  The gateware stores four bytes per word, in order I high, I low, Q high,
-  Q low.
-- TX sample rate: 48 ksps into the gateware's interpolators, whatever the
-  RX rate.
-- The FIFO holds 16384 bytes (4096 samples, 85 ms at 48 ksps). Ready falls
-  8 bytes before full. If it does fill, writes are dropped until it drains
-  to a quarter (1024 samples) and a word boundary is reached.
-- While not transmitting, the radio drains the FIFO at the sample rate and
-  discards the samples (measured: 48 000 words per second with PTT
-  clear). On entering transmit it stops reading for the TX
-  buffer latency (default 20 ms, address 0x17) to fill the FIFO.
-- Gateware watchdog: in transmit, if the FIFO runs dry for the PTT hang
-  time (default 12 ms, address 0x17 bits 12..8) the radio returns to idle
-  by itself. A hang time of 31 disables this and transmit then ends only
-  when PTT is cleared. Software must never send 31 there.
-- Original PIO throughput: divider 8 (25 MHz), seven cycles per bit,
-  about 233 cycles per word: at most about 107 000 words per second, more
-  than twice the 48 ksps needed. Measured on the development board with
-  PTT clear: about 102 000 words per second while the FIFO fills (from
-  empty, with the driver's ring full, for about 75 ms), then exactly
-  48 000 per second as the radio drains it.
-
-## 8. Keyer and jack inputs
-
-- Jack tip (`io_phone_tip`): CW key, debounced on the 1 ms tick; keys CW
-  directly in the basic CW build.
-- Jack ring (`io_phone_ring`): external PTT, debounced; feeds `ext_ptt` in
-  `control.v` (section 6).
-- `io_cwl` and `io_cwr` are passed straight through to `pi_cwl` and
-  `pi_cwr` for a Pi-side keyer such as piHPSDR's.
+| Document | Contents |
+|---|---|
+| [docs/provenance.md](docs/provenance.md) | source archive, image hashes and seeds, licences |
+| [docs/toolchain.md](docs/toolchain.md) | Quartus Prime Lite: what to download, licence, Docker and native installs |
+| [docs/interfaces.md](docs/interfaces.md) | pins, the control protocol and registers, the PIO and I2S links |
+| [docs/hardware-discovery.md](docs/hardware-discovery.md) | what was measured about the board itself |
+| [docs/plan.md](docs/plan.md) | the rewrite plan |
+| [docs/evaluation.md](docs/evaluation.md) | the evaluation of the Hermes-Lite 2 based gateware that led to the rewrite |
+| [docs/interface-strategies-rpi4.md](docs/interface-strategies-rpi4.md), [docs/interface-strategies-rpi5.md](docs/interface-strategies-rpi5.md) | the link options considered for each Pi |
+| [docs/linktest-results.md](docs/linktest-results.md) | the I2S link measured with the link test image |
+| [docs/rpi5-results.md](docs/rpi5-results.md) | the Pi 5 image: simulation, timing, receive and transmit results |
+| [docs/review.md](docs/review.md) | an external review: findings and progress |

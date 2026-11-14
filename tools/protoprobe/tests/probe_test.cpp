@@ -224,6 +224,16 @@ TEST_CASE("p2probe holds MOX with zero TX I/Q clocked by Mic/Line", "[protoprobe
     CHECK(report.at("transmit.ptt_reported_packets")->as_int() > 0);
 }
 
+TEST_CASE("p2probe reports a radio that answers but does not stream", "[protoprobe]") {
+    FakeRadio radio(true);
+    radio.mute = true;
+    const auto f = findings(
+        run_probe(Protocol::kTwo, radio, parse(Protocol::kTwo, {"--mox", "--seconds", "0.5"})));
+    CHECK(f == std::vector<std::string>{"no receive stream packets",
+                                        "no Mic/Line packets clocked the transmit stream"});
+    CHECK_FALSE(radio.mox);
+}
+
 TEST_CASE("p2probe reports lost DDC packets", "[protoprobe]") {
     FakeRadio radio(true);
     radio.skip_every = 50;

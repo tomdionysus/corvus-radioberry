@@ -24,8 +24,8 @@ std::optional<std::string> make_thread_realtime(const char* name, int priority) 
     return std::nullopt;
 }
 
-std::optional<std::string> lock_memory() {
-    if (::mlockall(MCL_CURRENT | MCL_FUTURE) != 0) {
+std::optional<std::string> lock_memory(int flags) {
+    if (::mlockall(flags) != 0) {
         return std::string("locking memory: ") + std::generic_category().message(errno);
     }
     return std::nullopt;

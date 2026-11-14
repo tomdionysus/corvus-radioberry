@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -19,15 +18,6 @@ constexpr std::uint8_t kLnaGain = 0x0a;
 constexpr std::uint32_t kLnaGainMode = 0x40;  // bits 5..0 are the gain + 12 dB
 constexpr std::uint32_t kPaEnable = 1u << 19;
 constexpr std::uint32_t kDuplex = 1u << 2;
-// Address 0x17: PTT hang time (bits 12..8) and TX buffer latency (bits
-// 6..0), in ms. Protocol 2 clients send no TX samples while receiving, so
-// the gateware's TX FIFO is empty at key-up; a latency above the FIFO's
-// 85 ms fills it before the gateware reads, which gives the full cushion a
-// Protocol 1 client's continuous stream keeps (gateware/README.md section
-// 7). The hang time is the 20 ms piHPSDR sends in Protocol 1.
-constexpr std::uint8_t kTxTiming = 0x17;
-constexpr std::uint32_t kPttHangMs = 20;
-constexpr std::uint32_t kTxLatencyMs = 100;
 constexpr int kMinGainDb = -12;
 constexpr int kMaxGainDb = 48;
 constexpr float kFullScale24 = 8388608.0f;
@@ -359,7 +349,6 @@ void Server::start_locked() {
     status_sequence_ = 0;
     status_frames_ = 0;
     status_sent_.reset();
-    command_locked(kTxTiming, kPttHangMs << 8 | kTxLatencyMs);
     spdlog::info("Protocol 2 stream to {}", describe(client_));
 }
 
@@ -486,11 +475,17 @@ void Server::tx_iq_locked(const TxIq& t) {
         session_.fault("Protocol 2 TX I/Q sequence gap");
     }
     last_tx_iq_ = t.sequence;
-    TxBlock* block = tx_.acquire();
-    if (block == nullptr) {
-        ++counters_.tx_blocks_dropped;
-        session_.fault("TX queue full");
-        return;
+    // Only samples sent while MOX is granted go to the device (as Protocol
+    // 1). The decimator still takes every sample, so its filter holds the
+    // client's signal when transmission starts.
+    TxBlock* block = nullptr;
+    if (policy_.transmitting()) {
+        block = tx_.acquire();
+        if (block == nullptr) {
+            ++counters_.tx_blocks_dropped;
+            session_.fault("TX queue full");
+            return;
+        }
     }
     std::size_t out = 0;
     for (std::size_t k = 0; k < kTxSamplesPerPacket; ++k) {
@@ -498,7 +493,7 @@ void Server::tx_iq_locked(const TxIq& t) {
         const std::complex<float> x(static_cast<float>(get24(in)) / kFullScale24,
                                     static_cast<float>(get24(in + 3)) / kFullScale24);
         std::complex<float> y;
-        if (!tx_decimator_.push(x, y)) {
+        if (!tx_decimator_.push(x, y) || block == nullptr) {
             continue;
         }
         const std::int32_t i = quantise(y.real(), 32768.0f, 32767);
@@ -512,23 +507,23 @@ void Server::tx_iq_locked(const TxIq& t) {
         p[3] = static_cast<std::uint8_t>(second);
         ++out;
     }
-    block->size = out * kTxSampleBytes;
-    tx_.publish();
+    if (block != nullptr) {
+        block->size = out * kTxSampleBytes;
+        tx_.publish();
+    }
 }
 
 void Server::command_locked(std::uint8_t address, std::uint32_t data) {
     if (control_.value(address) == data) {
         return;
     }
+    // The addresses here (general, frequencies, LNA gain) are below 0x40 and
+    // carry no transmit bits, so set() takes them.
     Command command;
     command.address = address;
     command.data = data;
-    try {
-        control_.set(command);
-        spdlog::debug("command 0x{:02x} data 0x{:08x}", address, data);
-    } catch (const std::invalid_argument& e) {
-        spdlog::warn("command 0x{:02x} data 0x{:08x} refused: {}", address, data, e.what());
-    }
+    control_.set(command);
+    spdlog::debug("command 0x{:02x} data 0x{:08x}", address, data);
 }
 
 void Server::drive_locked() {

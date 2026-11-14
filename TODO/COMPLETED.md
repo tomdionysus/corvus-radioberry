@@ -3,6 +3,86 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-14: Release 0.5.0 preparation, Pi 5. Packages
+  0.4.1+git35.gbcc3654 upgraded in place from 0.4.1+git22 with apt (DKMS
+  for all 14 installed kernels, both images linked, new driver loaded
+  without a reboot). Kernel matrix, 11 `rpt-rpi-2712` kernels 6.12.25 to
+  6.18.60: `rbprobe` exit 0, `ft8rx` 20 m (evening, 6 to 19 decodes per
+  protocol) with 0 packets lost, `rbcat` with no resyncs, `rbdrivertest`
+  12/12, no under-voltage during the runs, image TX counters (gaps, bad
+  frames, overflows, underruns, realigns) all 0, on every kernel. Driver
+  version string set to 0.5.0.
+- 2026-11-14: Release 0.5.0 preparation, Pi 4 and CI. CI on a cluster Pi
+  passes in full with 100% line coverage (4646 lines; 343 tests, 340
+  under ASan and UBSan). Pi 4: packages 0.4.1+git33.gb66dfe1 upgraded in
+  place from 0.4.1+git26 with apt (DKMS for every kernel, both images
+  linked, `postinst` warned about the old `radioberry-i2s` line, which was
+  then removed; the new driver loaded without a reboot). Kernel matrix,
+  11 `rpt-rpi-v8` kernels 6.12.25 to 6.18.60: `rbprobe` exit 0, `ft8rx`
+  20 m 63 to 95 decodes per protocol with 0 packets lost, `rbcat` 48 000
+  frames per second with no resyncs, `rbdrivertest` 12/12, no
+  under-voltage, on every kernel. The image counted 0 to 2 TX frames
+  dropped (flags check) per boot out of about 560 000 unkeyed zero
+  samples; when in the run they fell is not known.
+- 2026-11-14: Adopted the new gateware. The old `gateware/` (Hermes-Lite 2
+  PIO images, CL016 and CL025) removed; `gateware-v2/` is now `gateware/`
+  with the Hermes-Lite 2 source archive and the Quartus Dockerfile, its
+  own README and `docs/`. Driver: the PIO and I2S transports only, the Pi
+  4's PCM pins set by the driver (one overlay on both boards; on the Pi 4
+  with the test module, `ft8rx` 20 m 67 decodes over P1 and 69 over P2,
+  none lost), no RX clock hold, no 48-bit command path, `rbload` and
+  `rbbus` removed. Packages: no FPGA question, both images installed.
+  Installed config `frequency_ppm: 22.9`, `realtime: false`. Daemon: no
+  false RX stall at the first client after idle. Driver and daemon READMEs
+  and `docs/` folders; components table in the README. The Pi 4 SMI work
+  (`TODO/RPI4-SMI.md`, branch `item/rpi4-smi`) is superseded by the I2S
+  image and its plan removed from here.
+- 2026-11-14: Pi 5 transmit through the `rpi5-pio` image: TX bit 4 (pin
+  105) strict setup slack -2.72 ns, as the Pi 4 build; digital loopback
+  self-test passed (+1 kHz tone at -18.7 dBFS, opposite sideband -144.7,
+  carrier -138.2, counters clean); drive 128 into a dummy load 1.4 W (the
+  Pi 4 gave 1.35 W); on air through piHPSDR and WSJT-X on 20 m FT8 at
+  drive 150: about 240 PSK Reporter spots in five minutes (Europe, North
+  America, Japan, Korea) and an FT8 contact. 13 transmissions, about
+  47 900 samples a second, 0 blocks dropped, 0 image overflows or
+  underruns, 0 RX stalls.
+- 2026-11-14: Pi 5 receive through the `rpi5-pio` image (branch
+  `item/new-direction`): the `rpi4-i2s` control, AD9866 set-up, keying and
+  PA logic with the released PIO wire and pins; the receive FIFO's read
+  side on the Pi's RX clock and neither FIFO ever cleared, so a stopped
+  Pi clock cannot lock it up. Driver transport `rp1-pio` with the framed
+  command path and image `radioberry-rpi5-pio.rbf` (module parameter
+  `pio_released_image=1` keeps the released image); packaged and linked
+  as the I2S image. Testbench `tools/sim.sh rpi5` runs the driver's PIO
+  instruction words: in order across pauses, program restarts and
+  receiver-count changes with the clock running; transmit words exact and
+  held back by ready. Timing met (RX clock to pins within 15 ns, +5.2 ns
+  slack). On the Pi 5: FT8 on 40 m, 4 decodes in 3 slots over Protocol 1
+  and 8 over Protocol 2, 0 packets lost; `rbdrivertest` 12/12; driver
+  unit tests pass; no RX words move while idle. Transmit not yet tested.
+- 2026-11-14: Pi 4 transmit through the `rpi4-i2s` image (branch
+  `item/new-direction`): digital loopback self-test passed (+1 kHz tone at
+  -43.6 dBFS, counters clean); power into a dummy load measured from drive
+  32 to 170 (about 1 dB per gain code, 4.5 W at 170); on air through
+  piHPSDR and WSJT-X on 40 and 30 m FT8, decoded by stations across Europe
+  and in North America. Key-up loss found and fixed: the daemon's
+  Protocol 2 server set a 100 ms TX buffer latency sized for the PIO
+  image's flow-controlled FIFO, overflowing the I2S image's 2048-sample
+  FIFO by about 2720 samples at every key-up; the daemon now leaves
+  address 0x17 to the gateware (f7a38aa), and 26 transmissions after it
+  showed 0 overflows. `tools/worst.sh` prints the TX bus's strict setup
+  slack (bd7c980).
+- 2026-11-13: Pi 4 receive through the `rpi4-i2s` image: I2S link into the
+  PCM block with cyclic DMA (61.44 MHz both ways, 0 errors over 10 min
+  idle and 10 min under load), driver I2S transport, framed SPI control,
+  6 receivers; FT8 decoded over Protocol 1 and 2 with 0 packets lost.
+- Superseded 2026-11-13 by the gateware-v2 direction, not done: the Pi 4
+  RX over SMI ([RPI4-SMI.md](RPI4-SMI.md), built and tested on
+  `item/rpi4-smi`, abandoned for I2S); the Pi 4 CPU cost with piHPSDR on
+  the CPU-clocked buses (the I2S transport takes 13% at 192 ksps); the
+  Pi 4 TX block drops on the CPU-clocked buses; fixing the released PIO
+  gateware's RX lock-up in place (the `rpi5-pio` image replaces it).
+
 - 2026-11-11: v0.4.1 released: the Pi 5 driver works on the 6.12
   kernels as on 6.18 (receive buffers from the RP1 DMA controller passed
   by DMA address, DMA request thresholds set by the driver;

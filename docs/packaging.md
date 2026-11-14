@@ -8,7 +8,7 @@ same packages serve both.
 
 | Package | Architecture | Contents |
 |---|---|---|
-| `radioberry` | arm64 | `radioberryd` and `radioberry.service`, `rbprobe`, `rbcat`, `rbctl`, `rbload`, `rbbus`, `p1probe`, `p2probe`, sysusers.d entry, udev rule, modules-load.d entry for `i2c-dev`, `/etc/radioberry/config.yaml`, both gateware images, the overlay |
+| `radioberry` | arm64 | `radioberryd` and `radioberry.service`, `rbprobe`, `rbcat`, `rbctl`, `p1probe`, `p2probe`, sysusers.d entry, udev rule, modules-load.d entry for `i2c-dev`, `/etc/radioberry/config.yaml`, the gateware images, the overlay |
 | `radioberry-dkms` | all | the driver source, built by DKMS for every installed kernel |
 | `radioberry-dev` | all | `radioberry_ioctl.h` |
 | `radioberry-dbgsym` | arm64 | debug symbols for `radioberry` |
@@ -45,13 +45,12 @@ sudo apt install ./build-deb/radioberry_*_arm64.deb \
     ./build-deb/radioberry-dkms_*_all.deb
 ```
 
-The install asks which FPGA the RadioBerry has (CL025 or CL016; the
-marking on the chip's package says which) and does the following:
+The install does the following:
 
 | What | Where |
 |---|---|
 | kernel module, built by DKMS for each installed kernel | `/lib/modules/<kernel>/updates/dkms/radioberry.ko.xz` |
-| gateware for the chosen FPGA | `/usr/lib/firmware/radioberry.rbf`, a link into `/usr/share/radioberry/gateware/rpi-5/<type>/` |
+| gateware images | `/usr/share/radioberry/gateware/<image>/CL025/`, linked as `/usr/lib/firmware/radioberry-rpi5-pio.rbf` and `radioberry-rpi4-i2s.rbf` |
 | overlay | copied from `/usr/share/radioberry/overlays/` to `/boot/firmware/overlays/radioberry.dtbo` |
 | tools | `/usr/bin/` |
 | `radioberryd` | `/usr/sbin/` |
@@ -73,9 +72,6 @@ and reboot. `radioberry.service` is enabled at install and started then if
 Transmit and the PA are off in the installed `config.yaml`
 ([Quickstart](quickstart.md#3-configure)).
 
-To change the FPGA type later: `sudo dpkg-reconfigure radioberry`, then
-reboot (the driver loads the gateware when it binds at boot).
-
 ### Upgrades and kernel updates
 
 An upgrade of `radioberry-dkms` builds the new module for every installed
@@ -95,7 +91,7 @@ when the packaged default changed as well.
 ### Removing
 
 `sudo apt remove radioberry radioberry-dkms` stops the service and removes
-the programs, the DKMS modules, the overlay and the firmware link. The
+the programs, the DKMS modules, the overlay and the firmware links. The
 module stays loaded until the next reboot. `config.yaml` and the
 `radioberry` user remain; `sudo apt purge radioberry` deletes
 `/etc/radioberry`. The `dtoverlay=radioberry` line in `config.txt` is left

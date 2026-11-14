@@ -81,7 +81,8 @@ public:
     std::uint64_t faults() const;
 
 private:
-    void drop_locked(const std::string& why);
+    // Releases the radio from `owner`, its owner; called with the mutex held.
+    void drop_locked(const Owner& owner, const std::string& why);
 
     MakeSafe make_safe_;
     const std::chrono::nanoseconds timeout_;

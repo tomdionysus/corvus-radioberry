@@ -1,0 +1,137 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# Link test image for the RadioBerry, Cyclone 10 LP 10CL025, 144-pin.
+
+set_global_assignment -name FAMILY "Cyclone 10 LP"
+set_global_assignment -name DEVICE 10CL025YE144C8G
+set_global_assignment -name TOP_LEVEL_ENTITY rbt_top
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY build
+set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
+
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/linktest/rbt_spi.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/linktest/rbt_adser.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/linktest/rbt_fcount.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/linktest/rbt_bist.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/linktest/rbt_i2s.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/linktest/rbt_rxcap.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/linktest/rbt_arm.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/linktest/rbt_txtone.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/linktest/rbt_pll.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/linktest/rbt_top.sv
+set_global_assignment -name SDC_FILE linktest.sdc
+
+# Configuration: passive serial from the Raspberry Pi, raw binary output.
+set_global_assignment -name CYCLONEIII_CONFIGURATION_SCHEME "PASSIVE SERIAL"
+set_global_assignment -name USE_CONFIGURATION_DEVICE OFF
+set_global_assignment -name GENERATE_RBF_FILE ON
+set_global_assignment -name CRC_ERROR_OPEN_DRAIN OFF
+set_global_assignment -name FORCE_CONFIGURATION_VCCIO ON
+set_global_assignment -name ENABLE_OCT_DONE OFF
+set_global_assignment -name ENABLE_CONFIGURATION_PINS OFF
+set_global_assignment -name ENABLE_BOOT_SEL_PIN OFF
+set_global_assignment -name CYCLONEII_RESERVE_NCEO_AFTER_CONFIGURATION "USE AS REGULAR IO"
+set_global_assignment -name RESERVE_DATA0_AFTER_CONFIGURATION "USE AS REGULAR IO"
+set_global_assignment -name RESERVE_DATA1_AFTER_CONFIGURATION "USE AS REGULAR IO"
+set_global_assignment -name RESERVE_FLASH_NCE_AFTER_CONFIGURATION "USE AS REGULAR IO"
+set_global_assignment -name RESERVE_DCLK_AFTER_CONFIGURATION "USE AS REGULAR IO"
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS "AS INPUT TRI-STATED WITH WEAK PULL-UP"
+
+set_global_assignment -name STRATIX_DEVICE_IO_STANDARD "3.3-V LVCMOS"
+set_global_assignment -name MIN_CORE_JUNCTION_TEMP 0
+set_global_assignment -name MAX_CORE_JUNCTION_TEMP 85
+set_global_assignment -name OPTIMIZATION_MODE "HIGH PERFORMANCE EFFORT"
+
+# Clock from the board (76.8 MHz).
+set_location_assignment PIN_53 -to clk53
+
+# SPI0: GPIO 11, 8, 10, 9.
+set_location_assignment PIN_58 -to spi_sck
+set_location_assignment PIN_51 -to spi_ce0_n
+set_location_assignment PIN_60 -to spi_mosi
+set_location_assignment PIN_59 -to spi_miso
+
+# Header-side pins that can be driven. Index: FPGA pin (expected GPIO).
+#  0: 31 (25)   1: 32 (5)    2: 33 (18)   3: 44 (19)   4: 43 (20)
+#  5: 42 (21)   6: 49 (12)   7: 50 (7?)   8: 13 (13)   9: 39 (23?)
+# 10: 46 (16?) 11: 113 (17?) 12: 112      13: 28       14: 6
+# 15: 7        16: 8         17: 10       18: 11
+set_location_assignment PIN_31 -to pin_io[0]
+set_location_assignment PIN_32 -to pin_io[1]
+set_location_assignment PIN_33 -to pin_io[2]
+set_location_assignment PIN_44 -to pin_io[3]
+set_location_assignment PIN_43 -to pin_io[4]
+set_location_assignment PIN_42 -to pin_io[5]
+set_location_assignment PIN_49 -to pin_io[6]
+set_location_assignment PIN_50 -to pin_io[7]
+set_location_assignment PIN_13 -to pin_io[8]
+set_location_assignment PIN_39 -to pin_io[9]
+set_location_assignment PIN_46 -to pin_io[10]
+set_location_assignment PIN_113 -to pin_io[11]
+set_location_assignment PIN_112 -to pin_io[12]
+set_location_assignment PIN_28 -to pin_io[13]
+set_location_assignment PIN_6 -to pin_io[14]
+set_location_assignment PIN_7 -to pin_io[15]
+set_location_assignment PIN_8 -to pin_io[16]
+set_location_assignment PIN_10 -to pin_io[17]
+set_location_assignment PIN_11 -to pin_io[18]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to pin_io[*]
+
+# Header-side pins that are inputs only: 54 (GPIO 6), 55 (GPIO 4), both
+# dedicated clock inputs. Pin 12 (DCLK, GPIO 24) cannot be a user pin in
+# passive serial mode: the fitter reserves it whatever the setting above.
+set_location_assignment PIN_54 -to pin_in[0]
+set_location_assignment PIN_55 -to pin_in[1]
+
+# PA header inputs: tip, ring, paddle left, paddle right, then the pins
+# the radio gateware leaves unused.
+set_location_assignment PIN_120 -to cn301_in[0]
+set_location_assignment PIN_121 -to cn301_in[1]
+set_location_assignment PIN_141 -to cn301_in[2]
+set_location_assignment PIN_142 -to cn301_in[3]
+set_location_assignment PIN_115 -to cn301_in[4]
+set_location_assignment PIN_119 -to cn301_in[5]
+set_location_assignment PIN_125 -to cn301_in[6]
+set_location_assignment PIN_132 -to cn301_in[7]
+set_location_assignment PIN_133 -to cn301_in[8]
+set_location_assignment PIN_135 -to cn301_in[9]
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to cn301_in[*]
+
+# PA lines, held low: exttr, inttr, envpa, envbias.
+set_location_assignment PIN_144 -to pa_out[0]
+set_location_assignment PIN_143 -to pa_out[1]
+set_location_assignment PIN_136 -to pa_out[2]
+set_location_assignment PIN_137 -to pa_out[3]
+
+# AD9866.
+set_location_assignment PIN_114 -to ad_rst_n
+set_location_assignment PIN_111 -to ad_mode
+set_location_assignment PIN_65 -to ad_sen_n
+set_location_assignment PIN_66 -to ad_sclk
+set_location_assignment PIN_68 -to ad_sdio
+set_location_assignment PIN_67 -to ad_sdo
+set_location_assignment PIN_69 -to ad_clkout1b
+set_location_assignment PIN_71 -to ad_rxclk
+set_location_assignment PIN_80 -to ad_rx[0]
+set_location_assignment PIN_83 -to ad_rx[1]
+set_location_assignment PIN_85 -to ad_rx[2]
+set_location_assignment PIN_86 -to ad_rx[3]
+set_location_assignment PIN_87 -to ad_rx[4]
+set_location_assignment PIN_98 -to ad_rx[5]
+set_location_assignment PIN_77 -to ad_rxsync
+set_location_assignment PIN_99 -to ad_tx[0]
+set_location_assignment PIN_100 -to ad_tx[1]
+set_location_assignment PIN_101 -to ad_tx[2]
+set_location_assignment PIN_103 -to ad_tx[3]
+set_location_assignment PIN_105 -to ad_tx[4]
+set_location_assignment PIN_106 -to ad_tx[5]
+set_location_assignment PIN_76 -to ad_txsync
+set_location_assignment PIN_72 -to ad_txquiet_n
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to ad_sdo
+set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to ad_sdio
+set_instance_assignment -name FAST_INPUT_REGISTER ON -to ad_rx[*]
+# RX sync changes up to about 3 ns after the data on this bus; capturing it
+# through fabric routing while the data is captured in the I/O cells pairs
+# the halves wrongly (measured with the raw capture).
+set_instance_assignment -name FAST_INPUT_REGISTER ON -to ad_rxsync
+
+set_global_assignment -name LAST_QUARTUS_VERSION "23.1std.1 Lite Edition"

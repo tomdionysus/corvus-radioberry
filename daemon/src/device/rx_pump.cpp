@@ -15,7 +15,11 @@ RxPump::RxPump(Device& device, Control& control, SpscRing<RxBlock>& ring, Monito
       monitor_(monitor),
       sink_(std::move(sink)),
       clock_(std::move(clock)),
-      options_(options) {}
+      options_(options) {
+    control_.set_notify([this] { wake_.signal(); });
+}
+
+RxPump::~RxPump() { control_.set_notify({}); }
 
 bool RxPump::start() {
     try {
@@ -37,8 +41,13 @@ bool RxPump::step() {
         while (const auto command = control_.next()) {
             send(*command);
         }
-        const Readiness ready = device_.wait(true, false, options_.wait_ms);
-        if (ready.error || clock_() - last_stats_ >= options_.stats_period) {
+        const bool run = control_.run();
+        const Readiness ready =
+            device_.wait_or_wake(true, false, run ? options_.wait_ms : -1, wake_.fd());
+        if (ready.woken) {
+            wake_.drain();
+        }
+        if (ready.error || (run && clock_() - last_stats_ >= options_.stats_period)) {
             poll_stats();
         }
         if (ready.readable) {

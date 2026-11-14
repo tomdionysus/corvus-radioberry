@@ -48,6 +48,7 @@ void Monitor::update(const radioberry_stats& s, std::chrono::nanoseconds now, bo
         if (!last_) {
             last_ = s;
             last_frame_at_ = now;
+            rx_expected_ = rx_expected;
             return;
         }
         const radioberry_stats before = *last_;
@@ -56,13 +57,16 @@ void Monitor::update(const radioberry_stats& s, std::chrono::nanoseconds now, bo
         report(FaultKind::RxDroppedWords, before.rx_dropped_words, s.rx_dropped_words);
         report(FaultKind::RxOverrun, before.rx_overrun_frames, s.rx_overrun_frames);
         report(FaultKind::TxUnderrun, before.tx_underruns, s.tx_underruns);
-        if (s.rx_frames != before.rx_frames || !rx_expected) {
+        // While idle the daemon takes no snapshots, so the timer restarts
+        // when frames become expected, not at the last idle snapshot.
+        if (s.rx_frames != before.rx_frames || !rx_expected || !rx_expected_) {
             last_frame_at_ = now;
             stalled_ = false;
         } else if (!stalled_ && now - last_frame_at_ >= stall_after_) {
             stalled_ = true;
             stall_now = true;
         }
+        rx_expected_ = rx_expected;
     }
     if (stall_now) {
         sink_({FaultKind::RxStall, 1, {}});

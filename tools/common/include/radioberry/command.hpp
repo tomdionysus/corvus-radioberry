@@ -10,13 +10,15 @@
 
 namespace radioberry {
 
-// One gateware command (gateware/README.md section 4): byte 0 carries
-// run, CWX and the TX permission bit, bytes 1 to 5 a Hermes-Lite 2 C0..C4
-// block. PTT and the TX permission bit are clear unless set explicitly.
+// One gateware command, the radioberry_command layout of the driver's ABI:
+// byte 0 carries run, CWX, the TX permission bit and PA allowed, bytes 1
+// to 5 a Hermes-Lite 2 C0..C4 block. PTT and the TX permission bit are
+// clear unless set explicitly.
 struct Command {
     static constexpr std::uint8_t kRun = 1u << 0;
     static constexpr std::uint8_t kCwx = 1u << 1;
     static constexpr std::uint8_t kTxPermit = 1u << 2;
+    static constexpr std::uint8_t kPaAllowed = 1u << 3;
 
     std::uint8_t flags = kRun;  // byte 0
     std::uint8_t address = 0;   // C0 bits 7..1, 0 to 0x3f
@@ -52,8 +54,7 @@ struct Reply {
 std::vector<std::string> transmit_hazards(const Command& command);
 
 // True for an address 0x17 command with PTT hang time 31, which disables
-// the gateware's transmit watchdog (gateware/README.md section 7). Never
-// to be sent.
+// the Hermes-Lite 2 core's transmit watchdog. Never to be sent.
 bool disables_tx_watchdog(const Command& command);
 
 // Receive sample rates the gateware offers, by Hermes-Lite 2 rate code.

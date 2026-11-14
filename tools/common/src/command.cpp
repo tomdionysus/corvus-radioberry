@@ -10,6 +10,7 @@ namespace radioberry {
 static_assert(Command::kRun == RADIOBERRY_CMD_RUN);
 static_assert(Command::kCwx == RADIOBERRY_CMD_CWX);
 static_assert(Command::kTxPermit == RADIOBERRY_CMD_TX_PERMIT);
+static_assert(Command::kPaAllowed == RADIOBERRY_CMD_PA_ALLOWED);
 static_assert(RADIOBERRY_CMD_PTT == 1u);
 
 std::array<std::uint8_t, 6> Command::encode() const {
@@ -31,7 +32,7 @@ Command Command::decode(std::span<const std::uint8_t, 6> b) {
     return c;
 }
 
-bool Command::can_transmit() const { return ptt || (flags & (kTxPermit | kCwx)) != 0; }
+bool Command::can_transmit() const { return ptt || (flags & (kTxPermit | kCwx | kPaAllowed)) != 0; }
 
 Reply Reply::decode(std::span<const std::uint8_t, 6> b) {
     Reply r;
@@ -55,6 +56,9 @@ std::vector<std::string> transmit_hazards(const Command& c) {
     }
     if ((c.flags & Command::kCwx) != 0) {
         hazards.emplace_back("CWX");
+    }
+    if ((c.flags & Command::kPaAllowed) != 0) {
+        hazards.emplace_back("PA allowed");
     }
     if (c.address == 0x09) {
         if ((c.data >> 24) != 0) {

@@ -64,6 +64,12 @@ Network::Network(std::uint32_t address, std::uint16_t base, unsigned ddcs, SendB
         ::getsockname(fd, reinterpret_cast<sockaddr*>(&a), &len);
         sockets_[offset] = {fd, ntohs(a.sin_port)};
     }
+    fds_.push_back({wake_.fd(), POLLIN, 0});
+    offsets_.push_back(0);
+    for (const auto& [offset, s] : sockets_) {
+        fds_.push_back({s.fd, POLLIN, 0});
+        offsets_.push_back(offset);
+    }
 }
 
 Network::~Network() { close_all(); }
@@ -81,29 +87,26 @@ std::uint16_t Network::port(unsigned offset) const {
 }
 
 void Network::poll(int timeout_ms, const Handler& handler) {
-    std::vector<pollfd> fds;
-    std::vector<unsigned> offsets;
-    for (const auto& [offset, s] : sockets_) {
-        fds.push_back({s.fd, POLLIN, 0});
-        offsets.push_back(offset);
-    }
-    if (::poll(fds.data(), fds.size(), timeout_ms) <= 0) {
+    if (::poll(fds_.data(), fds_.size(), timeout_ms) <= 0) {
         return;
     }
+    if (fds_[0].revents != 0) {
+        wake_.drain();
+    }
     std::array<std::uint8_t, 2048> buffer;
-    for (std::size_t i = 0; i < fds.size(); ++i) {
-        if (fds[i].revents == 0) {
+    for (std::size_t i = 1; i < fds_.size(); ++i) {
+        if (fds_[i].revents == 0) {
             continue;
         }
         for (;;) {
             sockaddr_in from{};
             socklen_t len = sizeof from;
-            const ssize_t got = ::recvfrom(fds[i].fd, buffer.data(), buffer.size(), 0,
+            const ssize_t got = ::recvfrom(fds_[i].fd, buffer.data(), buffer.size(), 0,
                                            reinterpret_cast<sockaddr*>(&from), &len);
             if (got < 0) {
                 break;  // EAGAIN, or an error the next poll reports again
             }
-            handler(offsets[i],
+            handler(offsets_[i],
                     std::span<const std::uint8_t>(buffer.data(), static_cast<std::size_t>(got)),
                     Peer{ntohl(from.sin_addr.s_addr), ntohs(from.sin_port), false});
         }

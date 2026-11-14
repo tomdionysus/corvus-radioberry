@@ -306,7 +306,7 @@ TEST_CASE("High Priority sets frequencies, gain, drive and MOX", "[p2server]") {
     CHECK(rig.control.value(0x01) == 3573000u);
     CHECK(rig.control.value(0x0a) == (0x40u | 16u));  // 14 - 10 dB
     CHECK(rig.policy.transmitting());
-    CHECK(rig.control.transmit() == TransmitState{true, true, true});
+    CHECK(rig.control.transmit() == TransmitState{true, true, true, true});
     CHECK(rig.control.value(0x09) == 0x90u << 24);  // PA now off
 
     // Gain floors at -12 dB; the base gain is set by the daemon.
@@ -410,12 +410,18 @@ TEST_CASE("Mic/Line and status packets follow the radio's clock", "[p2server]") 
 TEST_CASE("TX I/Q is decimated to 48 ksps for the gateware", "[p2server]") {
     Rig rig(transmit());
     rig.start({{0, 48}});
-    for (std::uint32_t seq = 0; seq < 4; ++seq) {
+    // Without MOX the samples go through the decimator but not to the device.
+    rig.packet(kTxIqPort, tx_iq_packet(0, 0x123400, -0x123400));
+    CHECK(rig.tx.front() == nullptr);
+    HighPriorityBytes h;
+    h.mox = true;
+    rig.high_priority(h);
+    for (std::uint32_t seq = 1; seq < 5; ++seq) {
         rig.packet(kTxIqPort, tx_iq_packet(seq, 0x123400, -0x123400));
         TxBlock* b = rig.tx.front();
         REQUIRE(b != nullptr);
         CHECK(b->size == 60 * kTxSampleBytes);
-        if (seq == 3) {
+        if (seq == 4) {
             // Settled: 24-bit full scale maps to 16-bit full scale.
             const std::uint8_t* last = b->bytes.data() + 59 * kTxSampleBytes;
             const auto i = static_cast<std::int16_t>(last[0] << 8 | last[1]);
@@ -426,7 +432,8 @@ TEST_CASE("TX I/Q is decimated to 48 ksps for the gateware", "[p2server]") {
         rig.tx.pop();
     }
     rig.server.set_iq_convention(p1::IqConvention::Standard);
-    rig.packet(kTxIqPort, tx_iq_packet(4, 0x123400, -0x123400));
+    rig.packet(kTxIqPort, tx_iq_packet(5, 0x123400, -0x123400));
+    REQUIRE(rig.tx.front() != nullptr);
     const std::uint8_t* last = rig.tx.front()->bytes.data() + 59 * kTxSampleBytes;
     CHECK(static_cast<std::int16_t>(last[0] << 8 | last[1]) < 0);  // Q first
     rig.tx.pop();
@@ -476,13 +483,14 @@ TEST_CASE("unsupported requests are reported and do no harm", "[p2server]") {
     CHECK(rig.server.counters().ignored == 1);
 }
 
-TEST_CASE("starting a stream sets the TX cushion and hang time", "[p2server]") {
+TEST_CASE("starting a stream leaves the TX timing to the gateware", "[p2server]") {
     Rig rig;
     Command earlier;  // left by another client
     earlier.address = 0x17;
     earlier.data = 4u << 8 | 40u;
     rig.control.set(earlier);
     rig.start({{0, 48}});
-    // 20 ms PTT hang, 100 ms TX latency: more than the gateware's 85 ms FIFO.
-    CHECK(rig.control.value(0x17) == (20u << 8 | 100u));
+    // The TX buffer latency and PTT hang are the gateware's business: the
+    // server does not write address 0x17.
+    CHECK(rig.control.value(0x17) == (4u << 8 | 40u));
 }

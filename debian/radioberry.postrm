@@ -4,9 +4,11 @@ set -e
 
 case "$1" in
     remove | purge)
-        if [ -L /usr/lib/firmware/radioberry.rbf ]; then
-            rm -f /usr/lib/firmware/radioberry.rbf
-        fi
+        for f in radioberry-rpi4-i2s.rbf radioberry-rpi5-pio.rbf; do
+            if [ -L "/usr/lib/firmware/$f" ]; then
+                rm -f "/usr/lib/firmware/$f"
+            fi
+        done
         rm -f /boot/firmware/overlays/radioberry.dtbo
         ;;
 esac

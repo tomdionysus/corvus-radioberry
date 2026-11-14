@@ -19,10 +19,10 @@ sudo depmod
 sudo systemctl daemon-reload
 ```
 
-Its overlay and gateware (`/boot/firmware/overlays/radioberry.dtbo`,
-`/lib/firmware/radioberry.rbf`) are replaced when this software is
-installed. Keep `dtoverlay=radioberry` in `config.txt` and add
-`dtparam=i2c_arm=on`.
+Its overlay (`/boot/firmware/overlays/radioberry.dtbo`) is replaced when
+this software is installed. Its gateware, `/lib/firmware/radioberry.rbf`,
+is not used and can be deleted. Keep `dtoverlay=radioberry` in
+`config.txt` and add `dtparam=i2c_arm=on`.
 
 Then install this software ([Quickstart](quickstart.md)), reboot, and
 check that `rbprobe` exits 0.

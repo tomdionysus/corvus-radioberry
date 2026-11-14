@@ -5,9 +5,9 @@
  *
  * The control interface is spi0 chip select 0 in SPI mode 3. The FPGA's
  * passive serial configuration lines are GPIOs handed to the driver. The
- * stream pins (4, 5, 6, 12, 18 to 21, 25) are listed for the Pi 4, whose
- * driver clocks them through gpiolib's claim; on a Pi 5 the driver hands
- * them to the RP1 PIO instead and never requests these GPIOs.
+ * stream pins are not listed: on a Pi 5 the driver hands GPIO 4, 5, 6, 12,
+ * 18 to 21 and 25 to the RP1 PIO, on a Pi 4 it puts GPIO 18 to 21 in their
+ * PCM function itself.
  *
  * Only labels both boards' device trees define are used: spi0, spidev0,
  * spidev1 and gpio (the RP1 GPIO block on a Pi 5, the BCM2711 one on a
@@ -54,14 +54,6 @@
 				data0-gpios = <&gpio 13 0>;
 				conf-done-gpios = <&gpio 22 0>;
 				nstatus-gpios = <&gpio 26 0>;
-				/* Inputs pulled down (GPIO_PULL_DOWN, 0x20). */
-				tx-clk-gpios = <&gpio 4 0>;
-				tx-data-gpios = <&gpio 5 0>;
-				rx-clk-gpios = <&gpio 6 0>;
-				tx-ready-gpios = <&gpio 12 0x20>;
-				rx-data-gpios = <&gpio 18 0x20>, <&gpio 19 0x20>,
-						<&gpio 20 0x20>, <&gpio 21 0x20>;
-				rx-ready-gpios = <&gpio 25 0x20>;
 				status = "okay";
 			};
 		};

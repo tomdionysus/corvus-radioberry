@@ -100,10 +100,14 @@ TEST_CASE("the Protocol 1 sockets report what they cannot set up", "[net]") {
     }
     {
         const FdLimit none(0);
-        CHECK(what_of([] { Network n(kLoopback, 0); }).find("UDP socket") != std::string::npos);
+        CHECK(what_of([] { Network n(kLoopback, 0); }).find("eventfd") != std::string::npos);
     }
     {
         const FdLimit one(1);
+        CHECK(what_of([] { Network n(kLoopback, 0); }).find("UDP socket") != std::string::npos);
+    }
+    {
+        const FdLimit two(2);
         CHECK(what_of([] { Network n(kLoopback, 0); }).find("TCP socket") != std::string::npos);
     }
 }
@@ -193,4 +197,11 @@ TEST_CASE("the Protocol 2 sockets count the sends that fail", "[net]") {
     CHECK(n.send_failures() == 1);
     n.send(p2::kMicLinePort, to, std::vector<std::uint8_t>(70000, 0));
     CHECK(n.send_failures() == 2);
+}
+
+TEST_CASE("a Protocol 2 poll with nothing to read times out", "[net]") {
+    p2::Network n(kLoopback, 0, 1, [](const Peer&, std::span<const std::uint8_t>) {});
+    int handled = 0;
+    n.poll(0, [&](unsigned, std::span<const std::uint8_t>, const Peer&) { ++handled; });
+    CHECK(handled == 0);
 }

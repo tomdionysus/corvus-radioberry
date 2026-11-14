@@ -23,6 +23,9 @@ struct TxPolicyOptions {
     // Longest continuous MOX; then MOX is dropped and latched until the
     // client releases it.
     std::chrono::nanoseconds watchdog = std::chrono::seconds(120);
+    // The gateware has a transmitter (the driver reports one). Clear for a
+    // receive-only image: MOX is then refused whatever allow_tx says.
+    bool tx_available = true;
 };
 
 // What reaches the gateware's transmit controls (gateware/README.md
