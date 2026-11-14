@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""Framed control protocol of the gateware-v2 images, over /dev/spidev0.0
+"""Framed control protocol of the gateware images, over /dev/spidev0.0
 (SPI mode 3). For bring-up and checks; the driver speaks the same protocol.
 
   rbv.py rd board|radio ADDR

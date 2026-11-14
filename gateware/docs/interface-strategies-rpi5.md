@@ -3,7 +3,7 @@
 Ways the Raspberry Pi 5 and the FPGA could exchange samples and commands
 if the gateware were designed from scratch for this hardware. A list of
 options with what is known about each, not a decision. The Raspberry Pi 4
-list is in [Interface strategies: Raspberry Pi 4](interface_strategies_rpi4.md).
+list is in [Interface strategies: Raspberry Pi 4](interface-strategies-rpi4.md).
 
 On a Raspberry Pi 5 the header belongs to the RP1 chip, behind PCIe. Its
 peripherals differ from the Raspberry Pi 4's: it has programmable I/O
@@ -19,7 +19,7 @@ peripherals differ from the Raspberry Pi 4's: it has programmable I/O
 
 ## 1. What the hardware gives
 
-From [Hardware discovery](hardware_discovery.md).
+From [Hardware discovery](hardware-discovery.md).
 
 | Wires | Pi GPIO | Notes |
 |---|---|---|
@@ -57,14 +57,14 @@ second, 56.9 Mbit/s of samples, with the present protocol (measured).
   at 20 MHz within a value; transmit at 102 000 words per second against
   48 000 needed.
 - Facts of the engine the driver depends on are in
-  [Design](../docs/design.md): one PIO block of four state machines,
+  [Design](../../docs/design.md): one PIO block of four state machines,
   bounce-buffered DMA with at most four buffers per direction, programs
   of at most 32 instructions.
 - Weaknesses are the protocol's, not the engine's: 28 bits are moved for
   every 24 of data plus a start nibble on the wire, the transmit stream
   has no framing that recovers, and the constraints the bus runs under
   were written for 4.8 MHz
-  ([Evaluation](gateware_evaluation.md)).
+  ([Evaluation](evaluation.md)).
 
 ### B. PIO with DMA, a protocol designed for it
 

@@ -3,7 +3,7 @@
 Ways the Raspberry Pi 4 and the FPGA could exchange samples and commands
 if the gateware were designed from scratch for this hardware. A list of
 options with what is known about each, not a decision. The Raspberry Pi 5
-list is in [Interface strategies: Raspberry Pi 5](interface_strategies_rpi5.md).
+list is in [Interface strategies: Raspberry Pi 5](interface-strategies-rpi5.md).
 
 ## Grades used
 
@@ -15,7 +15,7 @@ list is in [Interface strategies: Raspberry Pi 5](interface_strategies_rpi5.md).
 
 ## 1. What the hardware gives
 
-From [Hardware discovery](hardware_discovery.md).
+From [Hardware discovery](hardware-discovery.md).
 
 | Wires | Pi GPIO | Notes |
 |---|---|---|
@@ -41,7 +41,7 @@ From [Hardware discovery](hardware_discovery.md).
 
 The Raspberry Pi 4 limit that started this: clocking a bus from the CPU
 costs a core from 192 000 values per second
-([CPU cost of receive](../docs/finding-rpi4-cpu.md)).
+([CPU cost of receive](../../docs/finding-rpi4-cpu.md)).
 
 ## 3. Strategies
 
@@ -188,4 +188,4 @@ Reading of the table, mine and open to challenge:
 | FPGA pin 12 as an output; pins 54 and 55 as clock inputs | The Cyclone 10 LP pin-out, then the same test image |
 | PCM slave bit clock limit and slot format | A test image sending a counter as I2S at rising bit clocks; `arecord` raw capture, check for gaps |
 | SPI6 with DMA: clock limit and cost per block | A test image answering SPI with a counter; `spidev` transfers at rising clocks and block sizes |
-| GPIO 7, 16, 17, 23 wires | The pin test in [Hardware discovery](hardware_discovery.md) |
+| GPIO 7, 16, 17, 23 wires | The pin test in [Hardware discovery](hardware-discovery.md) |

@@ -1,10 +1,10 @@
 # Plan: gateware projects
 
 Two gateware images from one radio core, one per host board. Background:
-[Hardware discovery](hardware_discovery.md),
-[Evaluation of the current gateware source](gateware_evaluation.md),
-[Interface strategies: Raspberry Pi 4](interface_strategies_rpi4.md),
-[Interface strategies: Raspberry Pi 5](interface_strategies_rpi5.md).
+[Hardware discovery](hardware-discovery.md),
+[Evaluation of the current gateware source](evaluation.md),
+[Interface strategies: Raspberry Pi 4](interface-strategies-rpi4.md),
+[Interface strategies: Raspberry Pi 5](interface-strategies-rpi5.md).
 
 ## Decided
 
@@ -41,7 +41,7 @@ chooses what each wire carries and in which direction.
 ## 2. Structure
 
 ```
-gateware-v2/
+gateware/
   rtl/core/           radio core, AD9866 interface and set-up, reset, PA lines
   rtl/control/        SPI0 command and status module
   rtl/transport/pio/  Raspberry Pi 5 streams
@@ -162,7 +162,7 @@ GPIO 4, 5, 6 and 12 carry nothing.
 - No ready line, no host clocking, no fill-level logic: the FPGA takes
   one transmit sample per frame.
 - Capacity, measured with the link test image and DMA
-  ([Link test results](linktest_results.md)): loss-free both ways at a
+  ([Link test results](linktest-results.md)): loss-free both ways at a
   61.44 MHz bit clock for 10 minutes, idle and under full load. That is
   61.4 Mbit/s each way on one wire. Six receivers at 192 ksps are
   55.3 Mbit/s of 24-bit values, but the first receive image sends one
@@ -255,7 +255,7 @@ Decided (owner, 2026-11-13):
 3. `ft8rx` over Protocols 1 and 2 with no packets lost.
 4. piHPSDR and WSJT-X on the Pi 4's desktop decode FT8, with decodes
    matching PSK Reporter spots.
-5. CPU cost measured against [the earlier finding](../docs/finding-rpi4-cpu.md).
+5. CPU cost measured against [the earlier finding](../../docs/finding-rpi4-cpu.md).
 6. MOX from piHPSDR is refused and logged; nothing on the transmit side
    moves (checked with the gateware's own status).
 7. The Raspberry Pi 5 build and CI unchanged.

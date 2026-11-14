@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
 // I2S link to the Raspberry Pi 4's PCM block, the FPGA as clock master
-// (measured in the link test: gateware-v2/linktest_results.md).
+// (measured in the link test: docs/linktest-results.md).
 //
 // Frame: 64 bit clocks, two 32-bit words, frame sync high for the first
 // 32, most significant bit first, no delay after the frame sync edge.

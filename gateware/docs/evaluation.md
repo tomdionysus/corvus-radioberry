@@ -1,12 +1,13 @@
 # Evaluation of the current gateware source
 
-The gateware that runs on the boards is the Hermes-Lite 2 RadioBerry PIO
-variant, version 75.3, built unmodified
-([gateware/README.md](../gateware/README.md),
-[gateware/PROVENANCE.md](../gateware/PROVENANCE.md)). This is a reading
-of that source: what it is made of, what is sound, and what is wrong or
-fragile. The hardware facts it rests on are in
-[Hardware discovery](hardware_discovery.md).
+The gateware release 0.4.1 ran on the boards is the Hermes-Lite 2
+RadioBerry PIO variant, version 75.3, built unmodified (its
+[README](https://github.com/tomdionysus/corvus-radioberry/blob/v0.4.1/gateware/README.md)
+and
+[provenance](https://github.com/tomdionysus/corvus-radioberry/blob/v0.4.1/gateware/PROVENANCE.md)
+in release 0.4.1). This is a reading of that source: what it is made of,
+what is sound, and what is wrong or fragile. The hardware facts it rests
+on are in [Hardware discovery](hardware-discovery.md).
 
 ## Method and limits
 
@@ -83,22 +84,22 @@ observed.
 | T4 | The four PA lines are combinational mixes of signals from three clock domains (`tx_on` from 76.8 MHz, run from 10 MHz, TX permission straight from the SPI register) | `radioberry/control.v` | Glitches on the lines that key the PA board are possible at any change of those signals | From source |
 | T5 | PA enable gates `envpa` and `envbias` only. `exttr` follows the keyed state whatever PA enable says, and `inttr` does too unless T/R disable is also set | `radioberry/control.v` | PA enable does not stop the PA board transmitting | Seen once |
 | T6 | PTT rides in every command and goes into the 76.8 MHz transmit state machine with no synchroniser | `radioberry_core.v`, `radio.v` | Any command sent with bit 32 set keys the transmitter. The missing synchroniser can at worst put the state machine in an unused state for a cycle, which returns to idle | From source |
-| T7 | The transmit state machine is forced to idle while run is clear | `radio.v` (`tx_state <= run ? tx_state_next : NOTX`) | With run clear nothing drives the DAC: not PTT, not the key on the jack. With run set, the jack key drives the DAC without the TX permission bit, and only the PA lines are held off | From source. Section 6 of [gateware/README.md](../gateware/README.md) says run is not needed; the source says it is |
+| T7 | The transmit state machine is forced to idle while run is clear | `radio.v` (`tx_state <= run ? tx_state_next : NOTX`) | With run clear nothing drives the DAC: not PTT, not the key on the jack. With run set, the jack key drives the DAC without the TX permission bit, and only the PA lines are held off | From source. Section 6 of the [0.4.1 gateware README](https://github.com/tomdionysus/corvus-radioberry/blob/v0.4.1/gateware/README.md) says run is not needed; the source says it is |
 | T8 | PTT hang time 31 disables the transmit watchdog | `radio.v` | Transmit then ends only when PTT is cleared | From source |
 
 ### Host interface
 
 | # | Finding | Where | Consequence | Status |
 |---|---|---|---|---|
-| H1 | After configuration the gateware drives FPGA pin 13 (GPIO 13) with the level of the paddle input on pin 142, which has a pull-up. The driver leaves GPIO 13 as an output at 0 after configuring | `radioberry_core.v` (`pi_cwr`), the pin file; [driver/kernel/radioberry.c](../driver/kernel/radioberry.c) | With no paddle contact closed, the FPGA drives the wire high against the Pi driving it low, all the time the radio runs | From source and driver code; not measured |
+| H1 | After configuration the gateware drives FPGA pin 13 (GPIO 13) with the level of the paddle input on pin 142, which has a pull-up. The driver leaves GPIO 13 as an output at 0 after configuring | `radioberry_core.v` (`pi_cwr`), the pin file; [driver/kernel/radioberry.c](../../driver/kernel/radioberry.c) | With no paddle contact closed, the FPGA drives the wire high against the Pi driving it low, all the time the radio runs | From source and driver code; not measured |
 | H2 | The RX read-out's outputs to the Pi are unregistered, one of them through inferred latches, and the constraints exclude them from timing | `rx_pi_pio.v`, `timing.sdc` | The 20 MHz RX clock works by margin, not by analysis. The constraints assume 4.8 MHz | Seen working at 20 MHz |
-| H3 | The RX FIFO is cleared asynchronously on every receiver-count change while the Pi's clock may be running. The parameter meant to synchronise the clear is not a real one, and the read-out state machine has no reset | `fifos.v` (`wrsync_aclr_synch`), `rx_pi_pio.v` | The read-out can lock up until the gateware is reloaded | Seen: [receive lock-up](../docs/fault-rx-lockup.md). The driver holds its clock still across the command |
+| H3 | The RX FIFO is cleared asynchronously on every receiver-count change while the Pi's clock may be running. The parameter meant to synchronise the clear is not a real one, and the read-out state machine has no reset | `fifos.v` (`wrsync_aclr_synch`), `rx_pi_pio.v` | The read-out can lock up until the gateware is reloaded | Seen: [receive lock-up](../../docs/fault-rx-lockup.md). The driver holds its clock still across the command |
 | H4 | The receiver-count comparison samples the SPI register's address and data in the 10 MHz domain on every cycle, with no synchroniser and without waiting for the command strobe | `radioberry_core.v` (`channels`) | A sample taken while the 48 bits change can read address 0 with other data: a FIFO clear the host did not ask for, on any command, so outside the driver's clock hold | From source. No lock-up has been seen with the hold on (0 in 750 runs), so it is rare if it happens |
 | H5 | The read-out's frame index is not reset when the FIFO is cleared, and the first value after a clear is dropped (the read-out acknowledges a value before sending the next one) | `rx_pi_pio.v` | After a receiver-count change the first frame arrives short and wrongly indexed. The host must discard until a clean frame | Seen: the driver discards a few words at each change |
 | H6 | The receiver count from command 0x00 is not limited to the receivers built | `radio.v` (`last_chan`) | A count above the build's gives frames with undefined values, and above eight receivers the 4-bit index wraps | From source |
 | H7 | Commands to the AD9866 arriving while its serial port is busy (about 3.4 us per write) are dropped; the acknowledge is not connected | `ad9866ctrl.v`, `radioberry_core.v` | An RX gain and a TX gain command sent back to back can lose the second until the host repeats it | From source |
 | H8 | The reply carries the version, receiver count and two key bits only | `radioberry_core.v` (`ret_info`) | No ADC overload flag (it is computed and dropped), no TX FIFO level or underrun flag (computed and dropped), no PLL lock, no command acknowledge, no read-back of any setting | From source |
-| H9 | Both streams are clocked edge by edge by the Pi: eight clocks per 24-bit RX value on four wires, 33 clocks per TX sample on one wire | `rx_pi_pio.v`, `tx_pi_pio.v` | On a Raspberry Pi 4 the CPU spends a core on it from one receiver at 96 ksps up | Seen: [CPU cost of receive](../docs/finding-rpi4-cpu.md) |
+| H9 | Both streams are clocked edge by edge by the Pi: eight clocks per 24-bit RX value on four wires, 33 clocks per TX sample on one wire | `rx_pi_pio.v`, `tx_pi_pio.v` | On a Raspberry Pi 4 the CPU spends a core on it from one receiver at 96 ksps up | Seen: [CPU cost of receive](../../docs/finding-rpi4-cpu.md) |
 
 ### Reset and clocks
 
@@ -119,7 +120,7 @@ observed.
 | W3 | The 245.76 MHz envelope clock is generated and drives nothing | `radioberry_core.v`, `radio.v` (`LRDATA` 0) | A PLL output and a global clock spent |
 | W4 | The radio's link inputs (`link_running`, `link_master` and others) are left unconnected | `radioberry_core.v` | The design depends on the tool tying undriven inputs low |
 | W5 | The project compiles many files the design does not use (the QS1R and second receiver chains, I2C, external amplifier and tuner, the link), and lists most files twice | `files.tcl`, `radioberry.qsf` | Build noise only |
-| W6 | The CL016 build misses the AD9866 TX output timing by up to 3.2 ns | [gateware/PROVENANCE.md](../gateware/PROVENANCE.md) | Transmit quality on a 10CL016 is unknown |
+| W6 | The CL016 build misses the AD9866 TX output timing by up to 3.2 ns | [0.4.1 provenance](https://github.com/tomdionysus/corvus-radioberry/blob/v0.4.1/gateware/PROVENANCE.md) | Transmit quality on a 10CL016 is unknown |
 | W7 | TX is fixed at 48 ksps and every receiver shares one sample rate | `radio.v` | A Protocol 2 host must resample its 192 ksps transmit stream |
 
 ## 4. Which findings matter most
@@ -151,7 +152,7 @@ Not a plan; the points this evaluation raises for any new gateware.
 - FIFO clears and resets synchronised into each clock domain they reach.
 - A host interface that does not need the Pi to produce every clock
   edge. The wiring available for one is in
-  [Hardware discovery](hardware_discovery.md): proven wires in section 3,
+  [Hardware discovery](hardware-discovery.md): proven wires in section 3,
   and the further wires the link test proved (GPIO 7, 16, 17, 23) in
   section 10.
 - The multiplier budget: six receivers already use all of them.

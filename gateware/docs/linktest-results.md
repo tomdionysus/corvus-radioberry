@@ -2,9 +2,9 @@
 
 Measurements made with the link test image on one RadioBerry on a
 Raspberry Pi 4. The image is written from scratch
-([rtl/linktest](rtl/linktest)); it is not a radio and cannot transmit.
+([rtl/linktest](../rtl/linktest)); it is not a radio and cannot transmit.
 What it found about the board itself is in
-[Hardware discovery](hardware_discovery.md), section 10. This page holds
+[Hardware discovery](hardware-discovery.md), section 10. This page holds
 the I2S link figures.
 
 ## Set-up
@@ -17,7 +17,7 @@ the I2S link figures.
   words, frame sync high for the first 32 bits, most significant bit
   first, no bit of delay after the frame sync edge.
 - Pi: the BCM2711 PCM block as clock and frame slave, programmed directly
-  through `/dev/mem` by [host/pcmpoll.c](host/pcmpoll.c), which polls the
+  through `/dev/mem` by [host/pcmpoll.c](../host/pcmpoll.c), which polls the
   FIFOs from one core at real-time priority. No kernel driver, no ALSA,
   no DMA.
 - Each direction carries a known word sequence (xorshift32 unless
@@ -77,12 +77,12 @@ about 20 MHz the right moment is in the following bit period.
 
 ## With DMA
 
-[host/kmod/rbpcm_dma.c](host/kmod/rbpcm_dma.c) drives the same PCM block
+[host/kmod/rbpcm_dma.c](../host/kmod/rbpcm_dma.c) drives the same PCM block
 with one cyclic DMA transfer each way (4096-word periods, 16 per buffer),
 checks every received word in the DMA callback and keeps the transmit
 buffer filled with its own sequence. No ALSA, no sound card: the PCM
 node stays disabled and only its DMA requests are used. Run with
-[host/run_dma.sh](host/run_dma.sh); each row counts 20 s, from 1 s after
+[host/run_dma.sh](../host/run_dma.sh); each row counts 20 s, from 1 s after
 the start.
 
 | Bit clock | FPGA sampling point | To the Pi: words, breaks, FIFO errors | To the FPGA: words, errors | Callback time, one core |

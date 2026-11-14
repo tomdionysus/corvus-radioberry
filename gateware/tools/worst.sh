@@ -6,8 +6,8 @@
 # For a project with an AD9866 TX bus it also prints each TX pin's setup
 # slack under the strict constraint. ad_tx[4] (pin 105) is relaxed in the
 # project's constraints, so its "strict" line is the only check of it;
-# a negative value there is known (hardware_discovery.md section 4,
-# "Pin 105") and does not fail anything.
+# a negative value there is known (docs/hardware-discovery.md section 4,
+# "Pin 105"; docs/review.md finding 1.3) and does not fail anything.
 set -eu
 top=$(cd "$(dirname "$0")/.." && pwd)
 p=$1

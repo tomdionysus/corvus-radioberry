@@ -18,11 +18,6 @@ endif()
 option(RADIOBERRY_BUILD_TESTS "Build the unit tests" ON)
 option(RADIOBERRY_BUILD_EXAMPLES "Build the example clients (examples/)" OFF)
 
-set(FPGATYPE "CL025" CACHE STRING "FPGA on the RadioBerry: CL016 or CL025")
-set_property(CACHE FPGATYPE PROPERTY STRINGS CL016 CL025)
-if(NOT FPGATYPE MATCHES "^(CL016|CL025)$")
-    message(FATAL_ERROR "FPGATYPE must be CL016 or CL025, not '${FPGATYPE}'")
-endif()
 set(RADIOBERRY_FIRMWARE_DIR "/lib/firmware" CACHE PATH "Where the driver's gateware is installed")
 
 add_compile_options(-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror)
@@ -53,5 +48,5 @@ if(RADIOBERRY_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
 
-message(STATUS "radioberry ${RADIOBERRY_VERSION}: FPGATYPE=${FPGATYPE}, "
+message(STATUS "radioberry ${RADIOBERRY_VERSION}: "
                "kernel module ${RADIOBERRY_BUILD_MODULE} (${KERNEL_RELEASE})")

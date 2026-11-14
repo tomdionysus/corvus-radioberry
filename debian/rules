@@ -16,7 +16,6 @@ DKMS_SRC = debian/radioberry-dkms/usr/src/radioberry-$(DEB_VERSION_UPSTREAM)
 override_dh_auto_configure:
 	dh_auto_configure -- \
 		-DCMAKE_BUILD_TYPE=RelWithDebInfo \
-		-DFPGATYPE=CL025 \
 		-DRADIOBERRY_BUILD_MODULE=OFF \
 		-DRADIOBERRY_INSTALL_FIRMWARE=OFF \
 		-DRADIOBERRY_OVERLAY_DIR=/usr/share/radioberry/overlays \

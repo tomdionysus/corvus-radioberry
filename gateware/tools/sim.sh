@@ -1,9 +1,13 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
-# Runs the gateware-v2 testbenches with Icarus Verilog in Docker.
-#   tools/sim.sh            run the link test testbench
-#   tools/sim.sh linktest   the same, by name
+# Runs a gateware testbench with Icarus Verilog in Docker (the image is
+# built from tools/sim.Dockerfile on first use). Prints PASS and exits 0 when
+# every check passes; the log is in build/sim/<name>.log.
+#   tools/sim.sh rpi5       the Raspberry Pi 5 image
+#   tools/sim.sh rpi4       the Raspberry Pi 4 image, receive
+#   tools/sim.sh rpi4tx     the Raspberry Pi 4 image, transmit
+#   tools/sim.sh linktest   the link test image (the default)
 set -eu
 top=$(cd "$(dirname "$0")/.." && pwd)
 image=rbv2-sim:trixie

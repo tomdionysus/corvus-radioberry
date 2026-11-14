@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 /*
- * rbpcm_dma: measurement module for the gateware-v2 I2S link test,
+ * rbpcm_dma: measurement module for the gateware's I2S link test,
  * Raspberry Pi 4 only. Drives the BCM2711 PCM block directly as a clock
  * and frame slave (two 32-bit words in a 64-bit frame) with one cyclic
  * DMA transfer in each direction. It checks the word sequence the link
@@ -396,5 +396,5 @@ static void __exit rbpcm_exit(void)
 
 module_init(rbpcm_init);
 module_exit(rbpcm_exit);
-MODULE_DESCRIPTION("RadioBerry gateware-v2 I2S link over the PCM block with DMA: measurement only");
+MODULE_DESCRIPTION("RadioBerry link test image's I2S link over the PCM block with DMA: measurement only");
 MODULE_LICENSE("GPL");

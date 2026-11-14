@@ -3,22 +3,22 @@
 Measurements made with the `rpi5-pio` image on one RadioBerry (10CL025,
 PA5W board) on a Raspberry Pi 5, driver transport `rp1-pio` with the
 framed control protocol, packages built from commit 6052f18. The image's
-design is in [rtl/rpi5](rtl/rpi5); the wire it speaks is the released PIO
-image's ([gateware/README.md](../gateware/README.md) sections 5 and 7).
+design is in [rtl/rpi5](../rtl/rpi5); the wire it speaks is the released PIO
+image's ([interfaces.md](interfaces.md), Pi 5 link).
 
 ## The image
 
 - The `rpi4-i2s` image's control registers, framed SPI protocol, AD9866
   set-up, keying watchdog and PA logic, and the Hermes-Lite 2 radio core
   (six receivers, one transmitter), unchanged.
-- Receive wire ([rbv_pio_rx.sv](rtl/rpi5/rbv_pio_rx.sv)) and transmit
-  wire ([rbv_pio_tx.sv](rtl/rpi5/rbv_pio_tx.sv)) run on the Pi's own RX
+- Receive wire ([rbv_pio_rx.sv](../rtl/rpi5/rbv_pio_rx.sv)) and transmit
+  wire ([rbv_pio_tx.sv](../rtl/rpi5/rbv_pio_tx.sv)) run on the Pi's own RX
   and TX clocks; the receive FIFO's read side and the transmit FIFO's
   write side do too. Neither FIFO is ever cleared and nothing in the Pi
   clock domains is reset, so a Pi clock may stop and start at any edge.
   The released image cleared its receive FIFO asynchronously in that
   domain, which is what locked it up
-  ([docs/fault-rx-lockup.md](../docs/fault-rx-lockup.md)).
+  ([docs/fault-rx-lockup.md](../../docs/fault-rx-lockup.md)).
 - Pins as the released PIO image: RX clock GPIO 6 (FPGA 54), data GPIO 18
   to 21 (33, 44, 43, 42), sample-ready GPIO 25 (31); TX clock GPIO 4
   (55), data GPIO 5 (32), ready GPIO 12 (49). The RX nibble, sample-ready
@@ -30,7 +30,7 @@ image's ([gateware/README.md](../gateware/README.md) sections 5 and 7).
 
 `tools/sim.sh rpi5`: the image with a radio-core stand-in, against a model
 of two RP1 PIO state machines that executes the driver's own instruction
-words ([rb_pio.h](../driver/kernel/rb_pio.h)) with the PIO's two-flop input
+words ([rb_pio.h](../../driver/kernel/rb_pio.h)) with the PIO's two-flop input
 synchronisers, 3 ns from the Pi to the FPGA and 11 ns back. All checks
 pass:
 
@@ -53,7 +53,7 @@ model. RX clock pin to the RX data and sample-ready pins: required within
 15 ns of the Pi's edge reaching the FPGA, slack +5.2 ns (slow 85 C). The
 AD9866 TX bus under the strict constraint: bits 0 to 3 and 5 and TX sync
 +0.06 to +0.25 ns; bit 4 (pin 105) -2.72 ns, the same as the `rpi4-i2s`
-build ([hardware_discovery.md](hardware_discovery.md) section 4).
+build ([hardware-discovery.md](hardware-discovery.md) section 4).
 
 ## Receive
 

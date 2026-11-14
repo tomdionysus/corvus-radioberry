@@ -3,7 +3,7 @@
 What is known about the RadioBerry boards in hand: the chips, the
 interfaces between them and the physical wiring. The boards are unbranded,
 carry no revision marking and are assumed to be clones of the RadioBerry
-2.x, each with the PA5W V2 amplifier board ([PA5W V2](../docs/pa.md)).
+2.x, each with the PA5W V2 amplifier board ([PA5W V2](../../docs/pa.md)).
 Nothing here is taken from a design file on trust.
 
 ## Evidence rules
@@ -24,16 +24,16 @@ has been programmed. Section 11 holds everything else.
 
 The proof route for wiring: the working image is built from
 `pins.tcl` in the gateware source
-([gateware/README.md](../gateware/README.md)), which names an FPGA pin for
+([provenance.md](provenance.md)), which names an FPGA pin for
 every signal, and the driver's overlay
-([driver/radioberry.dts](../driver/radioberry.dts)) names the Raspberry Pi
+([driver/radioberry.dts](../../driver/radioberry.dts)) names the Raspberry Pi
 GPIO for each. When a function works end to end, each pin on both sides of
 it is wired as those two files say.
 
 An inference from the gateware source is graded proven only where the
 observed behaviour could not have come about any other way given that
 source; each such row names the reasoning. The source itself is assessed
-in [Evaluation of the current gateware source](gateware_evaluation.md).
+in [Evaluation of the current gateware source](evaluation.md).
 
 The observations were made on the development boards. They have not been
 repeated on each of the three boards.
@@ -55,7 +55,7 @@ repeated on each of the three boards.
 | O11 | `i2cdetect -y 1` finds no device with the PA board stacked |
 | O12 | The same board works on a Raspberry Pi 4 and a Raspberry Pi 5 |
 
-Measurements behind O1, O4 to O7: [Test results](../docs/testing.md).
+Measurements behind O1, O4 to O7: [Test results](../../docs/testing.md).
 
 ## 2. Chips
 
@@ -115,8 +115,9 @@ All 3.3 V signalling, as the Pi's GPIO.
   build tool's default (source).
 
 Protocols on these wires that are proven to work (they are the gateware's,
-not the board's; the detail is in
-[gateware/README.md](../gateware/README.md)):
+not the board's; the detail is in the
+[0.4.1 gateware README](https://github.com/tomdionysus/corvus-radioberry/blob/v0.4.1/gateware/README.md)
+and, for this project's images, [interfaces.md](interfaces.md)):
 
 - Configuration: passive serial, least significant bit first.
 - SPI: mode 3, 48-bit transfers, most significant bit first, on CE0.
@@ -227,7 +228,7 @@ one (source).
 | FPGA pin 53 carries a continuous clock of 76.8 MHz nominal | proven | O2, O6, by inference: the PLL passes pin 53 through unchanged to the receivers, which divide by 5, 40 and 8, 1600 in all, for the 48 ksps frame rate. 48 001.5 frames per second can only come from 76.8024 MHz, to the accuracy of the Pi's clock. A 38.4 MHz clock would give 24 000 |
 | That clock runs before and during the gateware's 1.68 s reset | proven | O2: the reset is counted from it and ends |
 | The clock is stable enough for FT8 and WSPR | proven | O5, O8 |
-| On one board the reference is off by 22.9 ppm: uncorrected FT8 decodes read 161 to 163 Hz low on 40 m, and with the correction 0 to 2 Hz off on 40 m and 30 m | proven | [Test results](../docs/testing.md) |
+| On one board the reference is off by 22.9 ppm: uncorrected FT8 decodes read 161 to 163 Hz low on 40 m, and with the correction 0 to 2 Hz off on 40 m and 30 m | proven | [Test results](../../docs/testing.md) |
 
 Since measured (section 10): the board's oscillator runs at 38.4 MHz, and
 pin 53 carries 76.8 MHz only after the AD9866's register 0x04 has been
@@ -262,7 +263,7 @@ The source fixes what each output does, with `keyed` standing for
 So in O10, with PA enable clear, pins 136 and 137 were low and pin 144
 was high; pin 143 was high unless T/R disable was set.
 
-The PA board's markings and connectors: [PA5W V2](../docs/pa.md).
+The PA board's markings and connectors: [PA5W V2](../../docs/pa.md).
 
 ## 8. Speeds measured on the wiring
 
@@ -293,7 +294,7 @@ a guarantee from the build.
 - While run is set, a key on the PA board's jack drives the DAC without
   the TX permission bit; only the PA lines are held off. With run clear
   the transmit state machine is held idle and nothing drives the DAC
-  (source; [gateware/README.md](../gateware/README.md) section 6 says run
+  (source; the [0.4.1 gateware README](https://github.com/tomdionysus/corvus-radioberry/blob/v0.4.1/gateware/README.md) section 6 says run
   is not needed, and the source says it is).
 - One stray edge is permanent on two of the header's wires (source). The
   SPI slave counts 48 clock edges with no reset from chip select, and the
@@ -306,7 +307,7 @@ a guarantee from the build.
 ## 10. Measured with the link test image
 
 Measured on one board on a Raspberry Pi 4 with the link test image
-([rtl/linktest](rtl/linktest), host tool [host/linktest.py](host/linktest.py)),
+([rtl/linktest](../rtl/linktest), host tool [host/linktest.py](../host/linktest.py)),
 which is written from scratch and shares no code with the radio gateware.
 Where a row contradicts an earlier section or section 11, this section
 is the newer and stands.

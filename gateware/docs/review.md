@@ -2,7 +2,7 @@
 
 An external review of the gateware, with where corvus-radioberry stands on
 each finding. The review was written against release 0.4.1; this page
-reads it against the gateware-v2 images, `rpi4-i2s` (Raspberry Pi 4) and
+reads it against this project's own images, `rpi4-i2s` (Raspberry Pi 4) and
 `rpi5-pio` (Raspberry Pi 5).
 
 Both images are this project's own logic (control registers, AD9866

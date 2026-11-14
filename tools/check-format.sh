@@ -4,8 +4,8 @@
 # Checks C and C++ formatting against .clang-format with clang-format 19.
 # With --fix, rewrites the files instead. The kernel module and the ABI
 # header it shares with userspace follow the kernel's own style and are not
-# checked here, nor are the gateware-v2 measurement modules
-# (gateware-v2/host/kmod/), nor vendored third-party code (*/ft8_lib/).
+# checked here, nor is the link test's measurement module
+# (gateware/host/kmod/), nor vendored third-party code (*/ft8_lib/).
 set -eu
 
 cd "$(git rev-parse --show-toplevel)"
@@ -27,7 +27,7 @@ fi
 
 files=$(git ls-files -co --exclude-standard -- '*.c' '*.h' '*.cpp' '*.hpp' |
     grep -v -e '^driver/kernel/' -e '^driver/include/' -e '/ft8_lib/' \
-        -e '^gateware-v2/host/kmod/' || true)
+        -e '^gateware/host/kmod/' || true)
 if [ -z "$files" ]; then
     echo "format: no files"
     exit 0
