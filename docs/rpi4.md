@@ -9,6 +9,12 @@ Raspberry Pi 4 Model B, Raspberry Pi OS (Debian 13 trixie, 64-bit), a
 The RadioBerry uses the Pi's PCM (I2S) block on GPIO 18 to 21, so leave
 `dtparam=i2s=on` and audio HAT overlays out of `config.txt`.
 
+## Tested kernels
+
+6.12.25, 6.12.34, 6.12.47, 6.12.62, 6.12.75, 6.18.29, 6.18.33, 6.18.34,
+6.18.39, 6.18.50, 6.18.60 (`+rpt-rpi-v8`). The tests:
+[Kernels](kernels.md#tested-kernels).
+
 ## Capacity
 
 The I2S link carries about 1.54 million RX values per second: for example

@@ -28,8 +28,8 @@ Each kernel, installed from the Raspberry Pi OS archive with its headers
 RadioBerry, passed:
 
 - `rbprobe`: radio can run
-- `ft8rx` on 40 m, four 15 s periods each over Protocol 1 and Protocol 2:
-  decodes, no packets lost
+- `ft8rx` on 20 m or 40 m, four 15 s periods each over Protocol 1 and
+  Protocol 2: decodes, no packets lost
 - `rbcat --seconds 10 --tx-zeros`: 48 000 frames per second, no resyncs
   or dropped words, TX taken at 48 000 words per second
 - `rbdrivertest` ([Driver hardware tests](https://github.com/tomdionysus/corvus-radioberry/blob/main/driver/docs/driver-tests.md)): all tests
@@ -40,7 +40,7 @@ RadioBerry, passed:
 | 6.12.34 | passed | passed |
 | 6.12.47 | passed | passed |
 | 6.12.62 | passed | passed |
-| 6.12.75 | passed, one accepted anomaly | passed |
+| 6.12.75 | passed | passed |
 | 6.18.29 | passed | passed |
 | 6.18.33 | passed | passed |
 | 6.18.34 | passed | passed |
@@ -48,12 +48,4 @@ RadioBerry, passed:
 | 6.18.50 | passed | passed |
 | 6.18.60 | passed | passed |
 
-Accepted anomaly: on the Pi 4 with 6.12.75, one of 11 `rbdrivertest` runs
-failed one test ("the daemon's device layer streams through the
-driver"): 31 receive blocks overflowed the test's queue between the
-daemon's device layer and the test (`rx-queue-full`). The driver lost
-nothing in that boot (`rbcat` and `ft8rx` above), and the other 10 runs
-on that kernel passed.
-
-The per-board lists are in [Raspberry Pi 4](rpi4.md#tested-kernels) and
-[Raspberry Pi 5](rpi5.md#tested-kernels).
+The Raspberry Pi 5 column is release 0.4.1's driver.

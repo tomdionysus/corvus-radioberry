@@ -3,6 +3,18 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-14: Release 0.5.0 preparation, Pi 4 and CI. CI on a cluster Pi
+  passes in full with 100% line coverage (4646 lines; 343 tests, 340
+  under ASan and UBSan). Pi 4: packages 0.4.1+git33.gb66dfe1 upgraded in
+  place from 0.4.1+git26 with apt (DKMS for every kernel, both images
+  linked, `postinst` warned about the old `radioberry-i2s` line, which was
+  then removed; the new driver loaded without a reboot). Kernel matrix,
+  11 `rpt-rpi-v8` kernels 6.12.25 to 6.18.60: `rbprobe` exit 0, `ft8rx`
+  20 m 63 to 95 decodes per protocol with 0 packets lost, `rbcat` 48 000
+  frames per second with no resyncs, `rbdrivertest` 12/12, no
+  under-voltage, on every kernel. The image counted 0 to 2 TX frames
+  dropped (flags check) per boot out of about 560 000 unkeyed zero
+  samples; when in the run they fell is not known.
 - 2026-11-14: Adopted the new gateware. The old `gateware/` (Hermes-Lite 2
   PIO images, CL016 and CL025) removed; `gateware-v2/` is now `gateware/`
   with the Hermes-Lite 2 source archive and the Quartus Dockerfile, its

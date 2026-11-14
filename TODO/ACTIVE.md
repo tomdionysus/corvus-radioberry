@@ -80,16 +80,15 @@ item is removed from here and recorded at the top of
 
 ## 1. Release 0.5.0
 
-- [ ] CI on a claimed cluster Pi: format, SPDX, checkpatch, sparse,
-      clang-tidy, tests, and 100% line coverage (add tests or remove dead
-      code until the gate passes).
-- [ ] Packages built from the branch; on each Pi, an upgrade from 0.4.1
-      with apt comes up on the new image with `dtoverlay=radioberry` alone
-      (the Pi 4 with the old `[pi4] dtoverlay=radioberry-i2s` line removed
-      or left, warned by `postinst`). Acceptance: `rbprobe` exits 0,
-      `ft8rx` decodes over P1 and P2 with nothing lost, on both boards.
-- [ ] Kernel matrix on both boards with the new driver
-      ([docs/kernels.md](../docs/kernels.md) lists 0.4.1's results).
+- [ ] Packages built from the branch on the Pi 5: an upgrade from 0.4.1
+      with apt comes up on the new image with `dtoverlay=radioberry`.
+      Acceptance: `rbprobe` exits 0, `ft8rx` decodes over P1 and P2 with
+      nothing lost.
+- [ ] Kernel matrix on the Pi 5 with the new driver
+      ([docs/kernels.md](../docs/kernels.md) still lists 0.4.1's Pi 5
+      results).
+- [ ] Driver version string: the module reports 0.4.1; set it to 0.5.0
+      with the release version.
 - [ ] Release gate per board (clean-down, README install, FT8 receive, the
       owner's contact); version 0.5.0.
 
