@@ -24,8 +24,9 @@ item is removed from here and recorded at the top of
   client, transmit only with `--allow-tx` through the transmit policy and
   fail-safes; it no longer sets the TX buffer latency or PTT hang time
   (address 0x17): the gateware owns them.
-- Next, in order: the Pi 5 `rpi5-pio` image and its driver transport
-  (section 1, first item); then transmit on the Pi 5 with the board owner.
+  Raspberry Pi 5: the `rpi5-pio` image on the released PIO wire with the
+  framed control protocol, receiving (FT8 over Protocol 1 and 2, 0 lost).
+- Next: transmit on the Pi 5 with the board owner (section 1, first item).
 
 ## Standing decisions
 
@@ -52,14 +53,16 @@ item is removed from here and recorded at the top of
   Docker on an x86-64 machine; bitfiles are committed and the Pi only
   installs them. The radio never appears as a sound card.
 - The driver picks its transport from the SoC and each transport names its
-  image: Pi 5 PIO; Pi 4 I2S when the `radioberry-i2s` overlay is loaded,
-  else the CPU-clocked buses with the PIO image. The `rpi4-i2s` image is
-  built for the 10CL025 only.
+  image: Pi 5 PIO with `rpi5-pio` (the released image with
+  `pio_released_image=1`); Pi 4 I2S when the `radioberry-i2s` overlay is
+  loaded, else the CPU-clocked buses with the PIO image. The gateware-v2
+  images are built for the 10CL025 only.
 - Development FPGA is a 10CL025. The driver supports CL016 and CL025.
 - The PIO gateware's RX lock-up
   ([docs/fault-rx-lockup.md](../docs/fault-rx-lockup.md)) is worked around
   by the driver's RX clock hold (`rx_clock_hold_us`, default 200) on the
-  released image; the `rpi5-pio` image fixes it at source.
+  released image; the `rpi5-pio` image has no FIFO clear and so no
+  lock-up (the hold is kept and harmless).
 - The daemon assumes nothing about the image: gateware details (FIFO
   sizes, latencies) belong to the gateware and the driver.
 - No transmit test without the board owner's explicit permission for that
@@ -94,23 +97,12 @@ item is removed from here and recorded at the top of
 
 ## 1. gateware-v2 (`gateware-v2/`, `driver/`)
 
-- [ ] `rpi5-pio` image and its driver transport
-      ([plan.md](../gateware-v2/plan.md) section 5, stage 1). Gateware: the
-      `rpi4-i2s` top level's control, AD9866 set-up, keying and PA logic
-      with the present PIO wire protocol and pins (RX: clock GPIO 6, data
-      18 to 21, sample-ready 25; TX: clock 4, data 5, ready 12;
-      [gateware/README.md](../gateware/README.md) sections 5 and 7), the
-      receive read-out rebuilt without the lock-up (synchronous clear,
-      registered outputs, a reset), the transmit intake reset after a
-      still clock, constraints for the Pi's clocks. Board registers as
-      `rb_frame.h`, CAPS transport PIO. Driver: a Pi 5 transport made of
-      the PIO stream functions and the framed command path
-      (`rb_i2s_command`), the identity check per transport, its own image
-      name; the Pi 4 I2S and CPU transports unchanged. Package: the image
-      installed and linked as the I2S one is. Acceptance: `ft8rx` decodes
-      on the Pi 5 over Protocol 1 and 2 with no packets lost;
-      `rbdrivertest` passes on the Pi 5; frame tests and the Pi 4 I2S
-      build unchanged. Transmit on the Pi 5 with the board owner after.
+- [ ] Pi 5 transmit through the `rpi5-pio` image, with the board owner:
+      loopback self-test (sysfs `tx_loopback`), then keyed runs into the
+      dummy load, then on air. Check first: the AD9866 TX bus pin 105
+      strict slack in the `rpi5-pio` build (`tools/worst.sh` is written
+      for `rpi4-i2s`). Acceptance: loopback tone as on the Pi 4, image
+      counters clean (`i2s_counters`), an FT8 contact.
 - [ ] Pi 4 install instructions: the README quickstart and the
       `postinst` message name only `dtoverlay=radioberry`, which gives a
       Pi 4 the CPU-clocked transport. Add `[pi4] dtoverlay=radioberry-i2s`

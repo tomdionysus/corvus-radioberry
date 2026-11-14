@@ -3,6 +3,20 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-14: Pi 5 receive through the `rpi5-pio` image (branch
+  `item/new-direction`): the `rpi4-i2s` control, AD9866 set-up, keying and
+  PA logic with the released PIO wire and pins; the receive FIFO's read
+  side on the Pi's RX clock and neither FIFO ever cleared, so a stopped
+  Pi clock cannot lock it up. Driver transport `rp1-pio` with the framed
+  command path and image `radioberry-rpi5-pio.rbf` (module parameter
+  `pio_released_image=1` keeps the released image); packaged and linked
+  as the I2S image. Testbench `tools/sim.sh rpi5` runs the driver's PIO
+  instruction words: in order across pauses, program restarts and
+  receiver-count changes with the clock running; transmit words exact and
+  held back by ready. Timing met (RX clock to pins within 15 ns, +5.2 ns
+  slack). On the Pi 5: FT8 on 40 m, 4 decodes in 3 slots over Protocol 1
+  and 8 over Protocol 2, 0 packets lost; `rbdrivertest` 12/12; driver
+  unit tests pass; no RX words move while idle. Transmit not yet tested.
 - 2026-11-14: Pi 4 transmit through the `rpi4-i2s` image (branch
   `item/new-direction`): digital loopback self-test passed (+1 kHz tone at
   -43.6 dBFS, counters clean); power into a dummy load measured from drive
