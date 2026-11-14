@@ -162,11 +162,17 @@ TEST_CASE("radioberryd serves discovery and a UDP stream", "[daemon]") {
         std::this_thread::sleep_for(5ms);
     }
     REQUIRE(r.daemon.device().snapshot().receivers == 2);
-    {
-        const std::lock_guard lock(device.mutex);
-        REQUIRE_FALSE(device.commands.empty());
-        CHECK((device.commands.back().flags & Command::kRun) != 0);
+    // Run reaches the gateware with the next command sent.
+    bool run_sent = false;
+    for (int i = 0; i < 200 && !run_sent; ++i) {
+        {
+            const std::lock_guard lock(device.mutex);
+            run_sent =
+                !device.commands.empty() && (device.commands.back().flags & Command::kRun) != 0;
+        }
+        std::this_thread::sleep_for(5ms);
     }
+    CHECK(run_sent);
 
     feed(device, 72 * 3);
     for (int i = 0; i < 3; ++i) {
