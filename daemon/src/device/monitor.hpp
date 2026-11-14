@@ -64,6 +64,7 @@ private:
     mutable std::mutex mutex_;
     std::optional<radioberry_stats> last_;
     std::chrono::nanoseconds last_frame_at_{};
+    bool rx_expected_ = false;  // at the last snapshot
     bool stalled_ = false;
 };
 
