@@ -25,8 +25,7 @@ item is removed from here and recorded at the top of
   fail-safes; it no longer sets the TX buffer latency or PTT hang time
   (address 0x17): the gateware owns them.
   Raspberry Pi 5: the `rpi5-pio` image on the released PIO wire with the
-  framed control protocol, receiving (FT8 over Protocol 1 and 2, 0 lost).
-- Next: transmit on the Pi 5 with the board owner (section 1, first item).
+  framed control protocol, receive and transmit; an FT8 contact on 20 m.
 
 ## Standing decisions
 
@@ -97,12 +96,11 @@ item is removed from here and recorded at the top of
 
 ## 1. gateware-v2 (`gateware-v2/`, `driver/`)
 
-- [ ] Pi 5 transmit through the `rpi5-pio` image, with the board owner:
-      loopback self-test (sysfs `tx_loopback`), then keyed runs into the
-      dummy load, then on air. Check first: the AD9866 TX bus pin 105
-      strict slack in the `rpi5-pio` build (`tools/worst.sh` is written
-      for `rpi4-i2s`). Acceptance: loopback tone as on the Pi 4, image
-      counters clean (`i2s_counters`), an FT8 contact.
+- [ ] Pi 5 receive level of its own transmission: with the same tools the
+      Pi 5 sees the tone 25 dB stronger in loopback (-18.7 against -43.6
+      dBFS) and 48 dB stronger keyed into the dummy load (-16.9 against
+      -64.9) than the Pi 4; output power matches (1.4 W against 1.35 W at
+      drive 128). Cause unknown. Acceptance: explained by a measurement.
 - [ ] Pi 4 install instructions: the README quickstart and the
       `postinst` message name only `dtoverlay=radioberry`, which gives a
       Pi 4 the CPU-clocked transport. Add `[pi4] dtoverlay=radioberry-i2s`

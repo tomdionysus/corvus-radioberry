@@ -3,6 +3,15 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-14: Pi 5 transmit through the `rpi5-pio` image: TX bit 4 (pin
+  105) strict setup slack -2.72 ns, as the Pi 4 build; digital loopback
+  self-test passed (+1 kHz tone at -18.7 dBFS, opposite sideband -144.7,
+  carrier -138.2, counters clean); drive 128 into a dummy load 1.4 W (the
+  Pi 4 gave 1.35 W); on air through piHPSDR and WSJT-X on 20 m FT8 at
+  drive 150: about 240 PSK Reporter spots in five minutes (Europe, North
+  America, Japan, Korea) and an FT8 contact. 13 transmissions, about
+  47 900 samples a second, 0 blocks dropped, 0 image overflows or
+  underruns, 0 RX stalls.
 - 2026-11-14: Pi 5 receive through the `rpi5-pio` image (branch
   `item/new-direction`): the `rpi4-i2s` control, AD9866 set-up, keying and
   PA logic with the released PIO wire and pins; the receive FIFO's read
