@@ -14,6 +14,15 @@
 namespace radioberry::proto {
 namespace {
 
+// A send or receive's byte count; throws std::system_error, naming `what`,
+// when it failed.
+std::size_t checked(ssize_t n, const char* what) {
+    if (n < 0) {
+        throw std::system_error(errno, std::generic_category(), what);
+    }
+    return static_cast<std::size_t>(n);
+}
+
 class UdpTransport final : public Transport {
 public:
     UdpTransport(const std::string& host, std::uint16_t base_port) : base_port_(base_port) {
@@ -35,10 +44,9 @@ public:
     void send(unsigned offset, std::span<const std::uint8_t> bytes) override {
         sockaddr_in to = radio_;
         to.sin_port = htons(static_cast<std::uint16_t>(base_port_ + offset));
-        if (::sendto(fd_, bytes.data(), bytes.size(), 0, reinterpret_cast<const sockaddr*>(&to),
-                     sizeof to) < 0) {
-            throw std::system_error(errno, std::generic_category(), "send");
-        }
+        checked(::sendto(fd_, bytes.data(), bytes.size(), 0, reinterpret_cast<const sockaddr*>(&to),
+                         sizeof to),
+                "send");
     }
 
     std::optional<Datagram> receive(std::chrono::milliseconds timeout) override {
@@ -50,18 +58,16 @@ public:
         d.bytes.resize(2048);
         sockaddr_in from{};
         socklen_t length = sizeof from;
-        const ssize_t n = ::recvfrom(fd_, d.bytes.data(), d.bytes.size(), 0,
-                                     reinterpret_cast<sockaddr*>(&from), &length);
-        if (n < 0) {
-            throw std::system_error(errno, std::generic_category(), "receive");
-        }
+        const std::size_t n = checked(::recvfrom(fd_, d.bytes.data(), d.bytes.size(), 0,
+                                                 reinterpret_cast<sockaddr*>(&from), &length),
+                                      "receive");
         const std::uint16_t port = ntohs(from.sin_port);
         if (from.sin_addr.s_addr != radio_.sin_addr.s_addr || port < base_port_) {
             d.offset = ~0u;  // not from the radio
         } else {
             d.offset = port - base_port_;
         }
-        d.bytes.resize(static_cast<std::size_t>(n));
+        d.bytes.resize(n);
         return d;
     }
 

@@ -470,7 +470,7 @@ private:
             }
         };
         // Images sit up to three levels down, as in rpi5-pio/CL025/radioberry-rpi5-pio.rbf.
-        std::function<void(const std::string&, int)> walk = [&](const std::string& dir, int depth) {
+        const auto walk = [&](const auto& self, const std::string& dir, int depth) -> void {
             auto names = src_.list_dir(dir);
             std::sort(names.begin(), names.end());
             for (const auto& name : names) {
@@ -479,12 +479,12 @@ private:
                 path += name;
                 consider(path);
                 if (depth > 1) {
-                    walk(path, depth - 1);
+                    self(self, path, depth - 1);
                 }
             }
         };
         for (const auto& dir : opt_.gateware_dirs) {
-            walk(dir, 3);
+            walk(walk, dir, 3);
         }
         return files;
     }
@@ -806,9 +806,9 @@ std::string_view to_string(Severity severity) {
         case Severity::kWarning:
             return "warning";
         case Severity::kInfo:
-            return "info";
+            break;
     }
-    return "unknown";
+    return "info";
 }
 
 Report collect(Source& source, const Options& options) { return Collector(source, options).run(); }

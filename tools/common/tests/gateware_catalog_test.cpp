@@ -5,8 +5,7 @@
 
 using namespace radioberry;
 
-TEST_CASE("the catalog lists this project's two images first, then the originals",
-          "[catalog]") {
+TEST_CASE("the catalog lists this project's two images first, then the originals", "[catalog]") {
     const auto images = known_images();
     REQUIRE(images.size() == 5);
     CHECK(images[0].family == GatewareFamily::kRpi5Pio);

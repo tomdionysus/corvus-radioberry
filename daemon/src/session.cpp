@@ -65,7 +65,7 @@ void Session::heard(const Owner& client, std::chrono::nanoseconds now) {
 void Session::release(const Owner& client, const std::string& why) {
     const std::lock_guard lock(mutex_);
     if (owner_ && *owner_ == client) {
-        drop_locked(why);
+        drop_locked(client, why);
     }
 }
 
@@ -75,10 +75,11 @@ std::optional<Owner> Session::tick(std::chrono::nanoseconds now) {
         return std::nullopt;
     }
     const Owner gone = *owner_;
-    drop_locked(
-        "silent for " +
-        std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(timeout_).count()) +
-        " ms");
+    drop_locked(gone,
+                "silent for " +
+                    std::to_string(
+                        std::chrono::duration_cast<std::chrono::milliseconds>(timeout_).count()) +
+                    " ms");
     return gone;
 }
 
@@ -129,11 +130,8 @@ std::uint64_t Session::faults() const {
     return faults_;
 }
 
-void Session::drop_locked(const std::string& why) {
-    if (!owner_) {
-        return;
-    }
-    spdlog::info("{} released the radio: {}", describe(*owner_), why);
+void Session::drop_locked(const Owner& owner, const std::string& why) {
+    spdlog::info("{} released the radio: {}", describe(owner), why);
     owner_.reset();
     mox_ = false;
     latched_ = false;

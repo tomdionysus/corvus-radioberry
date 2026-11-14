@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -518,15 +517,13 @@ void Server::command_locked(std::uint8_t address, std::uint32_t data) {
     if (control_.value(address) == data) {
         return;
     }
+    // The addresses here (general, frequencies, LNA gain) are below 0x40 and
+    // carry no transmit bits, so set() takes them.
     Command command;
     command.address = address;
     command.data = data;
-    try {
-        control_.set(command);
-        spdlog::debug("command 0x{:02x} data 0x{:08x}", address, data);
-    } catch (const std::invalid_argument& e) {
-        spdlog::warn("command 0x{:02x} data 0x{:08x} refused: {}", address, data, e.what());
-    }
+    control_.set(command);
+    spdlog::debug("command 0x{:02x} data 0x{:08x}", address, data);
 }
 
 void Server::drive_locked() {

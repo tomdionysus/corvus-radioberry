@@ -127,6 +127,8 @@ TEST_CASE("the bit clock is the slowest that carries the stream with a quarter s
         }
     }
     CHECK(rb_i2s_div(0, 1) == 32);
+    CHECK(rb_i2s_div(0, 0) == 32);  // no receivers counts as one
+    CHECK(rb_i2s_div(0, 1) <= RB_I2S_DIV_MAX);
     CHECK(RB_I2S_VALUES_MAX == 1536000u);
 }
 

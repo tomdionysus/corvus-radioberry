@@ -220,7 +220,7 @@ FakeSource working_pi() {
     s.files["/proc/net/udp6"] =
         "  sl  local_address rem_address   st\n"
         "   1: 00000000000000000000000000000000:0400 00000000000000000000000000000000:0000 07\n"
-        "   2: bad\n   3: 0000:zz 0000:0000 07\n";
+        "   2: bad\n   3: 0000:zz 0000:0000 07\n   4:\n";
     s.files["/proc/net/udp"] =
         "  sl  local_address rem_address   st\n"
         " 1: 00000000:0400 00000000:0000 07\n"

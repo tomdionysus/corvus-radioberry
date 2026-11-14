@@ -41,6 +41,9 @@ if(RADIOBERRY_COVERAGE)
         CACHE STRING "lcov patterns excluded from the coverage report")
     set(RADIOBERRY_COVERAGE_MIN 100 CACHE STRING
         "Line coverage, in percent, below which the coverage target fails")
+    # Lines holding only a closing brace carry gcov's exception-cleanup
+    # blocks, not code; blank lines carry nothing.
+    set(_cov_filter --filter brace,blank)
 
     add_custom_target(coverage
         COMMAND ${CMAKE_COMMAND} -E rm -rf ${_cov_dir}
@@ -48,16 +51,16 @@ if(RADIOBERRY_COVERAGE)
         COMMAND find ${CMAKE_BINARY_DIR} -name *.gcda -delete
         COMMAND ${CMAKE_CTEST_COMMAND} --test-dir ${CMAKE_BINARY_DIR} --output-on-failure
         COMMAND ${LCOV_EXECUTABLE} --quiet --capture --directory ${CMAKE_BINARY_DIR}
-                --ignore-errors mismatch,inconsistent
+                --ignore-errors mismatch,inconsistent ${_cov_filter}
                 --output-file ${_cov_dir}/all.info
         COMMAND ${LCOV_EXECUTABLE} --quiet --extract ${_cov_dir}/all.info
-                "${CMAKE_SOURCE_DIR}/*" --ignore-errors inconsistent
+                "${CMAKE_SOURCE_DIR}/*" --ignore-errors inconsistent ${_cov_filter}
                 --output-file ${_cov_dir}/project.info
         COMMAND ${LCOV_EXECUTABLE} --quiet --remove ${_cov_dir}/project.info
                 ${RADIOBERRY_COVERAGE_EXCLUDE} --ignore-errors unused,unused,inconsistent
-                --output-file ${_cov_dir}/coverage.info
+                ${_cov_filter} --output-file ${_cov_dir}/coverage.info
         COMMAND ${GENHTML_EXECUTABLE} --quiet --output-directory ${_cov_dir}/html
-                ${_cov_dir}/coverage.info
+                ${_cov_filter} ${_cov_dir}/coverage.info
         COMMAND ${LCOV_EXECUTABLE} --summary ${_cov_dir}/coverage.info
                 --fail-under-lines ${RADIOBERRY_COVERAGE_MIN}
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}

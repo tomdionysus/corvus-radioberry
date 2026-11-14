@@ -49,7 +49,8 @@ void to_iq16(std::span<const std::uint8_t> data, std::vector<char>& out) {
 std::string progress_line(double elapsed, double rate, const radioberry_stats& from,
                           const radioberry_stats& to, bool tx) {
     std::ostringstream line;
-    line << "rbcat: " << format_double(std::round(elapsed * 10) / 10) << " s, "
+    line << "rbcat: ";
+    line << format_double(std::round(elapsed * 10) / 10) << " s, "
          << format_double(std::round(rate * 10) / 10) << " frames/s, resyncs "
          << to.rx_resyncs - from.rx_resyncs << ", dropped words "
          << to.rx_dropped_words - from.rx_dropped_words << ", overruns "

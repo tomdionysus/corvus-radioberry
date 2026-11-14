@@ -155,6 +155,19 @@ TEST_CASE("a client destroyed mid-stream stops the radio", "[protoprobe]") {
     }
 }
 
+TEST_CASE("a client destroyed mid-stream does not throw when the stop fails", "[protoprobe]") {
+    for (const bool two : {false, true}) {
+        FakeRadio radio(two);
+        {
+            const auto client = two ? make_p2_client(radio, radio.clock()) : make_p1_client(radio);
+            REQUIRE(client->discover(100ms));
+            client->start(StreamConfig{});
+            radio.fail_sends = true;
+        }
+        CHECK(radio.streaming);  // the stop never reached it
+    }
+}
+
 TEST_CASE("p1probe streams at every Protocol 1 rate", "[protoprobe]") {
     for (const unsigned rate : {48u, 96u, 192u, 384u}) {
         INFO("rate " << rate);

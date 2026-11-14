@@ -103,6 +103,8 @@ Daemon::Daemon(Device& device, const DaemonOptions& options)
     iq_standard_ = options.iq_convention == p1::IqConvention::Standard;
     frequency_ppm_ = options.frequency_ppm;
     realtime_ = options.realtime;
+    thread_realtime_ = options.thread_realtime;
+    memory_lock_ = options.memory_lock;
     protocol1_ = options.protocol1;
     protocol2_ = options.protocol2;
 }
@@ -114,7 +116,7 @@ void Daemon::start_thread(const char* name, int priority, bool rename) {
     if (!realtime_) {
         return;
     }
-    if (const auto failed = make_thread_realtime(name, priority);
+    if (const auto failed = thread_realtime_(name, priority);
         failed && !realtime_failed_.exchange(true)) {
         spdlog::warn("real-time scheduling not set: {}", *failed);
     }
@@ -188,7 +190,7 @@ bool Daemon::run(const std::atomic<bool>& stop) {
         spdlog::info("frequencies corrected for a radio error of {:+.2f} ppm", frequency_ppm_);
     }
     if (realtime_) {
-        if (const auto failed = lock_memory()) {
+        if (const auto failed = memory_lock_()) {
             spdlog::warn("{}", *failed);
         }
         spdlog::info("real-time: SCHED_FIFO {} for the device threads, {} for the network threads",
@@ -208,7 +210,7 @@ bool Daemon::run(const std::atomic<bool>& stop) {
     // The RX delivery thread runs before the device does, so the first
     // blocks find it draining the ring.
     std::atomic<bool> stop_rx{false};
-    std::thread rx([&] {
+    const auto deliver_rx = [&] {
         start_thread("rb-rx-send", kNetworkPriority);
         while (!stop_rx) {
             service_.rx().wait(stop_rx);
@@ -218,7 +220,8 @@ bool Daemon::run(const std::atomic<bool>& stop) {
                 service_.rx().pop();
             }
         }
-    });
+    };
+    std::thread rx(deliver_rx);
     if (!service_.start()) {
         stop_rx = true;
         service_.rx().wake();
@@ -227,7 +230,7 @@ bool Daemon::run(const std::atomic<bool>& stop) {
     }
     const Clock clock = steady_clock();
     std::atomic<bool> stop_p2{false};
-    std::thread p2([&] {
+    const auto serve_p2 = [&] {
         start_thread("rb-p2-network", kNetworkPriority);
         const auto p2_handler = [&](unsigned port, std::span<const std::uint8_t> packet,
                                     const Peer& from) {
@@ -242,7 +245,8 @@ bool Daemon::run(const std::atomic<bool>& stop) {
         while (!stop_p2) {
             p2_network_.poll(-1, p2_handler);
         }
-    });
+    };
+    std::thread p2(serve_p2);
     const auto handler = [&](std::span<const std::uint8_t> packet, const Peer& from) {
         on_packet(packet, from, clock());
     };

@@ -147,7 +147,8 @@ static inline u8 rb_frame_reply_flags(u8 status2)
 
 /*
  * The slowest bit clock that carries receivers at a rate code with a
- * quarter spare: the divider, RB_I2S_DIV_MIN to RB_I2S_DIV_MAX.
+ * quarter spare: the divider, RB_I2S_DIV_MIN up. The least demand, one
+ * receiver at 48 ksps, gives 32, within RB_I2S_DIV_MAX.
  */
 static inline unsigned int rb_i2s_div(unsigned int rate_code, unsigned int receivers)
 {
@@ -156,8 +157,6 @@ static inline unsigned int rb_i2s_div(unsigned int rate_code, unsigned int recei
 
 	if (div < RB_I2S_DIV_MIN)
 		div = RB_I2S_DIV_MIN;
-	if (div > RB_I2S_DIV_MAX)
-		div = RB_I2S_DIV_MAX;
 	return div;
 }
 

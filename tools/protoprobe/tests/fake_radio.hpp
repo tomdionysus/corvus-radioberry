@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cstdint>
 #include <map>
+#include <stdexcept>
 #include <vector>
 
 #include "client.hpp"
@@ -23,6 +24,9 @@ public:
     }
 
     void send(unsigned offset, std::span<const std::uint8_t> b) override {
+        if (fail_sends) {
+            throw std::runtime_error("send failed");
+        }
         sent.push_back({offset, std::vector<std::uint8_t>(b.begin(), b.end())});
         if (two_) {
             take_p2(offset, b);
@@ -37,7 +41,7 @@ public:
             queued.erase(queued.begin());
             return d;
         }
-        if (!streaming) {
+        if (!streaming || mute) {
             now += timeout;
             return std::nullopt;
         }
@@ -51,6 +55,8 @@ public:
     double rate_scale = 1.0;       // stream faster or slower than configured
     std::uint32_t skip_every = 0;  // drop one stream packet in this many
     bool report_ptt = false;       // echo MOX as PTT in the status
+    bool mute = false;             // answers discovery, never streams
+    bool fail_sends = false;       // send() throws
     std::int32_t sample = 1 << 20;
 
     // Observed.

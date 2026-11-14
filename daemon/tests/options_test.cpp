@@ -212,9 +212,10 @@ TEST_CASE("radioberryd refuses a bad config file", "[options]") {
                     std::invalid_argument);
 }
 
-TEST_CASE("the installed default config: radioberryd's defaults, drive ceiling 150, 22.9 ppm, "
-          "realtime off",
-          "[options]") {
+TEST_CASE(
+    "the installed default config: radioberryd's defaults, drive ceiling 150, 22.9 ppm, "
+    "realtime off",
+    "[options]") {
     const Options o = parse_options({"--config", RADIOBERRY_DEFAULT_CONFIG});
     const Options d = parse_options({});
     CHECK_FALSE(o.daemon.tx.allow_tx);

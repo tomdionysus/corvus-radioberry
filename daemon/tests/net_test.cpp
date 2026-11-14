@@ -198,3 +198,10 @@ TEST_CASE("the Protocol 2 sockets count the sends that fail", "[net]") {
     n.send(p2::kMicLinePort, to, std::vector<std::uint8_t>(70000, 0));
     CHECK(n.send_failures() == 2);
 }
+
+TEST_CASE("a Protocol 2 poll with nothing to read times out", "[net]") {
+    p2::Network n(kLoopback, 0, 1, [](const Peer&, std::span<const std::uint8_t>) {});
+    int handled = 0;
+    n.poll(0, [&](unsigned, std::span<const std::uint8_t>, const Peer&) { ++handled; });
+    CHECK(handled == 0);
+}

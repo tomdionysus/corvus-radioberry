@@ -122,6 +122,9 @@ TEST_CASE("transmit hazards", "[command]") {
     c.ptt = true;
     c.flags = Command::kRun | Command::kTxPermit | Command::kCwx;
     CHECK(transmit_hazards(c) == V{"PTT", "TX permission", "CWX"});
+    Command allowed;
+    allowed.flags = Command::kPaAllowed;
+    CHECK(transmit_hazards(allowed) == V{"PA allowed"});
 
     Command pa;
     pa.address = 0x09;

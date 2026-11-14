@@ -36,6 +36,16 @@ Options timed(double seconds) {
 
 }  // namespace
 
+TEST_CASE("a device without its own wait_or_wake waits as wait() does", "[stream]") {
+    FakeClock clock;
+    FakeDevice device(clock);
+    Device& d = device;
+    const Readiness r = d.wait_or_wake(true, true, 0, -1);
+    CHECK_FALSE(r.readable);
+    CHECK_FALSE(r.writable);
+    CHECK_FALSE(r.woken);
+}
+
 TEST_CASE("configures the receivers with receive-only commands", "[stream]") {
     Fixture fx;
     Options o = timed(0.1);

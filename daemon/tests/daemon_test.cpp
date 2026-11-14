@@ -13,7 +13,9 @@
 #include <chrono>
 #include <cstdlib>
 #include <map>
+#include <optional>
 #include <set>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -617,6 +619,129 @@ TEST_CASE("radioberryd serves a Protocol 2 client", "[daemon]") {
     CHECK(r.finish());
     const std::lock_guard lock(device.mutex);
     CHECK_FALSE(device.commands.back().can_transmit());
+}
+
+namespace {
+
+// Waits until the device's statistics have been read twice more: at least
+// one complete poll has seen a change made before.
+void two_stats_polls(FakeDevice& device) {
+    std::size_t polls = 0;
+    {
+        const std::lock_guard lock(device.mutex);
+        polls = device.stats_calls;
+    }
+    for (int i = 0; i < 400; ++i) {
+        {
+            const std::lock_guard lock(device.mutex);
+            if (device.stats_calls >= polls + 2) {
+                return;
+            }
+        }
+        std::this_thread::sleep_for(5ms);
+    }
+}
+
+}  // namespace
+
+TEST_CASE("radioberryd runs on when real-time scheduling is refused", "[daemon]") {
+    FakeDevice device;
+    device.idle_wait_ms = 1;
+    DaemonOptions o = Running::options();
+    o.realtime = true;
+    std::atomic<int> refused{0};
+    o.thread_realtime = [&](const char*, int) -> std::optional<std::string> {
+        ++refused;
+        return "SCHED_FIFO refused";
+    };
+    o.memory_lock = []() -> std::optional<std::string> { return "locking memory: refused"; };
+    Running r(device, o);
+    const sockaddr_in to = loopback(r.daemon.port());
+    Socket client(SOCK_DGRAM);
+    const auto discovery = discovery_packet();
+    ::sendto(client.fd, discovery.data(), discovery.size(), 0,
+             reinterpret_cast<const sockaddr*>(&to), sizeof to);
+    CHECK(receive(client.fd).size() == 60);
+    CHECK(refused >= 1);
+    CHECK(r.finish());
+}
+
+TEST_CASE("radioberryd serves a gateware with no transmitter, receive only", "[daemon]") {
+    FakeDevice device;
+    device.idle_wait_ms = 1;
+    device.info_.transmitters = 0;
+    DaemonOptions o = Running::options();
+    o.tx.allow_tx = true;
+    Running r(device, o);
+    CHECK_FALSE(r.daemon.policy().options().tx_available);
+    const sockaddr_in to = loopback(r.daemon.port());
+    Socket client(SOCK_DGRAM);
+    const auto discovery = discovery_packet();
+    ::sendto(client.fd, discovery.data(), discovery.size(), 0,
+             reinterpret_cast<const sockaddr*>(&to), sizeof to);
+    CHECK(receive(client.fd).size() == 60);
+    CHECK(r.finish());
+}
+
+TEST_CASE("radioberryd reports stream faults and streams on", "[daemon]") {
+    FakeDevice device;
+    device.idle_wait_ms = 1;
+    Running r(device);
+    const sockaddr_in to = loopback(r.daemon.port());
+    Socket client(SOCK_DGRAM);
+    const auto start = start_packet(1);
+    ::sendto(client.fd, start.data(), start.size(), 0, reinterpret_cast<const sockaddr*>(&to),
+             sizeof to);
+    for (int i = 0; i < 200 && !r.daemon.server().running(); ++i) {
+        std::this_thread::sleep_for(5ms);
+    }
+    REQUIRE(r.daemon.server().running());
+    two_stats_polls(device);
+    {
+        const std::lock_guard lock(device.mutex);
+        device.stats_.rx_resyncs += 1;
+    }
+    two_stats_polls(device);
+    CHECK(r.daemon.server().running());
+    CHECK(r.finish());
+}
+
+TEST_CASE("a Protocol 2 packet wakes an idle daemon", "[daemon]") {
+    FakeDevice device;
+    device.idle_wait_ms = 1;
+    Running r(device);
+    P2Client client(r.daemon);
+    std::this_thread::sleep_for(50ms);  // the main thread sleeps: nobody owns the radio
+    client.send(p2::kRxSpecificPort, rx_specific_packet(0, {{0, 48}}));
+    client.send(p2::kGeneralPort, p2_discovery_packet());
+    CHECK(client.receive_from({p2::kGeneralPort})[p2::kGeneralPort].size() == 60);
+    CHECK(r.finish());
+}
+
+TEST_CASE("radioberryd reports sends to a closed TCP client", "[daemon]") {
+    FakeDevice device;
+    device.idle_wait_ms = 1;
+    DaemonOptions o = Running::options();
+    o.client_timeout = 500ms;
+    Running r(device, o);
+    const sockaddr_in to = loopback(r.daemon.port());
+    {
+        Socket tcp(SOCK_STREAM);
+        REQUIRE(::connect(tcp.fd, reinterpret_cast<const sockaddr*>(&to), sizeof to) == 0);
+        const auto start = start_packet(1, 1032);
+        ::send(tcp.fd, start.data(), start.size(), 0);
+        for (int i = 0; i < 200 && !r.daemon.server().running(); ++i) {
+            std::this_thread::sleep_for(5ms);
+        }
+        REQUIRE(r.daemon.server().running());
+    }  // closed without a stop: the stream goes on until the client times out
+    std::this_thread::sleep_for(50ms);
+    feed(device, 126 * 4);
+    for (int i = 0; i < 400 && r.daemon.server().running(); ++i) {
+        std::this_thread::sleep_for(5ms);
+    }
+    CHECK_FALSE(r.daemon.server().running());
+    CHECK(r.finish());
 }
 
 #if !defined(__SANITIZE_ADDRESS__)

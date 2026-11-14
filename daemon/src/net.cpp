@@ -158,12 +158,13 @@ void Network::accept_tcp() {
 void Network::read_tcp(const Handler& handler) {
     const ssize_t got =
         ::recv(tcp_, record_.data() + record_fill_, record_.size() - record_fill_, MSG_DONTWAIT);
-    if (got == 0 || (got < 0 && errno != EAGAIN && errno != EINTR)) {
-        const std::lock_guard lock(tcp_mutex_);
-        close_tcp_locked();
-        return;
-    }
-    if (got < 0) {
+    if (got <= 0) {
+        // The end of the stream or an error closes it; EAGAIN and EINTR
+        // wait for the next poll.
+        if (got == 0 || (errno != EAGAIN && errno != EINTR)) {
+            const std::lock_guard lock(tcp_mutex_);
+            close_tcp_locked();
+        }
         return;
     }
     record_fill_ += static_cast<std::size_t>(got);
@@ -225,11 +226,9 @@ void Network::close_tcp_locked() {
 
 std::optional<std::array<std::uint8_t, 6>> interface_mac() {
     ifaddrs* list = nullptr;
-    if (::getifaddrs(&list) != 0) {
-        return std::nullopt;
-    }
+    const bool listed = ::getifaddrs(&list) == 0;  // none found if it fails
     std::optional<std::array<std::uint8_t, 6>> mac;
-    for (const ifaddrs* i = list; i != nullptr && !mac; i = i->ifa_next) {
+    for (const ifaddrs* i = listed ? list : nullptr; i != nullptr && !mac; i = i->ifa_next) {
         if (i->ifa_addr == nullptr || i->ifa_addr->sa_family != AF_PACKET ||
             (i->ifa_flags & IFF_LOOPBACK) != 0 || (i->ifa_flags & IFF_RUNNING) == 0) {
             continue;
@@ -241,7 +240,9 @@ std::optional<std::array<std::uint8_t, 6>> interface_mac() {
             mac = m;
         }
     }
-    ::freeifaddrs(list);
+    if (listed) {
+        ::freeifaddrs(list);
+    }
     return mac;
 }
 

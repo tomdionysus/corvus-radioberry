@@ -5,9 +5,11 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <span>
+#include <string>
 
 #include "device/service.hpp"
 #include "net.hpp"
@@ -15,6 +17,7 @@
 #include "p2/network.hpp"
 #include "p2/server.hpp"
 #include "radioberry/device.hpp"
+#include "realtime.hpp"
 #include "session.hpp"
 #include "tx_policy.hpp"
 
@@ -38,6 +41,12 @@ struct DaemonOptions {
     // SCHED_FIFO for the stream and network threads and locked memory
     // (realtime.hpp); without the privileges each is reported and skipped.
     bool realtime = true;
+    // The calls that do it; tests replace them.
+    std::function<std::optional<std::string>(const char*, int)> thread_realtime =
+        ::radioberry::daemon::make_thread_realtime;
+    std::function<std::optional<std::string>()> memory_lock = [] {
+        return ::radioberry::daemon::lock_memory();
+    };
     // The driver's TX ring is kept within 100 ms at 48 ksps.
     DeviceOptions device{.tx_ring_limit_words = 4800, .on_thread_start = {}};
     TxPolicyOptions tx;
@@ -101,6 +110,8 @@ private:
     double frequency_ppm_ = 0;
     bool iq_standard_ = false;
     bool realtime_ = true;
+    std::function<std::optional<std::string>(const char*, int)> thread_realtime_;
+    std::function<std::optional<std::string>()> memory_lock_;
     bool protocol1_ = true;
     bool protocol2_ = true;
     std::atomic<bool> realtime_failed_{false};

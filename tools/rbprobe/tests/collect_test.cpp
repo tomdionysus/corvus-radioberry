@@ -266,6 +266,14 @@ TEST_CASE("identify finds images in the installed gateware layout", "[collect]")
     CHECK(str(r, "fpga.type") == "10CL025");
 }
 
+TEST_CASE("identify skips a .rbf name it cannot read", "[collect]") {
+    FakeSource pi = development_pi();
+    pi.dirs.insert("/srv/gateware/a-directory.rbf");
+    const Report r = collect(pi, test_options(true));
+    CHECK(pi.configure_calls == 1);
+    CHECK(str(r, "fpga.type") == "10CL025");
+}
+
 TEST_CASE("identify deduplicates identical images", "[collect]") {
     FakeSource pi = development_pi();
     pi.files["/lib/firmware/radioberry-rpi5-pio.rbf"] = kPi5Image;
