@@ -66,6 +66,10 @@ doesn't yet: [docs/status.md](docs/status.md). Changes per version:
   receiver-count change ([docs/fault-rx-lockup.md](docs/fault-rx-lockup.md)).
   I've worked around this in the driver, but the real fix belongs in the
   gateware itself.
+- An external review of the gateware lists what would make it more
+  reliable, observable and numerically careful; the
+  [gateware review](docs/gateware-review.md) has each finding and how far
+  along it is.
 - The AURSINC RadioBerry Preamp Board I'm using is an inexpensive copy with
   manual bias set on a pot. The
   [original design](https://groups.google.com/g/radioberry/c/WQc_afuvViI)

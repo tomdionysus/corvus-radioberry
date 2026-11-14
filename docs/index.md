@@ -36,6 +36,7 @@ Source: [github.com/tomdionysus/corvus-radioberry](https://github.com/tomdionysu
 - [Test results](testing.md)
 - [Driver hardware tests](driver-tests.md)
 - [Driver under a debug kernel](kernel-debug.md)
+- [Gateware review](gateware-review.md): findings and progress
 - [The gateware's receive lock-up](fault-rx-lockup.md)
 - [CPU cost of receive on the Raspberry Pi 4](finding-rpi4-cpu.md)
 - [Gateware interface](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/README.md),
