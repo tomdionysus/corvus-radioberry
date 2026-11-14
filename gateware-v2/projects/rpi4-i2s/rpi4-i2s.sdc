@@ -32,7 +32,9 @@ set_output_delay -clock virt_adc -max 2.5 [get_ports {ad_tx[*] ad_txsync}]
 set_output_delay -clock virt_adc -min 0.0 [get_ports {ad_tx[*] ad_txsync}]
 # Pin 105 (ad_tx[4]) has a 5.4 ns output buffer in the slow model, the
 # other TX pins about 2.2 ns; the radio gateware relaxes this one bit the
-# same way (set_max_delay 10) and transmits on this board.
+# same way (set_max_delay 10) and transmits on this board. Fragile: the
+# strict margin is printed by tools/worst.sh; see hardware_discovery.md
+# section 4.
 set_max_delay -from [get_registers {ad_tx_q[4]}] -to [get_ports {ad_tx[4]}] 10.0
 
 # Slow or asynchronous pins.

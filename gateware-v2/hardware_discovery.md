@@ -169,6 +169,20 @@ not the board's; the detail is in
 - TX quiet: the source holds pin 72 low except while transmitting. A
   transmitter that works (O8) shows the AD9866 is not held quiet during a
   transmission; it does not show the pin is what releases it.
+- Pin 105 (TX bit 4) is fragile. The AD9866 needs each TX half 2.5 ns
+  before the 153.6 MHz edge (datasheet: setup 2.5 ns, hold 1.5 ns). In the
+  slow timing model pin 105's output buffer takes about 5.4 ns, the other
+  TX pins about 2.2 ns, and the pin is fixed by the board trace. The
+  rpi4-i2s constraints relax that one path to `set_max_delay 10`, as the
+  radio gateware's own constraints do; the radio gateware transmits with
+  it (O8). Under the strict constraint, rpi4-i2s at 52303aa: bit 4
+  -2.708 ns, the other TX bits and TX sync +0.051 to +0.245 ns.
+  `tools/worst.sh` prints these "strict" lines on every build; the
+  relaxed path itself is checked by nothing else. Whether bit 4 arrives
+  in time on real boards is not measured. Unexplored remedies: faster
+  drive strength or slew rate on pin 105, or launching bit 4 earlier
+  than the others (risks the 1.5 ns hold). Suspect this pin first if
+  transmitted samples show errors in bit 4 or bit 10.
 - Whether mode and reset are wired cannot be told from a working radio:
   the full-duplex mode is proven (section 2), but a strap on the board
   would do the same as pin 111. The build has no half-duplex option set,
