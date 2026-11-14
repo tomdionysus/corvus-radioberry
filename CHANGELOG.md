@@ -3,7 +3,7 @@
 Changes per released version, newest first. Versions are git tags; the
 packages carry the same number.
 
-## Unreleased
+## 0.5.0 - 2026-11-14
 
 - New gateware, one image per board, both for the 10CL025: `rpi5-pio`
   (Raspberry Pi 5, RP1 PIO) and `rpi4-i2s` (Raspberry Pi 4, I2S into the
@@ -25,6 +25,8 @@ packages carry the same number.
   decodes `.c2` files.
 - Docs: frequency calibration procedure; Code of Conduct; README per
   component (driver, daemon, gateware); gateware review.
+- Tests: 100% line coverage; all 11 Raspberry Pi OS 6.12 and 6.18
+  kernels pass on both boards.
 
 ## 0.4.1 - 2026-11-11
 
