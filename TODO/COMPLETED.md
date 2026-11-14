@@ -3,6 +3,15 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-14: Release 0.5.0 preparation, Pi 5. Packages
+  0.4.1+git35.gbcc3654 upgraded in place from 0.4.1+git22 with apt (DKMS
+  for all 14 installed kernels, both images linked, new driver loaded
+  without a reboot). Kernel matrix, 11 `rpt-rpi-2712` kernels 6.12.25 to
+  6.18.60: `rbprobe` exit 0, `ft8rx` 20 m (evening, 6 to 19 decodes per
+  protocol) with 0 packets lost, `rbcat` with no resyncs, `rbdrivertest`
+  12/12, no under-voltage during the runs, image TX counters (gaps, bad
+  frames, overflows, underruns, realigns) all 0, on every kernel. Driver
+  version string set to 0.5.0.
 - 2026-11-14: Release 0.5.0 preparation, Pi 4 and CI. CI on a cluster Pi
   passes in full with 100% line coverage (4646 lines; 343 tests, 340
   under ASan and UBSan). Pi 4: packages 0.4.1+git33.gb66dfe1 upgraded in

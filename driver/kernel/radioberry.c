@@ -62,8 +62,8 @@
 #include "rb_frame.h"
 #include "rb_pio.h"
 
-#define RB_DRIVER_VERSION ((0u << 16) | (4u << 8) | 1u)
-#define RB_DRIVER_VERSION_STRING "0.4.1"
+#define RB_DRIVER_VERSION ((0u << 16) | (5u << 8) | 0u)
+#define RB_DRIVER_VERSION_STRING "0.5.0"
 
 #define RB_DMA_SLOTS 4
 #define RB_RX_SLOT_BYTES (32 * 1024)

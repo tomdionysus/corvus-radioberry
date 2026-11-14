@@ -47,5 +47,3 @@ RadioBerry, passed:
 | 6.18.39 | passed | passed |
 | 6.18.50 | passed | passed |
 | 6.18.60 | passed | passed |
-
-The Raspberry Pi 5 column is release 0.4.1's driver.

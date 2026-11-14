@@ -80,15 +80,6 @@ item is removed from here and recorded at the top of
 
 ## 1. Release 0.5.0
 
-- [ ] Packages built from the branch on the Pi 5: an upgrade from 0.4.1
-      with apt comes up on the new image with `dtoverlay=radioberry`.
-      Acceptance: `rbprobe` exits 0, `ft8rx` decodes over P1 and P2 with
-      nothing lost.
-- [ ] Kernel matrix on the Pi 5 with the new driver
-      ([docs/kernels.md](../docs/kernels.md) still lists 0.4.1's Pi 5
-      results).
-- [ ] Driver version string: the module reports 0.4.1; set it to 0.5.0
-      with the release version.
 - [ ] Release gate per board (clean-down, README install, FT8 receive, the
       owner's contact); version 0.5.0.
 
