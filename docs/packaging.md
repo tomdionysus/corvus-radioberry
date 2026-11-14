@@ -8,7 +8,7 @@ same packages serve both.
 
 | Package | Architecture | Contents |
 |---|---|---|
-| `radioberry` | arm64 | `radioberryd` and `radioberry.service`, `rbprobe`, `rbcat`, `rbctl`, `rbload`, `rbbus`, `p1probe`, `p2probe`, sysusers.d entry, udev rule, modules-load.d entry for `i2c-dev`, `/etc/radioberry/config.yaml`, both gateware images, the overlay |
+| `radioberry` | arm64 | `radioberryd` and `radioberry.service`, `rbprobe`, `rbcat`, `rbctl`, `rbload`, `rbbus`, `p1probe`, `p2probe`, sysusers.d entry, udev rule, modules-load.d entry for `i2c-dev`, `/etc/radioberry/config.yaml`, the gateware images, the overlays |
 | `radioberry-dkms` | all | the driver source, built by DKMS for every installed kernel |
 | `radioberry-dev` | all | `radioberry_ioctl.h` |
 | `radioberry-dbgsym` | arm64 | debug symbols for `radioberry` |
@@ -51,8 +51,8 @@ marking on the chip's package says which) and does the following:
 | What | Where |
 |---|---|
 | kernel module, built by DKMS for each installed kernel | `/lib/modules/<kernel>/updates/dkms/radioberry.ko.xz` |
-| gateware for the chosen FPGA | `/usr/lib/firmware/radioberry.rbf`, a link into `/usr/share/radioberry/gateware/rpi-5/<type>/` |
-| overlay | copied from `/usr/share/radioberry/overlays/` to `/boot/firmware/overlays/radioberry.dtbo` |
+| gateware for the chosen FPGA | links in `/usr/lib/firmware/` into `/usr/share/radioberry/gateware/`: `radioberry.rbf` (the Hermes-Lite 2 PIO image, `rpi-5/<type>/`), and for a CL025 `radioberry-rpi5-pio.rbf` (Pi 5, `rpi5-pio/CL025/`) and `radioberry-rpi4-i2s.rbf` (Pi 4 I2S, `rpi4-i2s/CL025/`) |
+| overlays | copied from `/usr/share/radioberry/overlays/` to `/boot/firmware/overlays/radioberry.dtbo` and `radioberry-i2s.dtbo` |
 | tools | `/usr/bin/` |
 | `radioberryd` | `/usr/sbin/` |
 | unit, sysusers.d entry, udev rule | `/usr/lib/systemd/system/`, `/usr/lib/sysusers.d/`, `/usr/lib/udev/rules.d/` |
@@ -60,14 +60,20 @@ marking on the chip's package says which) and does the following:
 | daemon config (conffile) | `/etc/radioberry/config.yaml` |
 
 The install does not edit `/boot/firmware/config.txt`. If it has no
-`dtoverlay=radioberry` line the install prints a reminder; add
+`dtoverlay=radioberry` line the install prints a reminder; add, at the
+end,
 
 ```
+[all]
 dtparam=i2c_arm=on
 dtoverlay=radioberry
+[pi4]
+dtoverlay=radioberry-i2s
+[all]
 ```
 
-and reboot. `radioberry.service` is enabled at install and started then if
+and reboot. The `[pi4]` line gives a Raspberry Pi 4 the I2S transport;
+without it a Pi 4 uses the CPU-clocked transport. A Pi 5 ignores it. `radioberry.service` is enabled at install and started then if
 `/dev/radioberry` exists, otherwise at the next boot. Check with `rbprobe`.
 
 Transmit and the PA are off in the installed `config.yaml`

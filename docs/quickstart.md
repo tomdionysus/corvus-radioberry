@@ -19,12 +19,19 @@ The install asks which FPGA the RadioBerry has: read the chip's marking,
 
 ## 2. Enable the driver
 
-Add to `/boot/firmware/config.txt`:
+Add to the end of `/boot/firmware/config.txt`:
 
 ```
+[all]
 dtparam=i2c_arm=on
 dtoverlay=radioberry
+[pi4]
+dtoverlay=radioberry-i2s
+[all]
 ```
+
+The `[pi4]` line gives a Raspberry Pi 4 the I2S transport; a Pi 5
+ignores it.
 
 Reboot, then check:
 

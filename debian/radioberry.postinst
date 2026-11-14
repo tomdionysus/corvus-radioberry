@@ -51,8 +51,10 @@ if [ "$1" = configure ]; then
     fi
 
     if ! grep -qs '^dtoverlay=radioberry' /boot/firmware/config.txt; then
-        echo "radioberry: add 'dtparam=i2c_arm=on' and 'dtoverlay=radioberry' to" \
-            "/boot/firmware/config.txt and reboot to enable the RadioBerry." >&2
+        echo "radioberry: add these lines to the end of /boot/firmware/config.txt" \
+            "and reboot to enable the RadioBerry (the [pi4] line gives a" \
+            "Raspberry Pi 4 the I2S transport):" >&2
+        printf '  [all]\n  dtparam=i2c_arm=on\n  dtoverlay=radioberry\n  [pi4]\n  dtoverlay=radioberry-i2s\n  [all]\n' >&2
     fi
 fi
 
