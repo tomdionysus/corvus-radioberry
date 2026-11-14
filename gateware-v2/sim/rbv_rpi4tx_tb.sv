@@ -346,7 +346,7 @@ module rbv_rpi4tx_tb;
         check("AD9866 0x01 TxDAC off in loopback", ad_reg(1), 8'h40);
         check("AD9866 0x0d loopback on", ad_reg(13), 8'h43);
         check("core transmitting in loopback", {31'd0, dut.tx_on}, 32'h1);
-        check("TX quiet low in loopback", {31'd0, ad_txquiet_n}, 32'h0);
+        check("TX quiet follows the core in loopback", {31'd0, ad_txquiet_n}, 32'h1);
         check("PA lines low in loopback", {28'd0, pa_out}, 32'h0);
         if (ad_tx === 6'd0) begin $display("FAIL TX bus idle in loopback"); errors++; end
         else $display("ok   TX bus carries samples in loopback");

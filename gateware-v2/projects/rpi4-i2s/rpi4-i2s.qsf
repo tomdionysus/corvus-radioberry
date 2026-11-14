@@ -145,3 +145,9 @@ set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to jack_tip
 set_instance_assignment -name WEAK_PULL_UP_RESISTOR ON -to jack_ring
 set_instance_assignment -name FAST_INPUT_REGISTER ON -to ad_rx[*]
 set_instance_assignment -name FAST_INPUT_REGISTER ON -to ad_rxsync
+# The AD9866 latches TX nibbles with 2.5 ns setup and 1.5 ns hold at
+# 153.6 MHz: the bus leaves from the I/O-cell registers, as the original
+# gateware drives it.
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to ad_tx[*]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to ad_txsync
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to ad_txquiet_n

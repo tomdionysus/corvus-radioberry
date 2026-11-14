@@ -23,10 +23,11 @@
 // radio core as in the Hermes-Lite 2 gateware (with run set), and the PA
 // lines only under the same permission and PA allowed. The AD9866's
 // transmit gain is the drive of command 0x09 while transmitting or keyed,
-// and its lowest otherwise; TX quiet is high only while the core transmits
-// and loopback is clear. Loopback: the AD9866's digital loopback, TxDAC and
-// IAMP powered down, TX quiet and every PA line held low; transmit samples
-// come back on the receive bus.
+// and its lowest otherwise; TX quiet is high only while the core transmits.
+// Loopback: the AD9866's digital loopback, the TxDAC and IAMP powered down
+// (register 0x01), every PA line held low; TX quiet still follows the core,
+// since held low it stops the AD9866 taking TX words; transmit samples come
+// back on the receive bus.
 //
 // Board registers (space 1):
 //   00 ID        ro  0x52425632 ("RBV2")
@@ -471,15 +472,16 @@ module rbv_rpi4_top #(
 
     // AD9866 transmit bus, as the Hermes-Lite 2 gateware drives it: each
     // 12-bit sample as two 6-bit halves at twice the sample rate, the high
-    // half with TX sync low, then the low half with TX sync high. TX quiet
-    // (active low) is high only while the core transmits outside loopback.
+    // half with TX sync low, then the low half with TX sync high, from the
+    // I/O-cell registers. TX quiet (active low) is high while the core
+    // transmits, in loopback too: held low it keeps the AD9866 from taking
+    // TX words at all (measured: digital loopback returned exact zeros). In
+    // loopback the TxDAC and IAMP stay powered down by register 0x01.
     logic        tx_en_d1 = 1'b0, tx_sync = 1'b0;
     logic [11:0] tx_hold = 12'd0;
-    logic [1:0]  lb2_s = 2'b00;
     logic [5:0]  ad_tx_q = 6'd0;
     logic        ad_txsync_q = 1'b0, ad_txquiet_q = 1'b0;
     always_ff @(posedge clk_2x) begin
-        lb2_s    <= {lb2_s[0], lb_s[1]};
         tx_en_d1 <= tx_on;
         tx_sync  <= ~tx_sync;
         if (tx_en_d1) begin
@@ -494,7 +496,7 @@ module rbv_rpi4_top #(
             ad_tx_q     <= 6'd0;
             ad_txsync_q <= 1'b0;
         end
-        ad_txquiet_q <= tx_en_d1 && !lb2_s[1];
+        ad_txquiet_q <= tx_en_d1;
     end
     assign ad_tx        = TX ? ad_tx_q : 6'd0;
     assign ad_txsync    = TX ? ad_txsync_q : 1'b0;
