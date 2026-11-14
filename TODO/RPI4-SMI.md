@@ -1,8 +1,12 @@
 # Raspberry Pi 4: RX over SMI with DMA
 
+**Superseded (2026-11-13):** the Pi 4 moved to the gateware-v2 I2S
+transport ([COMPLETED.md](COMPLETED.md)). Kept as the record of the SMI
+work on branch `item/rpi4-smi`; not active.
+
 Plan for a Pi 4 RX transport that reads the RadioBerry's RX bus with the
 BCM2711's Secondary Memory Interface (SMI) and DMA instead of clocking it
-from the CPU. Tracked in [ACTIVE.md](ACTIVE.md), section 2.
+from the CPU.
 
 ## Why
 

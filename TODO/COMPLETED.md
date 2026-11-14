@@ -3,6 +3,29 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-14: Pi 4 transmit through the `rpi4-i2s` image (branch
+  `item/new-direction`): digital loopback self-test passed (+1 kHz tone at
+  -43.6 dBFS, counters clean); power into a dummy load measured from drive
+  32 to 170 (about 1 dB per gain code, 4.5 W at 170); on air through
+  piHPSDR and WSJT-X on 40 and 30 m FT8, decoded by stations across Europe
+  and in North America. Key-up loss found and fixed: the daemon's
+  Protocol 2 server set a 100 ms TX buffer latency sized for the PIO
+  image's flow-controlled FIFO, overflowing the I2S image's 2048-sample
+  FIFO by about 2720 samples at every key-up; the daemon now leaves
+  address 0x17 to the gateware (f7a38aa), and 26 transmissions after it
+  showed 0 overflows. `tools/worst.sh` prints the TX bus's strict setup
+  slack (bd7c980).
+- 2026-11-13: Pi 4 receive through the `rpi4-i2s` image: I2S link into the
+  PCM block with cyclic DMA (61.44 MHz both ways, 0 errors over 10 min
+  idle and 10 min under load), driver I2S transport, framed SPI control,
+  6 receivers; FT8 decoded over Protocol 1 and 2 with 0 packets lost.
+- Superseded 2026-11-13 by the gateware-v2 direction, not done: the Pi 4
+  RX over SMI ([RPI4-SMI.md](RPI4-SMI.md), built and tested on
+  `item/rpi4-smi`, abandoned for I2S); the Pi 4 CPU cost with piHPSDR on
+  the CPU-clocked buses (the I2S transport takes 13% at 192 ksps); the
+  Pi 4 TX block drops on the CPU-clocked buses; fixing the released PIO
+  gateware's RX lock-up in place (the `rpi5-pio` image replaces it).
+
 - 2026-11-11: v0.4.1 released: the Pi 5 driver works on the 6.12
   kernels as on 6.18 (receive buffers from the RP1 DMA controller passed
   by DMA address, DMA request thresholds set by the driver;

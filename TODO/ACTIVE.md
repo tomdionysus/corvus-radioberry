@@ -9,39 +9,23 @@ item is removed from here and recorded at the top of
 
 - Released: v0.4.1 (Raspberry Pi 4 and 5, Linux 6.12 and 6.18,
   [docs/kernels.md](../docs/kernels.md)), as Debian packages from the
-  apt repository and on GitHub.
-- Working on both boards: the CL025 gateware (75.3, built from source),
-  the driver (0.4.1; RP1 PIO on the Pi 5, CPU-clocked on the Pi 4; the PIO
-  gateware's RX lock-up worked around,
-  [docs/fault-rx-lockup.md](../docs/fault-rx-lockup.md)), `rbprobe`,
-  `rbcat`, `rbctl`, `rbload`, `rbbus`, `p1probe`, `p2probe`, the driver
-  harness `rbdrivertest` and the CI gate
-  [tools/ci-pi.sh](../tools/ci-pi.sh).
-- `radioberryd`: Protocol 1 (HL2 dialect) receive and transmit over UDP
-  and TCP, and Protocol 2 receive and transmit over UDP, one owning
+  apt repository and on GitHub. Its Pi 5 path (RP1 PIO with the
+  Hermes-Lite 2 PIO gateware 75.3) is unchanged on the development branch.
+- Development branch `item/new-direction`: gateware-v2
+  ([gateware-v2/plan.md](../gateware-v2/plan.md)), separate gateware per
+  board. Raspberry Pi 4: the `rpi4-i2s` image, an I2S link into the
+  BCM2711 PCM block driven by the driver directly (no ALSA), the framed
+  SPI control protocol ([driver/kernel/rb_frame.h](../driver/kernel/rb_frame.h)),
+  receive and transmit. On air through piHPSDR and WSJT-X: FT8 decoded by
+  stations across Europe and in North America; 13% CPU at 192 ksps.
+  Transmit power into a dummy load, drive 32 to 170: about 1 dB per AD9866
+  gain code over codes 10 to 25, compression starting near 4.5 W.
+- `radioberryd`: Protocol 1 (HL2 dialect) and Protocol 2, one owning
   client, transmit only with `--allow-tx` through the transmit policy and
-  fail-safes, frequency calibration (`--frequency-ppm`, +22.9 on the
-  development board), I/Q convention option, real-time threads; runs as
-  `radioberry.service`.
-- On air: piHPSDR and WSJT-X through `radioberryd` received and decoded
-  FT8, transmitted it (decoded by distant stations on PSK Reporter), and
-  completed FT8 contacts over Protocol 1 and Protocol 2. The transmit
-  chain measured clean with a HackRF (no spurs or image above a broadband
-  floor about 46 dB down).
-- `ft8rx` (`examples/ft8`, optional): receive-only FT8 decoder over
-  Protocol 1 or 2.
-- Known limits: on the Pi 4, one receiver at 96 ksps or more, or three
-  or more at 48, holds the driver's thread at 100% of one CPU core,
-  mostly polling (SMI item, section 2), and so did piHPSDR at one
-  receiver at 48 ksps (section 2); each Pi 4 FT8 TX period drops some TX
-  blocks (section 2).
-- Next, in order: the Pi 4 SMI measurement (section 2,
-  [RPI4-SMI.md](RPI4-SMI.md) step 1); `rbprobe` reporting an install of
-  the original software (section 4); the integration test's fault
-  injection (section 3). Fuzzing the packet parsers, servers and the
-  driver's ioctl and sysfs interface waits until the code settles. The
-  Pi 4 TX drops, the HL2 drive item and the Protocol 2 output checks
-  wait for the board owner's go-ahead to transmit.
+  fail-safes; it no longer sets the TX buffer latency or PTT hang time
+  (address 0x17): the gateware owns them.
+- Next, in order: the Pi 5 `rpi5-pio` image and its driver transport
+  (section 1, first item); then transmit on the Pi 5 with the board owner.
 
 ## Standing decisions
 
@@ -49,6 +33,9 @@ item is removed from here and recorded at the top of
 - Unit tests on every component, aiming at complete coverage; kernel
   module logic compiled into a userspace test binary. Catch2 v3, gcov with
   lcov reports, ASan and UBSan test builds.
+- Testing effort: each test once; a repeat needs a reason (a flaky test,
+  odd behaviour). ASan, TSan and the full CI run for releases, not for
+  every commit.
 - Dependencies from Debian trixie packages only: catch2, libyaml-cpp-dev,
   nlohmann-json3-dev, libspdlog-dev, libliquid-dev, libgpiod-dev,
   libi2c-dev, libsystemd-dev.
@@ -56,30 +43,28 @@ item is removed from here and recorded at the top of
   module. Users install the Debian packages (the module through DKMS,
   built by [tools/build-deb.sh](../tools/build-deb.sh)); `cmake --install`
   is for development only.
-- Gateware: the Hermes-Lite 2 RadioBerry PIO variants (75.3), built
-  unmodified from `gateware/source/` with Quartus Prime Lite 23.1std.1 on
-  an x86-64 machine by
-  [tools/build-gateware.sh](../tools/build-gateware.sh); the bitfiles are
-  committed and the Pi only installs them. The original RadioBerry
-  software's free rpi-5 images are older GPIO-mode gateware and are not
-  used. CL016 ships with a documented AD9866 TX output timing violation
-  ([gateware/PROVENANCE.md](../gateware/PROVENANCE.md)).
+- Gateware: one image per board and FPGA. Released Pi 5 path: the
+  Hermes-Lite 2 RadioBerry PIO variants (75.3) built unmodified from
+  `gateware/source/` ([tools/build-gateware.sh](../tools/build-gateware.sh)).
+  gateware-v2 images: `gateware-v2/projects/`, built by
+  `gateware-v2/tools/build.sh`; the Hermes-Lite 2 radio core read
+  unmodified from `gateware/source/`. Quartus Prime Lite 23.1std.1 in
+  Docker on an x86-64 machine; bitfiles are committed and the Pi only
+  installs them. The radio never appears as a sound card.
+- The driver picks its transport from the SoC and each transport names its
+  image: Pi 5 PIO; Pi 4 I2S when the `radioberry-i2s` overlay is loaded,
+  else the CPU-clocked buses with the PIO image. The `rpi4-i2s` image is
+  built for the 10CL025 only.
 - Development FPGA is a 10CL025. The driver supports CL016 and CL025.
 - The PIO gateware's RX lock-up
-  ([docs/fault-rx-lockup.md](../docs/fault-rx-lockup.md)) is resolved by
-  the driver's RX clock hold (`rx_clock_hold_us`, default 200), which
-  measured 0 lock-ups in 4500 receiver-count changes against 17 in 1800
-  without it. This is accepted as the fix. It is not reinvestigated and
-  the gateware item in section 5 is not started unless the stall
-  indicator fires with the hold on: sysfs `rx_stalled` reads 1,
-  `rx_stalls` is above 0, or "RX stream stalled" is in the kernel log. If
-  that happens, record the circumstances in the fault document's
-  Measurements section and reopen from there; otherwise, a stream that
-  stops is a new fault, not this one.
-- No transmit test on the development board without the board owner's
-  explicit permission for that specific test. Transmit code is proved first against
-  fakes. Writing samples to the TX path with PTT and the TX permission bit
-  clear is not transmitting.
+  ([docs/fault-rx-lockup.md](../docs/fault-rx-lockup.md)) is worked around
+  by the driver's RX clock hold (`rx_clock_hold_us`, default 200) on the
+  released image; the `rpi5-pio` image fixes it at source.
+- The daemon assumes nothing about the image: gateware details (FIFO
+  sizes, latencies) belong to the gateware and the driver.
+- No transmit test without the board owner's explicit permission for that
+  specific test, with the dummy load and external PA state confirmed. Any
+  PTT is a transmission. Transmit code is proved first against fakes.
 - Names: daemon `radioberryd`, unit `radioberry.service`, config
   `/etc/radioberry/config.yaml`, module `radioberry.ko`, C++ namespace
   `radioberry`, tools `rbprobe`, `rbcat`, `rbctl`, `rbload`, `p1probe`,
@@ -89,80 +74,97 @@ item is removed from here and recorded at the top of
 - Logging with spdlog: stderr in the foreground, journal as a service.
 - Runtime privileges: system user and group `radioberry`, udev rule for
   `/dev/radioberry`, unit grants CAP_SYS_NICE and CAP_IPC_LOCK; never root.
-- CI is [tools/ci-pi.sh](../tools/ci-pi.sh) on the development Pi (directly or with
-  `--remote`); it is the merge gate. GitHub Actions also runs its userspace
-  half on every push ([.github/workflows/ci.yml](../.github/workflows/ci.yml):
-  no module, no hardware), uploads coverage to Codecov, and runs CodeQL
-  ([.github/workflows/codeql.yml](../.github/workflows/codeql.yml)); these
-  give the README badges and do not replace the Pi run.
+- CI is [tools/ci-pi.sh](../tools/ci-pi.sh) on a Pi (directly or with
+  `--remote`), run before a release. GitHub Actions runs its userspace
+  half on every push ([.github/workflows/ci.yml](../.github/workflows/ci.yml)),
+  uploads coverage to Codecov, and runs CodeQL.
 - Workflow: one branch per TODO item, squash-merged into `develop`;
   `develop` merged into `main` only at a version tag. No pull requests.
 - Protocol 2: transmit I/Q at 192 ksps resampled in the daemon with
-  liquid-dsp; discovery advertises the gateware's receiver count (four
-  DDCs on the CL016, six on the CL025), one DUC, 48 to 384 ksps, no
-  wideband, diversity or audio.
-- RX capacity: at most about 2.37 million values per second over the Pi
-  5's PIO bus (six receivers at 192 ksps, three at 384 ksps), and 192 000
-  on a Pi 4 (the driver's `bb_rx_values_max`, until the SMI item). The
-  daemon runs fewer receivers than asked for above it, never fewer than
-  one, since a client's rate cannot be refused.
+  liquid-dsp; discovery advertises the gateware's receiver count, one DUC,
+  48 to 384 ksps, no wideband, diversity or audio.
+- RX capacity: about 2.37 million values per second over the Pi 5's PIO
+  bus (six receivers at 192 ksps), 1.536 million over the Pi 4's I2S link
+  (four at 192 ksps), 192 000 on the Pi 4's CPU-clocked buses. The daemon
+  runs fewer receivers than asked for above it, never fewer than one.
 - Code style: clang-format 19, Google base, 4-space indent, 100 columns;
   `-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror`. The kernel
   module and ABI header use kernel style and are not clang-formatted.
 - Version string from `git describe`, embedded at configure time.
 
+## 1. gateware-v2 (`gateware-v2/`, `driver/`)
+
+- [ ] `rpi5-pio` image and its driver transport
+      ([plan.md](../gateware-v2/plan.md) section 5, stage 1). Gateware: the
+      `rpi4-i2s` top level's control, AD9866 set-up, keying and PA logic
+      with the present PIO wire protocol and pins (RX: clock GPIO 6, data
+      18 to 21, sample-ready 25; TX: clock 4, data 5, ready 12;
+      [gateware/README.md](../gateware/README.md) sections 5 and 7), the
+      receive read-out rebuilt without the lock-up (synchronous clear,
+      registered outputs, a reset), the transmit intake reset after a
+      still clock, constraints for the Pi's clocks. Board registers as
+      `rb_frame.h`, CAPS transport PIO. Driver: a Pi 5 transport made of
+      the PIO stream functions and the framed command path
+      (`rb_i2s_command`), the identity check per transport, its own image
+      name; the Pi 4 I2S and CPU transports unchanged. Package: the image
+      installed and linked as the I2S one is. Acceptance: `ft8rx` decodes
+      on the Pi 5 over Protocol 1 and 2 with no packets lost;
+      `rbdrivertest` passes on the Pi 5; frame tests and the Pi 4 I2S
+      build unchanged. Transmit on the Pi 5 with the board owner after.
+- [ ] Pi 4 install instructions: the README quickstart and the
+      `postinst` message name only `dtoverlay=radioberry`, which gives a
+      Pi 4 the CPU-clocked transport. Add `[pi4] dtoverlay=radioberry-i2s`
+      `[all]`, or fold the PCM fragment into one overlay that still
+      applies on a Pi 5. Acceptance: a clean Pi 4 following the README
+      comes up on the I2S transport.
+- [ ] Pi 4 transmit, 30 m: the image counted 482 TX underruns across the
+      30 m transmissions (drive 150, capped from 162), none on 40 m before
+      or after. Cause unknown. Acceptance: the cause found from a counter
+      log of one 30 m transmission (`/root/txcount-log.sh` pattern).
+- [ ] Transmit drive curve: power rose about 1.06 dB per AD9866 gain code
+      against the datasheet's 0.5 dB. Cause unknown (PA gain with level,
+      TxDAC/IAMP split, the board's register 0x0e). Measurement first.
+- [ ] TX bit 4 (FPGA pin 105) misses the AD9866 setup by 2.7 ns in the
+      slow model and is relaxed in the constraints
+      ([hardware_discovery.md](../gateware-v2/hardware_discovery.md)
+      section 4). Watch the `strict` line of `tools/worst.sh` on every
+      build; investigate if bits 4 or 10 of transmitted samples show
+      errors.
+- [ ] Documentation for gateware-v2: the TX bus in hardware_discovery, a
+      README for gateware-v2 like gateware/README.md, the driver's
+      `tx_loopback` and `i2s_counters` sysfs files, docs/daemon.md.
+- [ ] Optional: a lock-phase status bit in the I2S image, so each TX
+      stream's realign is attributable (explanation now inferred).
+
 ## 2. Kernel driver remainder (`driver/`)
 
-- [ ] Raspberry Pi 4 RX over SMI with DMA, so receive no longer holds a
-      CPU core ([docs/finding-rpi4-cpu.md](../docs/finding-rpi4-cpu.md)):
-      plan, steps and acceptance in [RPI4-SMI.md](RPI4-SMI.md). Additive
-      beside the working transports; the Pi 5 is rechecked on the radio
-      after every driver step.
-- [ ] Raspberry Pi 4 at 48 ksps with piHPSDR: the driver's thread at
-      102 to 104% of a core and `radioberryd`'s RX threads at about 90%
-      together (2 sessions), against 17% for the driver's thread with
-      `p1probe` at the same rate and packet rate
-      ([docs/finding-rpi4-cpu.md](../docs/finding-rpi4-cpu.md)). A client
-      replaying `p1probe`'s commands gave 100% once, right after
-      piHPSDR, and 17% once. Find what puts the driver in that state.
-      Acceptance: piHPSDR at one receiver at 48 ksps costs the driver's
-      thread what `p1probe` does.
-- [ ] Raspberry Pi 4 TX drops: in the 0.4.0 acceptance test each FT8 TX
-      period logged 5 to 30 "TX blocks dropped" and 0 to 1 underruns, at
-      about 47.6k samples/s. Not investigated. Find the cause and fix it.
-      Transmitting needs the board owner's go-ahead at the time.
-      Acceptance: no TX blocks dropped across a run of FT8 TX periods on
-      the Pi 4.
 - [ ] Raspberry Pi 4 on 6.12.75: the harness test "the daemon's device
       layer streams through the driver" failed once in 11 runs (a gap,
-      `rx_blocks_dropped` 31, RX queue full); the other 10 passed. It was
-      accepted as an anomaly for 0.4.1. Find the cause. Acceptance: the
-      cause identified, and fixed if it is ours.
+      `rx_blocks_dropped` 31, RX queue full) on the CPU-clocked transport.
+      Find the cause. Acceptance: the cause identified, and fixed if it is
+      ours.
 - [ ] Upstream review: the driver has not been through review on the
       kernel mailing lists.
 
 ## 3. Daemon (`daemon/`)
 
 - [ ] HL2 drive compatibility: the HL2 gateware takes 0x09's top four
-      bits as AD9866 TX gain codes 0 to 15, the RadioBerry build maps the
-      whole byte to codes 0 to 39 (`ad9866ctrl.v`), and the PA hat is not
-      the HL2's, so HL2 software sends far too little drive (piHPSDR:
-      drive 46 for 80% at its default calibration, about 0.4 W). Measure
-      output against gain code across the range, then decide whether
-      `radioberryd` maps HL2 drive to RadioBerry codes. Until then piHPSDR
-      is calibrated by hand (its per-band PA calibration, about 45 to 50).
-      Current piHPSDR (dl1ycf 900b1c94, `radio_calc_drive_level`) encodes
-      HL2 drive differently from the build used so far: the 0x09 byte is
-      a 0.5 dB attenuator step (0, 16, ... 240) and the rest goes into the
-      TX I/Q amplitude, so a level of 115 is sent as byte 32 (gateware
-      code 5) instead of 115 (code 17); hand calibrations made with the
-      older build give far less drive with it.
+      bits as AD9866 TX gain codes 0 to 15, the RadioBerry images map the
+      whole byte to codes 0 to 39, and the PA hat is not the HL2's, so HL2
+      software sends far too little drive. With the measured curve
+      (section 1), decide whether `radioberryd` maps HL2 drive to
+      RadioBerry codes. Current piHPSDR (dl1ycf 900b1c94,
+      `radio_calc_drive_level`) sends the 0x09 byte as a 0.5 dB attenuator
+      step and the rest in the TX I/Q amplitude.
 - [ ] Integration test: a fake client against the daemon on loopback for
       both protocols, with fault injection for every fail-safe path.
       [tools/protoprobe/tests/daemon_test.cpp](../tools/protoprobe/tests/daemon_test.cpp)
-      already runs `p1probe` and
-      `p2probe` against the daemon and the fake device (streams, MOX
-      allowed and refused, a busy radio); the fault injection is open.
+      already runs `p1probe` and `p2probe` against the daemon and the fake
+      device; the fault injection is open.
+- [ ] piHPSDR at 384 ksps on the Pi 4 stalled and exited; the kernel
+      counted UDP receive-buffer drops (none on send), so the client fell
+      behind. Confirm with per-socket drops (`ss -uamp`) while it runs;
+      a larger `net.core.rmem_default` is the board owner's decision.
 
 ## 4. Tools (`tools/`)
 
@@ -190,51 +192,31 @@ item is removed from here and recorded at the top of
       [docs/original-software.md](../docs/original-software.md).
       `postinst` prints the same. Acceptance: tests through
       the fake source for each signal alone and combined, and no finding on
-      a Pi with only the packages installed (the development Pi, where the
-      original's unit, init script and overlay were moved aside by hand).
+      a Pi with only the packages installed.
 
-## 5. Gateware
+## 5. Gateware (released PIO images)
 
-- [ ] Fix the RX lock-up at source. Not taken in order: only on the
-      project owner's explicit instruction, since it reopens "built
-      unmodified" ([docs/fault-rx-lockup.md](../docs/fault-rx-lockup.md),
-      "Fixing it in the gateware"). The changes: synchronise the RX FIFO
-      clear on both sides with the real `dcfifo` parameters, give
-      `rx_pi_pio` a reset or safe-state recovery, remove its inferred
-      latches, constrain the Pi RX clock at 20 MHz; version the image so
-      `rbprobe` tells it apart. Acceptance: with `rx_clock_hold_us=0`,
-      0 lock-ups in at least 600 harness runs against the shipped image's
-      rate of about 6% per run, and no regression in `rbcat` streaming to
-      the PIO bus ceiling.
 - [ ] Test the CL016 image on a CL016 board, receive and transmit, when
-      one is available.
+      one is available. (The `rpi4-i2s` image has no CL016 build; not
+      pursued.)
 
-## 6. Hardware validation on the development Pi
+## 6. Hardware validation
 
 Transmit items each need the board owner's go-ahead at the time.
 
 - [ ] SparkSDR and Quisk receive and tune via Protocol 1.
-- [ ] Protocol 2 transmit output: power into the dummy load against
-      Protocol 1 at the same piHPSDR settings, and the HackRF spectrum
-      against Protocol 1's (no spurs or image above a floor about 46 dB
-      down); TX I/Q is decimated from 192 to 48 ksps in the daemon.
-- [ ] Two-tone linearity. A test client's two tones (700 and 1900 Hz)
-      measured third-order products at -13 to -15 dBc at every drive from
-      64 to 170, and fifth-order products rising with drive (-44 to
-      -28 dBc), while piHPSDR's carrier and FT8 showed no products above
-      a floor about 46 dB down. Establish whether the two-tone result is
-      the test client or the radio (repeat with piHPSDR's own two-tone
-      generator, and in the duplex receiver into a dummy load), then
-      measure the drive at which compression sets in.
+- [ ] Two-tone linearity: a test client's two tones measured third-order
+      products at -13 to -15 dBc at every drive from 64 to 170 on the
+      released image, while piHPSDR's carrier and FT8 showed no products
+      above a floor about 46 dB down. Establish whether the result is the
+      test client or the radio, then measure where compression sets in.
 
-## 7. Development Pi
+## 7. Development Pi (Pi 5)
 
-- [ ] Wi-Fi background scans: while associated, the development Pi scans
-      every 33.7 s for 3.65 s, which stalls UDP to a Wi-Fi client for about
-      130 ms at a time ([docs/testing.md](../docs/testing.md)); longer than the 85 ms TX FIFO,
-      so a Protocol 2 client transmitting over Wi-Fi would run it dry.
-      Stop the scans (for example by locking the connection to the access
-      point's BSSID, in the netplan configuration so it survives reboots),
-      with a rollback in place since Wi-Fi is the Pi's only link; the
-      board owner's decision. Acceptance: RX packet lateness to a Wi-Fi client under
-      10 ms at p99.9 over 60 s.
+- [ ] Wi-Fi background scans: while associated, the Pi 5 scans every
+      33.7 s for 3.65 s, which stalls UDP to a Wi-Fi client for about
+      130 ms at a time ([docs/testing.md](../docs/testing.md)). Stop the
+      scans (for example by locking the connection to the access point's
+      BSSID in the netplan configuration), with a rollback in place since
+      Wi-Fi is the Pi's only link; the board owner's decision. Acceptance:
+      RX packet lateness to a Wi-Fi client under 10 ms at p99.9 over 60 s.
