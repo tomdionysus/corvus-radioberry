@@ -10,6 +10,19 @@ target_include_directories(radioberry_common PUBLIC
     ${CMAKE_BINARY_DIR}/generated)
 target_link_libraries(radioberry_common PUBLIC radioberry_abi)
 
+# This project's gateware images, recognised by hash: taken from the
+# committed bitfiles at configure time, so a new build needs no code change.
+foreach(_image IN ITEMS rpi5-pio rpi4-i2s)
+    set(_file ${PROJECT_SOURCE_DIR}/gateware/images/${_image}/CL025/radioberry-${_image}.rbf)
+    file(SHA256 ${_file} _hash)
+    file(SIZE ${_file} _size)
+    string(TOUPPER ${_image} _name)
+    string(MAKE_C_IDENTIFIER ${_name} _name)
+    target_compile_definitions(radioberry_common PRIVATE
+        RB_IMAGE_${_name}_SHA256="${_hash}" RB_IMAGE_${_name}_SIZE=${_size})
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_file})
+endforeach()
+
 # Report tree rendered as text, JSON and YAML, shared by the tools.
 add_library(radioberry_report STATIC src/node.cpp src/render.cpp)
 target_include_directories(radioberry_report PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

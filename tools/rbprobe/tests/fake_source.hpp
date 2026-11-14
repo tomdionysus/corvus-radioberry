@@ -35,14 +35,14 @@ public:
 };
 
 // Gateware stand-ins: short contents with a matching test catalog.
-inline const std::string kCl025Image = "fake rpi-5 CL025 gateware";
-inline const std::string kCl016Image = "fake rpi-5 CL016 gateware";
-inline const std::string kRpi4Image = "fake rpi-4 CL016 gateware";
+inline const std::string kPi5Image = "fake rpi5-pio gateware";
+inline const std::string kPi4Image = "fake rpi4-i2s gateware";
+inline const std::string kOriginalImage = "fake original rpi-4 CL016 gateware";
 
 std::span<const KnownImage> test_catalog();
 
-// A Pi set up for the original RadioBerry software: its overlay and init
-// script, the wrong (rpi-4 CL016) image installed, no driver, an empty I2C
+// A Raspberry Pi 5 set up for the original RadioBerry software: its overlay,
+// init script and image, none of this project's, no driver, an empty I2C
 // bus and a CL025 FPGA.
 FakeSource development_pi();
 

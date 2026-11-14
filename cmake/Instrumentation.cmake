@@ -35,11 +35,12 @@ if(RADIOBERRY_COVERAGE)
         "*/linux_device.cpp"
         "*/rbcat/src/main.cpp"
         "*/rbctl/src/main.cpp"
-        "*/rbload/src/main.cpp"
         "*/protoprobe/src/*_main.cpp"
         "*/daemon/src/main.cpp"
         "*/driver-tests/*"
         CACHE STRING "lcov patterns excluded from the coverage report")
+    set(RADIOBERRY_COVERAGE_MIN 100 CACHE STRING
+        "Line coverage, in percent, below which the coverage target fails")
 
     add_custom_target(coverage
         COMMAND ${CMAKE_COMMAND} -E rm -rf ${_cov_dir}
@@ -58,6 +59,7 @@ if(RADIOBERRY_COVERAGE)
         COMMAND ${GENHTML_EXECUTABLE} --quiet --output-directory ${_cov_dir}/html
                 ${_cov_dir}/coverage.info
         COMMAND ${LCOV_EXECUTABLE} --summary ${_cov_dir}/coverage.info
+                --fail-under-lines ${RADIOBERRY_COVERAGE_MIN}
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         COMMENT "Running tests and writing the coverage report to ${_cov_dir}/html"
         VERBATIM)

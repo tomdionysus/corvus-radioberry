@@ -29,8 +29,7 @@ check() {
         { echo "$1: no sdr,radioberry at $node"; exit 1; }
     [ "$(fdtget "$merged" "$2" status)" = "okay" ] || { echo "$1: $2 not enabled"; exit 1; }
     gpio=$(fdtget -t u "$merged" "$3" phandle)
-    for prop in nconfig-gpios dclk-gpios data0-gpios conf-done-gpios nstatus-gpios \
-        tx-clk-gpios tx-data-gpios rx-clk-gpios tx-ready-gpios rx-data-gpios rx-ready-gpios; do
+    for prop in nconfig-gpios dclk-gpios data0-gpios conf-done-gpios nstatus-gpios; do
         ref=$(fdtget -t u "$merged" "$node" "$prop" | cut -d' ' -f1)
         [ "$ref" = "$gpio" ] || { echo "$1: $prop is not on $3"; exit 1; }
     done

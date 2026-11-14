@@ -52,20 +52,20 @@ TEST_CASE("development Pi: acceptance facts", "[collect]") {
     FakeSource pi = development_pi();
     const Report r = collect(pi, test_options(true));
 
-    // 10CL025 identified, the CL016 image never tried after success.
+    // 10CL025 identified with this board's image only.
     CHECK(str(r, "fpga.type") == "10CL025");
     CHECK(str(r, "fpga.type_source") == "identify");
     CHECK(pi.configure_calls == 1);
     const Node* attempts = r.root.at("fpga.identify.attempts");
     REQUIRE(attempts != nullptr);
     REQUIRE(attempts->items().size() == 1);
-    CHECK(attempts->items()[0].find("image")->as_string() == "/srv/gateware/CL025/radioberry.rbf");
+    CHECK(attempts->items()[0].find("image")->as_string() ==
+          "/srv/gateware/rpi5-pio/CL025/radioberry-rpi5-pio.rbf");
 
-    // Wrong installed image: rpi-4 family and CL016.
-    CHECK(str(r, "firmware.family") == "rpi-4 GPIO");
-    CHECK(str(r, "firmware.fpga") == "10CL016");
-    CHECK(has(r, "firmware.family", Severity::kBlocker));
-    CHECK(has(r, "firmware.fpga", Severity::kBlocker));
+    // The image the driver loads on a Pi 5 is not installed.
+    CHECK(str(r, "firmware.path") == "/lib/firmware/radioberry-rpi5-pio.rbf");
+    CHECK_FALSE(flag(r, "firmware.present"));
+    CHECK(has(r, "firmware.missing", Severity::kBlocker));
 
     // No I2C devices.
     CHECK(r.root.at("pa.devices")->items().empty());
@@ -119,10 +119,6 @@ TEST_CASE("development Pi: boot, firmware and software", "[collect]") {
     CHECK(flag(r, "boot.i2c_arm"));
     CHECK(r.root.at("boot.spidev")->items().empty());
 
-    CHECK(flag(r, "firmware.known"));
-    CHECK(r.root.at("firmware.size")->as_int() == static_cast<long>(kRpi4Image.size()));
-    CHECK(str(r, "firmware.source").find("rpi-4") != std::string::npos);
-
     CHECK(r.root.at("software.daemon.path")->is_null());
     CHECK(str(r, "software.daemon.service_enabled") == "disabled");
     CHECK(str(r, "software.daemon.service_active") == "inactive");
@@ -170,7 +166,10 @@ TEST_CASE("working Pi: radio can run", "[collect]") {
     CHECK_FALSE(has_id(r, "fpga.type"));
     CHECK(flag(r, "boot.overlay.active"));
     CHECK_FALSE(has_id(r, "boot.overlay"));
-    CHECK(str(r, "firmware.family") == "rpi-5 PIO");
+    CHECK(str(r, "firmware.family") == "rpi5-pio");
+    CHECK(flag(r, "firmware.known"));
+    CHECK(r.root.at("firmware.size")->as_int() == static_cast<long>(kPi5Image.size()));
+    CHECK(str(r, "firmware.source").find("rpi5-pio") != std::string::npos);
     CHECK(str(r, "software.daemon.version") == "radioberryd v0.1.0");
     CHECK(str(r, "software.daemon.service_active") == "active");
     CHECK_FALSE(flag(r, "fpga.config_lines.available"));
@@ -214,27 +213,36 @@ TEST_CASE("identify is refused while the driver is loaded", "[collect]") {
     CHECK(str(r, "fpga.type_source") == "driver");
 }
 
-TEST_CASE("identify falls through to the CL016 image", "[collect]") {
+TEST_CASE("identify on a Pi 4 tries the Pi 4 image", "[collect]") {
     FakeSource pi = development_pi();
-    pi.configure = [](std::span<const std::uint8_t> image) {
-        const std::string content(reinterpret_cast<const char*>(image.data()), image.size());
-        return content == kCl016Image ? ConfigResult{} : ConfigResult{ConfigError::kConfDoneLow};
-    };
+    pi.files["/proc/device-tree/compatible"] =
+        std::string("raspberrypi,4-model-b\0brcm,bcm2711", 34) + '\0';
     const Report r = collect(pi, test_options(true));
-    CHECK(pi.configure_calls == 2);
-    CHECK(str(r, "fpga.type") == "10CL016");
-    // The installed rpi-4 image is CL016 too: wrong family, right chip.
-    CHECK_FALSE(has_id(r, "firmware.fpga"));
-    CHECK(has(r, "firmware.family", Severity::kBlocker));
+    CHECK(pi.configure_calls == 1);
+    CHECK(str(r, "fpga.type") == "10CL025");
+    CHECK(r.root.at("fpga.identify.attempts")->items()[0].find("image")->as_string() ==
+          "/srv/gateware/rpi4-i2s/CL025/radioberry-rpi4-i2s.rbf");
+    CHECK(str(r, "firmware.path") == "/lib/firmware/radioberry-rpi4-i2s.rbf");
 }
 
-TEST_CASE("identify reports when no image configures the FPGA", "[collect]") {
+TEST_CASE("identify reports when the board's image does not configure the FPGA", "[collect]") {
     FakeSource pi = development_pi();
     pi.configure = nullptr;
     const Report r = collect(pi, test_options(true));
-    CHECK(pi.configure_calls == 2);
+    CHECK(pi.configure_calls == 1);
     CHECK(r.root.at("fpga.type")->is_null());
     CHECK(has(r, "fpga.identify", Severity::kBlocker));
+}
+
+TEST_CASE("on another board there is no image to identify with or to check", "[collect]") {
+    FakeSource pi = development_pi();
+    pi.files["/proc/device-tree/compatible"] =
+        std::string("raspberrypi,3-model-b\0brcm,bcm2837", 34) + '\0';
+    const Report r = collect(pi, test_options(true));
+    CHECK(pi.configure_calls == 0);
+    CHECK(has(r, "fpga.identify", Severity::kWarning));
+    CHECK(r.root.at("firmware.path")->is_null());
+    CHECK_FALSE(has_id(r, "firmware.missing"));
 }
 
 TEST_CASE("identify with no candidate images", "[collect]") {
@@ -248,10 +256,9 @@ TEST_CASE("identify with no candidate images", "[collect]") {
 
 TEST_CASE("identify finds images in the installed gateware layout", "[collect]") {
     FakeSource pi = development_pi();
-    pi.files.erase("/srv/gateware/CL025/radioberry.rbf");
-    pi.files.erase("/srv/gateware/CL016/radioberry.rbf");
-    pi.files["/usr/share/radioberry/gateware/rpi-5/CL025/radioberry.rbf"] = kCl025Image;
-    pi.files["/usr/share/radioberry/gateware/rpi-5/CL025/deeper/too-deep.rbf"] = kCl016Image;
+    pi.files.erase("/srv/gateware/rpi5-pio/CL025/radioberry-rpi5-pio.rbf");
+    pi.files["/usr/share/radioberry/gateware/rpi5-pio/CL025/radioberry-rpi5-pio.rbf"] = kPi5Image;
+    pi.files["/usr/share/radioberry/gateware/rpi5-pio/CL025/deeper/too-deep.rbf"] = kPi5Image;
     Options o = test_options(true);
     o.gateware_dirs = {"/usr/share/radioberry/gateware"};
     const Report r = collect(pi, o);
@@ -261,42 +268,31 @@ TEST_CASE("identify finds images in the installed gateware layout", "[collect]")
 
 TEST_CASE("identify deduplicates identical images", "[collect]") {
     FakeSource pi = development_pi();
-    pi.files["/lib/firmware/radioberry.rbf"] = kCl016Image;
-    pi.files["/srv/gateware/copy.rbf"] = kCl016Image;
+    pi.files["/lib/firmware/radioberry-rpi5-pio.rbf"] = kPi5Image;
+    pi.files["/srv/gateware/copy.rbf"] = kPi5Image;
     pi.configure = nullptr;
-    const Report r = collect(pi, test_options(true));
-    CHECK(pi.configure_calls == 2);  // CL025 and CL016 once each
+    collect(pi, test_options(true));
+    CHECK(pi.configure_calls == 1);
 }
 
-TEST_CASE("rpi-5 GPIO-mode gateware is installed but unusable", "[collect]") {
-    static const std::string gpio_image = "fake rpi-5 GPIO CL025 gateware";
-    static const std::string hash = radioberry::Sha256::hex(gpio_image);
-    static const std::array<KnownImage, 1> catalog = {
-        {{hash, GatewareFamily::kRpi5Gpio, FpgaType::k10CL025, gpio_image.size(), "archive", "t"}}};
+TEST_CASE("an original RadioBerry image in the driver's place is unusable", "[collect]") {
     FakeSource pi = working_pi();
-    pi.files["/lib/firmware/radioberry.rbf"] = gpio_image;
-    pi.dirs.erase("/sys/module/radioberry");
-    pi.files.erase("/dev/radioberry");
-    pi.config_lines = {true, "", true, true};
-    pi.files["/srv/gateware/gpio.rbf"] = gpio_image;
-    pi.configure = [](std::span<const std::uint8_t>) { return ConfigResult{}; };
-    Options o = test_options(true);
-    o.catalog = catalog;
-    const Report r = collect(pi, o);
-    CHECK(str(r, "firmware.family") == "rpi-5 GPIO");
+    pi.files["/lib/firmware/radioberry-rpi5-pio.rbf"] = kOriginalImage;
+    const Report r = collect(pi, test_options());
+    CHECK(str(r, "firmware.family") == "original rpi-4");
     CHECK(has(r, "firmware.family", Severity::kBlocker));
-    // A GPIO-mode image still identifies the chip.
-    CHECK(str(r, "fpga.type") == "10CL025");
+    // The driver reports a 10CL025; the image is for a 10CL016.
+    CHECK(has(r, "firmware.fpga", Severity::kBlocker));
 }
 
 TEST_CASE("missing and unknown firmware", "[collect]") {
-    FakeSource pi = development_pi();
-    pi.files.erase("/lib/firmware/radioberry.rbf");
+    FakeSource pi = working_pi();
+    pi.files.erase("/lib/firmware/radioberry-rpi5-pio.rbf");
     Report r = collect(pi, test_options());
     CHECK_FALSE(flag(r, "firmware.present"));
     CHECK(has(r, "firmware.missing", Severity::kBlocker));
 
-    pi.files["/lib/firmware/radioberry.rbf"] = "something else";
+    pi.files["/lib/firmware/radioberry-rpi5-pio.rbf"] = "something else";
     r = collect(pi, test_options());
     CHECK_FALSE(flag(r, "firmware.known"));
     CHECK(r.root.at("firmware.family")->is_null());
@@ -334,7 +330,8 @@ TEST_CASE("a Pi 4 needs no RP1 PIO and has no PMIC", "[collect]") {
     CHECK_FALSE(has_id(r, "boot.rp1_pio"));
     CHECK(str(r, "driver.module_file") ==
           "/lib/modules/6.18.60+rpt-rpi-v8/updates/dkms/radioberry.ko.xz");
-    CHECK(str(r, "driver.transport") == "cpu");
+    CHECK(str(r, "driver.transport") == "i2s");
+    CHECK(str(r, "firmware.family") == "rpi4-i2s");
     CHECK(r.radio_can_run());
 
     // A driver up to release 0.3.0 has no transport attribute.

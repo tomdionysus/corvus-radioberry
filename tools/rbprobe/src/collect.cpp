@@ -16,7 +16,7 @@
 namespace radioberry::probe {
 namespace {
 
-constexpr const char* kFirmwarePath = "/lib/firmware/radioberry.rbf";
+constexpr const char* kFirmwareDir = "/lib/firmware/";
 constexpr const char* kDevicePath = "/dev/radioberry";
 constexpr const char* kServiceName = "radioberry.service";
 constexpr int kPaI2cBus = 1;
@@ -349,7 +349,7 @@ private:
         n.set("loaded", loaded_);
         const bool device = src_.exists(kDevicePath);
         n.set("device", device);
-        // "rp1-pio" (Pi 5) or "cpu" (Pi 4); absent up to release 0.3.0.
+        // "rp1-pio" (Pi 5) or "i2s" (Pi 4); absent up to release 0.3.0.
         n.set("transport", file_trimmed("/sys/bus/spi/devices/spi0.0/transport"));
 
         Node holders = Node::seq();
@@ -396,14 +396,21 @@ private:
 
     // ---- firmware -----------------------------------------------------
 
+    // The image the driver loads on this board.
     Node firmware() {
         Node n = Node::map();
-        n.set("path", kFirmwarePath);
-        const auto content = src_.read_file(kFirmwarePath);
+        const auto wanted = board_family(board_);
+        if (!wanted) {
+            n.set("path", Node());
+            return n;
+        }
+        const std::string path = std::string(kFirmwareDir) + std::string(firmware_name(*wanted));
+        n.set("path", path);
+        const auto content = src_.read_file(path);
         n.set("present", content.has_value());
         if (!content) {
             add(Severity::kBlocker, "firmware.missing",
-                std::string(kFirmwarePath) + " is missing; the driver has no gateware to load");
+                path + " is missing; the driver has no gateware to load");
             return n;
         }
         n.set("size", static_cast<unsigned long>(content->size()));
@@ -422,10 +429,10 @@ private:
         n.set("family", std::string(to_string(installed_->family)));
         n.set("fpga", std::string(to_string(installed_->fpga)));
         n.set("source", std::string(installed_->source) + " " + std::string(installed_->path));
-        if (installed_->family != GatewareFamily::kRpi5Pio) {
+        if (installed_->family != *wanted) {
             add(Severity::kBlocker, "firmware.family",
                 "the installed gateware is the " + std::string(to_string(installed_->family)) +
-                    " image; the driver needs the rpi-5 PIO image (on a Pi 4 as well)");
+                    " image; this board needs the " + std::string(to_string(*wanted)) + " image");
         }
         return n;
     }
@@ -462,7 +469,7 @@ private:
                 files.emplace_back(path, std::move(*content));
             }
         };
-        // Images sit up to three levels down, as in rpi-5/CL025/radioberry.rbf.
+        // Images sit up to three levels down, as in rpi5-pio/CL025/radioberry-rpi5-pio.rbf.
         std::function<void(const std::string&, int)> walk = [&](const std::string& dir, int depth) {
             auto names = src_.list_dir(dir);
             std::sort(names.begin(), names.end());
@@ -498,29 +505,16 @@ private:
             std::string content;
             KnownImage image;
         };
+        // This board's own image: it configures only a 10CL025, and with the
+        // driver unloaded the Pi's side of every link pin is an input.
+        const auto wanted = board_family(board_);
         std::vector<Candidate> candidates;
         for (auto& [path, content] : candidate_files()) {
             auto known = lookup(Sha256::hex(content));
-            // Either rpi-5 family configures the chip; both are safe to load
-            // on a Pi 5 whose stream pins are inputs.
-            if (known && (known->family == GatewareFamily::kRpi5Pio ||
-                          known->family == GatewareFamily::kRpi5Gpio)) {
+            if (known && wanted && known->family == *wanted) {
                 candidates.push_back({path, std::move(content), *known});
             }
         }
-        // Catalog order: the most likely FPGA first.
-        const auto catalog = opt_.catalog;
-        auto rank = [&](const Candidate& c) {
-            for (std::size_t i = 0; i < catalog.size(); ++i) {
-                if (catalog[i].sha256 == c.image.sha256) {
-                    return i;
-                }
-            }
-            return catalog.size();
-        };
-        std::sort(candidates.begin(), candidates.end(),
-                  [&](const Candidate& a, const Candidate& b) { return rank(a) < rank(b); });
-
         Node attempts = Node::seq();
         for (const auto& c : candidates) {
             const auto* bytes = reinterpret_cast<const std::uint8_t*>(c.content.data());
@@ -539,10 +533,11 @@ private:
         n.set("attempts", std::move(attempts));
         if (candidates.empty()) {
             add(Severity::kWarning, "fpga.identify",
-                "identification found no known rpi-5 image in the gateware directories");
+                "identification found no image for this board in the gateware directories");
         } else if (!identified_) {
             add(Severity::kBlocker, "fpga.identify",
-                "no known rpi-5 image configured the FPGA; check the board and its power");
+                "this board's image did not configure the FPGA: it needs a 10CL025; check the "
+                "board and its power");
         }
         return n;
     }

@@ -3,44 +3,39 @@
 set -e
 
 if [ "$1" = configure ]; then
-    . /usr/share/debconf/confmodule
-    db_get radioberry/fpga
-    fpga="$RET"
-    case "$fpga" in
-        CL016 | CL025) ;;
-        *) fpga=CL025 ;;
-    esac
-    # The driver loads /usr/lib/firmware/radioberry.rbf.
-    ln -sfn "/usr/share/radioberry/gateware/rpi-5/$fpga/radioberry.rbf" \
-        /usr/lib/firmware/radioberry.rbf
-    # With the radioberry-i2s overlay (Raspberry Pi 4) it loads the
-    # gateware-v2 image instead, built for the 10CL025 only.
-    i2s="/usr/share/radioberry/gateware/rpi4-i2s/$fpga/radioberry-rpi4-i2s.rbf"
-    if [ -f "$i2s" ]; then
-        ln -sfn "$i2s" /usr/lib/firmware/radioberry-rpi4-i2s.rbf
-    elif [ -L /usr/lib/firmware/radioberry-rpi4-i2s.rbf ]; then
-        rm -f /usr/lib/firmware/radioberry-rpi4-i2s.rbf
+    # Up to release 0.4.1 the install asked which FPGA the board has; the
+    # images are for the 10CL025 only now. (Sourcing the confmodule runs
+    # this script again under debconf, so this comes first.)
+    if [ -e /usr/share/debconf/confmodule ]; then
+        . /usr/share/debconf/confmodule
+        db_purge || true
+        db_stop
     fi
-    # On a Raspberry Pi 5 it loads the gateware-v2 PIO image (unless its
-    # pio_released_image parameter is set), built for the 10CL025 only.
-    pio="/usr/share/radioberry/gateware/rpi5-pio/$fpga/radioberry-rpi5-pio.rbf"
-    if [ -f "$pio" ]; then
-        ln -sfn "$pio" /usr/lib/firmware/radioberry-rpi5-pio.rbf
-    elif [ -L /usr/lib/firmware/radioberry-rpi5-pio.rbf ]; then
-        rm -f /usr/lib/firmware/radioberry-rpi5-pio.rbf
+
+    # The driver loads the image for its board from /usr/lib/firmware.
+    for image in rpi5-pio rpi4-i2s; do
+        ln -sfn "/usr/share/radioberry/gateware/$image/CL025/radioberry-$image.rbf" \
+            "/usr/lib/firmware/radioberry-$image.rbf"
+    done
+    # Up to release 0.4.1: the Hermes-Lite 2 PIO image.
+    if [ -L /usr/lib/firmware/radioberry.rbf ]; then
+        rm -f /usr/lib/firmware/radioberry.rbf
     fi
 
     # The firmware reads overlays from /boot/firmware/overlays, a FAT
     # file system dpkg cannot manage files on.
     if [ -d /boot/firmware/overlays ]; then
-        for o in radioberry radioberry-i2s; do
-            [ -f "/usr/share/radioberry/overlays/$o.dtbo" ] || continue
-            cp "/usr/share/radioberry/overlays/$o.dtbo" "/boot/firmware/overlays/$o.dtbo.new"
-            mv "/boot/firmware/overlays/$o.dtbo.new" "/boot/firmware/overlays/$o.dtbo"
-        done
+        cp /usr/share/radioberry/overlays/radioberry.dtbo /boot/firmware/overlays/radioberry.dtbo.new
+        mv /boot/firmware/overlays/radioberry.dtbo.new /boot/firmware/overlays/radioberry.dtbo
+        # No longer needed: the driver sets up a Raspberry Pi 4 itself.
+        rm -f /boot/firmware/overlays/radioberry-i2s.dtbo
     else
         echo "radioberry: /boot/firmware/overlays not found; copy" \
             "/usr/share/radioberry/overlays/radioberry.dtbo there." >&2
+    fi
+    if grep -qs '^dtoverlay=radioberry-i2s' /boot/firmware/config.txt; then
+        echo "radioberry: the dtoverlay=radioberry-i2s line in /boot/firmware/config.txt" \
+            "is no longer needed; remove it." >&2
     fi
 
     # The radioberry user and group, then /dev/radioberry's group.
@@ -50,11 +45,9 @@ if [ "$1" = configure ]; then
         udevadm trigger --action=add --subsystem-match=misc --sysname-match=radioberry || true
     fi
 
-    if ! grep -qs '^dtoverlay=radioberry' /boot/firmware/config.txt; then
-        echo "radioberry: add these lines to the end of /boot/firmware/config.txt" \
-            "and reboot to enable the RadioBerry (the [pi4] line gives a" \
-            "Raspberry Pi 4 the I2S transport):" >&2
-        printf '  [all]\n  dtparam=i2c_arm=on\n  dtoverlay=radioberry\n  [pi4]\n  dtoverlay=radioberry-i2s\n  [all]\n' >&2
+    if ! grep -qs '^dtoverlay=radioberry$' /boot/firmware/config.txt; then
+        echo "radioberry: add 'dtparam=i2c_arm=on' and 'dtoverlay=radioberry' to" \
+            "/boot/firmware/config.txt and reboot to enable the RadioBerry." >&2
     fi
 fi
 

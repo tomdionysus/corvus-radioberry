@@ -99,15 +99,15 @@ ConfigResult FakeSource::configure_fpga(std::span<const std::uint8_t> image) {
 }
 
 std::span<const KnownImage> test_catalog() {
-    static const std::string cl025 = Sha256::hex(kCl025Image);
-    static const std::string cl016 = Sha256::hex(kCl016Image);
-    static const std::string rpi4 = Sha256::hex(kRpi4Image);
+    static const std::string pi5 = Sha256::hex(kPi5Image);
+    static const std::string pi4 = Sha256::hex(kPi4Image);
+    static const std::string original = Sha256::hex(kOriginalImage);
     static const std::array<KnownImage, 3> catalog = {{
-        {cl025, GatewareFamily::kRpi5Pio, FpgaType::k10CL025, kCl025Image.size(),
-         "SBC/rpi-5/releases/dev/CL025/radioberry.rbf", "test"},
-        {cl016, GatewareFamily::kRpi5Pio, FpgaType::k10CL016, kCl016Image.size(),
-         "SBC/rpi-5/releases/dev/CL016/radioberry.rbf", "test"},
-        {rpi4, GatewareFamily::kRpi4Gpio, FpgaType::k10CL016, kRpi4Image.size(),
+        {pi5, GatewareFamily::kRpi5Pio, FpgaType::k10CL025, kPi5Image.size(),
+         "gateware/images/rpi5-pio/CL025/radioberry-rpi5-pio.rbf", "test"},
+        {pi4, GatewareFamily::kRpi4I2s, FpgaType::k10CL025, kPi4Image.size(),
+         "gateware/images/rpi4-i2s/CL025/radioberry-rpi4-i2s.rbf", "test"},
+        {original, GatewareFamily::kOriginalRpi4, FpgaType::k10CL016, kOriginalImage.size(),
          "SBC/rpi-4/releases/dev/CL016/radioberry.rbf", "test"},
     }};
     return catalog;
@@ -154,16 +154,19 @@ FakeSource development_pi() {
     s.files["/dev/i2c-1"] = "";
     s.files["/dev/null"] = "";
 
-    s.files["/lib/firmware/radioberry.rbf"] = kRpi4Image;
-    s.files["/srv/gateware/CL025/radioberry.rbf"] = kCl025Image;
-    s.files["/srv/gateware/CL016/radioberry.rbf"] = kCl016Image;
+    s.files["/lib/firmware/radioberry.rbf"] = kOriginalImage;
+    s.files["/srv/gateware/rpi5-pio/CL025/radioberry-rpi5-pio.rbf"] = kPi5Image;
+    s.files["/srv/gateware/rpi4-i2s/CL025/radioberry-rpi4-i2s.rbf"] = kPi4Image;
     s.files["/srv/gateware/README"] = "int main() {}";
 
     s.config_lines = {true, "", true, true};
     s.i2c = std::vector<I2cDevice>{};
+    // A 10CL025: either of this project's images configures it.
     s.configure = [](std::span<const std::uint8_t> image) {
         const std::string content(reinterpret_cast<const char*>(image.data()), image.size());
-        return content == kCl025Image ? ConfigResult{} : ConfigResult{ConfigError::kConfDoneLow};
+        return content == kPi5Image || content == kPi4Image
+                   ? ConfigResult{}
+                   : ConfigResult{ConfigError::kConfDoneLow};
     };
 
     s.files["/etc/systemd/system/radioberry.service"] = "[Service]\n";
@@ -190,7 +193,9 @@ FakeSource working_pi() {
     s.dirs.insert("/sys/module/radioberry");
     s.files["/dev/radioberry"] = "";
     s.links["/sys/bus/spi/devices/spi0.0/driver"] = "../../../../bus/spi/drivers/radioberry";
-    s.files["/lib/firmware/radioberry.rbf"] = kCl025Image;
+    s.files.erase("/lib/firmware/radioberry.rbf");
+    s.files["/lib/firmware/radioberry-rpi5-pio.rbf"] = kPi5Image;
+    s.files["/lib/firmware/radioberry-rpi4-i2s.rbf"] = kPi4Image;
     s.files.erase("/proc/device-tree/radioberry/compatible");
     s.files.erase("/proc/device-tree/radioberry/status");
     s.files["/sys/bus/spi/devices/spi0.0/modalias"] = "spi:radioberry\n";
@@ -239,7 +244,7 @@ FakeSource working_pi4() {
         std::string("raspberrypi,4-model-b\0brcm,bcm2711", 34) + '\0';
     s.dirs.erase("/sys/module/rp1_pio");
     s.commands.erase({"vcgencmd", "pmic_read_adc"});  // the Pi 4 has no PMIC ADC
-    s.files["/sys/bus/spi/devices/spi0.0/transport"] = "cpu\n";
+    s.files["/sys/bus/spi/devices/spi0.0/transport"] = "i2s\n";
     return s;
 }
 

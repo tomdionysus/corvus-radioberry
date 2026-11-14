@@ -6,12 +6,14 @@
 #include <span>
 #include <string_view>
 
+#include "radioberry/board.hpp"
+
 namespace radioberry {
 
-// Which host interface a gateware image was built for. Only the rpi-5 PIO
-// family works with this project's driver; rpi-5 GPIO is the older 73.3
-// gateware with an 8-bit RX bus.
-enum class GatewareFamily { kRpi5Pio, kRpi5Gpio, kRpi4Gpio, kJuice };
+// What a gateware image is. This project's two images, one per board, and
+// the original RadioBerry software's images, which are recognised only to
+// say that they do not work with this driver.
+enum class GatewareFamily { kRpi5Pio, kRpi4I2s, kOriginalRpi5, kOriginalRpi4 };
 
 enum class FpgaType { k10CL016, k10CL025 };
 
@@ -24,11 +26,16 @@ struct KnownImage {
     std::string_view source;
 };
 
-// Every gateware image this project recognises by hash: its own builds and
-// the original RadioBerry software's images.
+// Every gateware image recognised by hash, this project's first.
 std::span<const KnownImage> known_images();
 
 std::optional<KnownImage> find_known_image(std::string_view sha256);
+
+// The family of the image the driver loads on this board, if any.
+std::optional<GatewareFamily> board_family(Board board);
+
+// The file the driver loads on this board: radioberry-<family>.rbf.
+std::string_view firmware_name(GatewareFamily family);
 
 std::string_view to_string(GatewareFamily family);
 std::string_view to_string(FpgaType fpga);
