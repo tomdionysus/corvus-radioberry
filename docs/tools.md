@@ -1,29 +1,27 @@
 # Tools
 
-`rbprobe`, `rbcat`, `rbctl`, `rbload`, `rbbus`, `p1probe` and `p2probe`
-are installed in `/usr/bin` (`/usr/local/bin` when built from source). `rbcat` and `rbctl` open
-`/dev/radioberry`, which is exclusive: stop `radioberry.service` first.
-`rbload` needs the driver unloaded. `p1probe` and `p2probe` are network
-clients of `radioberryd`.
+`rbprobe`, `rbcat`, `rbctl`, `p1probe` and `p2probe` are installed in
+`/usr/bin` (`/usr/local/bin` when built from source). `rbcat` and `rbctl`
+open `/dev/radioberry`, which is exclusive: stop `radioberry.service`
+first. `p1probe` and `p2probe` are network clients of `radioberryd`.
 
 ## rbprobe
 
-Reports the Pi, kernel, overlay, driver, installed gateware, FPGA type and
-gateware identity, PA board (I2C scan) and daemon state. `--json` and
-`--yaml` give the same content. Run it as root to see device holders and
-the I2C bus.
+Reports the Pi, kernel, overlay, driver, the gateware image the driver
+loads on this board, FPGA type and gateware identity, PA board (I2C scan)
+and daemon state. `--json` and `--yaml` give the same content. Run it as
+root to see device holders and the I2C bus.
 
 Exit status: 0 the radio can run, 1 it cannot (each blocker is listed
 under `findings`), 2 a usage error.
 
-`rbprobe --identify` finds out which FPGA the board carries by loading
-each of this project's gateware images in turn until one configures the
-chip. It
-reprograms the FPGA, so it refuses to run while the driver is loaded. It
-looks for `.rbf` files in `/usr/local/share/radioberry/gateware`,
-`/usr/share/radioberry/gateware` and `/lib/firmware`; `--gateware-dir`
-replaces that list. Images are recognised by hash; the original GPIO-mode
-images (73.3) are reported as unusable with this driver.
+`rbprobe --identify` checks the FPGA by loading this board's gateware
+image: it configures only a 10CL025. It reprograms the FPGA, so it refuses
+to run while the driver is loaded. It looks for `.rbf` files in
+`/usr/local/share/radioberry/gateware`, `/usr/share/radioberry/gateware`
+and `/lib/firmware`; `--gateware-dir` replaces that list. Images are
+recognised by hash; the original RadioBerry software's images are
+reported as unusable with this driver.
 
 ## rbcat
 
@@ -73,59 +71,6 @@ run, PTT, the TX permission bit, PA enable and drive last only while
 
 Exit status: 0 success, 1 a device error (including EBUSY), 2 a usage
 error or refused command.
-
-## rbload
-
-`rbload [IMAGE]` loads a gateware image into the FPGA through its passive
-serial configuration lines, without the driver, and checks nSTATUS and
-CONF_DONE. IMAGE defaults to `/lib/firmware/radioberry.rbf`.
-
-- Only images `rbprobe` knows as this project's gateware are loaded;
-  `--force` loads an unknown image or another family's.
-- `--fpga CL025|CL016` refuses an image for the other FPGA, even with
-  `--force`.
-- It refuses to run while `radioberry.ko` is loaded, since the driver owns
-  the configuration lines: `sudo systemctl stop radioberry`,
-  `sudo rmmod radioberry`, then `rbload`. To keep the loaded image when
-  the driver comes back, load it with
-  `sudo modprobe radioberry load_gateware=0`.
-- `--json` and `--yaml` give the report as JSON or YAML.
-
-Exit status: 0 the FPGA configured, 1 it did not (an image for the other
-FPGA leaves CONF_DONE low) or the image cannot be read, 2 a usage error or
-a refused image.
-
-## rbbus
-
-Measures the RX bus, and optionally the TX bus, clocked by the CPU on a
-Raspberry Pi 4, with the bus code the driver uses there
-(`driver/kernel/rb_bitbang.h`) running in userspace through
-`/dev/gpiomem`. Gateware commands go over spidev. It runs only on a Pi 4
-(BCM2711) and only while `/dev/radioberry` is absent: remove
-`dtoverlay=radioberry`, set `dtparam=spi=on`, reboot, and load the
-gateware with `rbload` before each run.
-
-| Option | Meaning |
-|---|---|
-| `--seconds S` | stream time (default 10) |
-| `--receivers N` | receivers, 1 to 6 (default 1) |
-| `--rate 48\|96\|192\|384` | sample rate, ksps (default 48) |
-| `--settle N` | extra pin reads after each clock pulse (default 0) |
-| `--idle-sleep US` | sleep when the gateware has nothing to send (default 1000; 0 spins) |
-| `--tx` | also clock TX words of zeros at 48 000 per second |
-| `--spi DEVICE` | default `/dev/spidev0.0` |
-| `--json`, `--yaml` | report format |
-
-It reports values and clocks per second, frames against the number
-expected, the parser's resyncs and dropped words, TX words per second and
-ready waits, and the CPU time used. PTT, the TX permission bit and CWX are
-never set; the run ends with the command that clears run, PTT, the TX
-permission bit, PA enable and drive. Run it under `chrt -f 50` to see what
-the driver's real-time thread would.
-
-Exit status: 0 every frame arrived in sequence (at least 98% of those
-expected) and, with `--tx`, the TX word rate kept up, 1 frames were lost
-or the run could not start, 2 a usage error or the wrong board.
 
 ## p1probe and p2probe
 

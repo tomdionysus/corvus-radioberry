@@ -37,9 +37,9 @@ std::string ConfigResult::message() const {
         case ConfigError::kCrcError:
             return "nSTATUS went low: the FPGA rejected the bitstream";
         case ConfigError::kConfDoneLow:
-            return "CONF_DONE stayed low: image does not match this FPGA";
+            break;
     }
-    return "unknown";
+    return "CONF_DONE stayed low: image does not match this FPGA";
 }
 
 ConfigResult configure_passive_serial(ConfigPins& pins, std::span<const std::uint8_t> image) {

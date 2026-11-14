@@ -90,7 +90,30 @@ public:
             }
             fail(path_ + ": poll");
         }
-        return {(p.revents & POLLIN) != 0, (p.revents & POLLOUT) != 0, (p.revents & POLLERR) != 0};
+        return {(p.revents & POLLIN) != 0, (p.revents & POLLOUT) != 0,
+                (p.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0};
+    }
+
+    Readiness wait_or_wake(bool want_read, bool want_write, int timeout_ms, int wake_fd) override {
+        if (wake_fd < 0) {
+            return wait(want_read, want_write, timeout_ms);
+        }
+        pollfd p[2] = {
+            {fd_, static_cast<short>((want_read ? POLLIN : 0) | (want_write ? POLLOUT : 0)), 0},
+            {wake_fd, POLLIN, 0}};
+        const int n = ::poll(p, 2, timeout_ms);
+        if (n < 0) {
+            if (errno == EINTR) {
+                return {};
+            }
+            fail(path_ + ": poll");
+        }
+        // A hang-up counts as an error, so the caller asks the device and
+        // fails instead of polling it again at once.
+        Readiness r{(p[0].revents & POLLIN) != 0, (p[0].revents & POLLOUT) != 0,
+                    (p[0].revents & (POLLERR | POLLHUP | POLLNVAL)) != 0};
+        r.woken = (p[1].revents & POLLIN) != 0;
+        return r;
     }
 
 private:

@@ -31,15 +31,14 @@ Json to_json(const Node& node) {
             }
             return j;
         }
-        case Node::Kind::kSeq: {
-            Json j = Json::array();
-            for (const auto& item : node.items()) {
-                j.push_back(to_json(item));
-            }
-            return j;
-        }
+        case Node::Kind::kSeq:
+            break;
     }
-    return nullptr;
+    Json j = Json::array();
+    for (const auto& item : node.items()) {
+        j.push_back(to_json(item));
+    }
+    return j;
 }
 
 void emit(YAML::Emitter& out, const Node& node) {

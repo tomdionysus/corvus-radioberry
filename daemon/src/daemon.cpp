@@ -32,6 +32,12 @@ DeviceOptions with_thread_hook(DeviceOptions options, std::function<void(const c
     return options;
 }
 
+// The transmit options, with whether the gateware has a transmitter.
+TxPolicyOptions with_tx_available(TxPolicyOptions options, Device& device) {
+    options.tx_available = device.info().transmitters != 0;
+    return options;
+}
+
 // Faults that break the transmit stream: the session drops MOX on them.
 // A driver TX underrun is not one: the driver's ring runs empty for moments
 // whenever the gateware fills its own 85 ms FIFO at PIO speed (on PTT, at
@@ -40,6 +46,9 @@ DeviceOptions with_thread_hook(DeviceOptions options, std::function<void(const c
 // Real starvation ends transmission through the gateware's own PTT
 // hang-time watchdog, the TX watchdog, the client timeout and the other
 // faults here.
+// The main thread's tick while a client owns the radio.
+constexpr int kTickMs = 100;
+
 bool breaks_transmit(FaultKind kind) {
     switch (kind) {
         case FaultKind::TxInvalidBlock:
@@ -64,7 +73,7 @@ Daemon::Daemon(Device& device, const DaemonOptions& options)
                                    std::string(role) == "rx" ? "rb-rx-device" : "rb-tx-device",
                                    kDevicePriority);
                            })),
-      policy_(service_.control(), session_, options.tx),
+      policy_(service_.control(), session_, with_tx_available(options.tx, device)),
       network_(options.address, options.port),
       server_(
           identity_, service_.control(), service_.tx(), session_, policy_,
@@ -94,6 +103,8 @@ Daemon::Daemon(Device& device, const DaemonOptions& options)
     iq_standard_ = options.iq_convention == p1::IqConvention::Standard;
     frequency_ppm_ = options.frequency_ppm;
     realtime_ = options.realtime;
+    thread_realtime_ = options.thread_realtime;
+    memory_lock_ = options.memory_lock;
     protocol1_ = options.protocol1;
     protocol2_ = options.protocol2;
 }
@@ -105,7 +116,7 @@ void Daemon::start_thread(const char* name, int priority, bool rename) {
     if (!realtime_) {
         return;
     }
-    if (const auto failed = make_thread_realtime(name, priority);
+    if (const auto failed = thread_realtime_(name, priority);
         failed && !realtime_failed_.exchange(true)) {
         spdlog::warn("real-time scheduling not set: {}", *failed);
     }
@@ -116,6 +127,7 @@ Daemon::~Daemon() = default;
 void Daemon::on_fault(const Fault& fault) {
     if (fault.kind == FaultKind::DeviceError) {
         spdlog::error("{}", describe(fault));
+        network_.wake();  // the main thread ends the run
     } else if (fault.kind == FaultKind::TxUnderrun) {
         spdlog::debug("{}", describe(fault));  // summarised per transmission
     } else {
@@ -178,14 +190,16 @@ bool Daemon::run(const std::atomic<bool>& stop) {
         spdlog::info("frequencies corrected for a radio error of {:+.2f} ppm", frequency_ppm_);
     }
     if (realtime_) {
-        if (const auto failed = lock_memory()) {
+        if (const auto failed = memory_lock_()) {
             spdlog::warn("{}", *failed);
         }
         spdlog::info("real-time: SCHED_FIFO {} for the device threads, {} for the network threads",
                      kDevicePriority, kNetworkPriority);
     }
     start_thread("the Protocol 1 network thread", kNetworkPriority, false);
-    if (tx.allow_tx) {
+    if (!tx.tx_available) {
+        spdlog::info("the gateware has no transmitter: receive only, MOX is refused");
+    } else if (tx.allow_tx) {
         spdlog::warn(
             "transmit allowed: drive ceiling {}, PA {}, watchdog {} s; no PA interlock is claimed",
             tx.drive_ceiling, tx.allow_pa ? "allowed" : "not allowed",
@@ -196,7 +210,7 @@ bool Daemon::run(const std::atomic<bool>& stop) {
     // The RX delivery thread runs before the device does, so the first
     // blocks find it draining the ring.
     std::atomic<bool> stop_rx{false};
-    std::thread rx([&] {
+    const auto deliver_rx = [&] {
         start_thread("rb-rx-send", kNetworkPriority);
         while (!stop_rx) {
             service_.rx().wait(stop_rx);
@@ -206,7 +220,8 @@ bool Daemon::run(const std::atomic<bool>& stop) {
                 service_.rx().pop();
             }
         }
-    });
+    };
+    std::thread rx(deliver_rx);
     if (!service_.start()) {
         stop_rx = true;
         service_.rx().wake();
@@ -215,19 +230,23 @@ bool Daemon::run(const std::atomic<bool>& stop) {
     }
     const Clock clock = steady_clock();
     std::atomic<bool> stop_p2{false};
-    std::thread p2([&] {
+    const auto serve_p2 = [&] {
         start_thread("rb-p2-network", kNetworkPriority);
         const auto p2_handler = [&](unsigned port, std::span<const std::uint8_t> packet,
                                     const Peer& from) {
             if (protocol2_) {
                 p2_server_.on_packet(port, packet, from, clock());
                 update_run();
+                if (idle_) {
+                    network_.wake();  // a client may own the radio now: ticks start
+                }
             }
         };
         while (!stop_p2) {
-            p2_network_.poll(100, p2_handler);
+            p2_network_.poll(-1, p2_handler);
         }
-    });
+    };
+    std::thread p2(serve_p2);
     const auto handler = [&](std::span<const std::uint8_t> packet, const Peer& from) {
         on_packet(packet, from, clock());
     };
@@ -240,7 +259,18 @@ bool Daemon::run(const std::atomic<bool>& stop) {
     std::uint64_t send_failures_reported = 0;
     std::chrono::nanoseconds send_failures_at{};
     while (!stop && !service_.failed()) {
-        network_.poll(100, handler);
+        // Ticks (client timeout, TX watchdog, a lost client's stream) matter
+        // only while someone owns the radio; otherwise sleep until a packet
+        // or wake(). idle_ is set before ownership is read, so a Protocol 2
+        // claim either shows here or finds idle_ set and wakes this poll.
+        idle_ = true;
+        const bool active =
+            session_.owner().has_value() || server_.running() || p2_server_.running();
+        if (active) {
+            idle_ = false;
+        }
+        network_.poll(active ? kTickMs : -1, handler);
+        idle_ = false;
         const auto now = clock();
         const std::uint64_t send_failures = network_.send_failures() + p2_network_.send_failures();
         if (send_failures != send_failures_reported &&
@@ -279,6 +309,7 @@ bool Daemon::run(const std::atomic<bool>& stop) {
     }
     const bool failed = service_.failed();
     stop_p2 = true;
+    p2_network_.wake();
     p2.join();
     stop_rx = true;
     service_.rx().wake();

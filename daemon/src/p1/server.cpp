@@ -44,12 +44,8 @@ void Server::on_packet(std::span<const std::uint8_t> packet, const Peer& from,
                 ++counters_.ignored;
                 return;
             }
-            const std::optional<bool> start = parse_start(packet);
-            if (!start) {
-                ++counters_.ignored;
-                return;
-            }
-            if (*start) {
+            // classify() found a start/stop packet, which always parses.
+            if (parse_start(packet).value_or(false)) {
                 if (session_.claim(owner(from), now)) {
                     start_locked(from);
                 }
@@ -187,10 +183,6 @@ void Server::start_locked(const Peer& from) {
     packer_.reset();
     status_address_ = 0;
     pending_ack_.reset();
-    Command timing;
-    timing.address = kTxTiming;
-    timing.data = kPttHangMs << 8 | kMinTxLatencyMs;
-    control_.set(timing);
 }
 
 void Server::apply_locked(const HostCommand& c) {
@@ -222,8 +214,6 @@ void Server::apply_locked(const HostCommand& c) {
         policy_.set_cwx((data & kCwxEnable) != 0);
     } else if (is_frequency_address(c.address)) {
         data = corrected_frequency(data, frequency_ppm_);
-    } else if (c.address == kTxTiming && (data & kTxLatencyMask) < kMinTxLatencyMs) {
-        data = (data & ~kTxLatencyMask) | kMinTxLatencyMs;
     }
     if (control_.value(c.address) == data || refused_[c.address] == data) {
         return;
@@ -242,6 +232,12 @@ void Server::apply_locked(const HostCommand& c) {
 }
 
 void Server::queue_tx_locked(const HostPacket& packet) {
+    // Clients send TX samples between overs too, as zeros. Only samples
+    // sent while MOX is granted go to the device; the rest would cost the
+    // driver, the link and the gateware work for nothing.
+    if (!policy_.transmitting()) {
+        return;
+    }
     TxBlock* block = tx_.acquire();
     if (block == nullptr) {
         ++counters_.tx_blocks_dropped;

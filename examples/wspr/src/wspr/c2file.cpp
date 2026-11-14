@@ -42,8 +42,9 @@ void write_c2(const std::string& path, const C2File& f) {
     if (!out) {
         throw std::runtime_error("cannot create " + path);
     }
+    // A fixed 14-byte field, space or zero padded, not a C string.
     char name[14] = {};
-    std::memcpy(name, f.name.data(), std::min(f.name.size(), sizeof name));
+    std::copy_n(f.name.data(), std::min(f.name.size(), sizeof name), name);
     const std::int32_t minutes = 2;
     out.write(name, sizeof name);
     out.write(reinterpret_cast<const char*>(&minutes), sizeof minutes);

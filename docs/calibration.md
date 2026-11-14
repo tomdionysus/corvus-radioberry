@@ -5,8 +5,9 @@ frequency it tunes is off by the same number of parts per million.
 `radioberryd` corrects this with one figure, `frequency_ppm`: positive if
 the radio tunes high. It applies to every band, receive and transmit.
 
-The figure is measured against carriers on known frequencies (standard
-time and frequency stations), with WSJT-X's FreqCal mode.
+The installed config sets 22.9, a typical figure for these boards. To
+measure your own, use carriers on known frequencies (standard time and
+frequency stations) with WSJT-X's FreqCal mode.
 
 ## What you need
 

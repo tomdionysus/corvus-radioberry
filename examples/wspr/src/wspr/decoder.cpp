@@ -18,12 +18,18 @@ using cf = std::complex<float>;
 
 // Spectrogram: one-symbol windows, zero-padded to give half-tone bins, in
 // half-symbol steps.
-constexpr std::size_t kFft = 2 * kSymbolSamples;
+constexpr std::size_t kFft = static_cast<std::size_t>(kSymbolSamples) * 2;
 constexpr float kBinHz = kSampleRate / kFft;  // 0.732 Hz, half a tone spacing
 constexpr std::size_t kStep = kSymbolSamples / 2;
 constexpr std::size_t kSteps = (kSlotSamples - kSymbolSamples) / kStep + 1;
 constexpr int kMaxBin = 220;  // +-161 Hz kept
 constexpr int kBins = 2 * kMaxBin + 1;
+
+// Index into a per-bin vector for bin b, -kMaxBin to kMaxBin.
+std::size_t bin_index(int b) {
+    const int i = b + kMaxBin;
+    return static_cast<std::size_t>(i);
+}
 constexpr int kMaxLagSteps = static_cast<int>(kSteps) - 2 * (kSymbols - 1) - 1;
 constexpr std::array<int, 4> kToneBins = {-3, -1, 1, 3};
 
@@ -157,7 +163,7 @@ std::vector<Decoder::Decode> Decoder::decode(std::span<const std::complex<float>
     std::vector<float> avg(kBins);
     for (std::size_t t = 0; t < kSteps; ++t) {
         for (int b = -kMaxBin; b <= kMaxBin; ++b) {
-            avg[static_cast<std::size_t>(b + kMaxBin)] += s.at(t, b);
+            avg[bin_index(b)] += s.at(t, b);
         }
     }
     std::vector<float> sorted = avg;
@@ -172,15 +178,14 @@ std::vector<Decoder::Decode> Decoder::decode(std::span<const std::complex<float>
     for (int b = -kMaxBin + 3; b <= kMaxBin - 3; ++b) {
         float sum = 0;
         for (int j = -3; j <= 3; ++j) {
-            sum += avg[static_cast<std::size_t>(b + j + kMaxBin)];
+            sum += avg[bin_index(b + j)];
         }
-        smooth[static_cast<std::size_t>(b + kMaxBin)] = sum / (7 * floor);
+        smooth[bin_index(b)] = sum / (7 * floor);
     }
     std::vector<Candidate> candidates;
     for (int b = std::max(lo, -kMaxBin + 12); b <= std::min(hi, kMaxBin - 12); ++b) {
-        const float v = smooth[static_cast<std::size_t>(b + kMaxBin)];
-        if (v > 1.02f && v >= smooth[static_cast<std::size_t>(b - 1 + kMaxBin)] &&
-            v > smooth[static_cast<std::size_t>(b + 1 + kMaxBin)]) {
+        const float v = smooth[bin_index(b)];
+        if (v > 1.02f && v >= smooth[bin_index(b - 1)] && v > smooth[bin_index(b + 1)]) {
             candidates.push_back({b, v});
         }
     }

@@ -90,3 +90,19 @@ TEST_CASE("no stall is reported while no frames are expected", "[monitor]") {
     CHECK(faults.empty());
     CHECK_FALSE(monitor.stalled());
 }
+
+TEST_CASE("the stall timer starts when frames become expected, however long idle was",
+          "[monitor]") {
+    std::vector<Fault> faults;
+    Monitor monitor([&](const Fault& f) { faults.push_back(f); }, 250ms);
+    radioberry_stats s{};
+    // Idle, the daemon takes no snapshots; the next one comes with run set.
+    monitor.update(s, 0ms, false);
+    monitor.update(s, 5000ms, true);
+    CHECK(faults.empty());
+    monitor.update(s, 5200ms, true);
+    CHECK(faults.empty());
+    monitor.update(s, 5250ms, true);
+    REQUIRE(faults.size() == 1);
+    CHECK(faults[0].kind == FaultKind::RxStall);
+}

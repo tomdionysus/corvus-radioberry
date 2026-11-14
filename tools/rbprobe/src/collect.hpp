@@ -20,8 +20,9 @@ struct Finding {
 };
 
 struct Options {
-    // Identify the FPGA by configuring it with each known rpi-5 image in
-    // turn. Changes FPGA state; refused while the driver is loaded.
+    // Identify the FPGA by configuring it with this board's image (a
+    // 10CL025 takes it). Changes FPGA state; refused while the driver is
+    // loaded.
     bool identify = false;
     std::vector<std::string> gateware_dirs = {"/usr/local/share/radioberry/gateware",
                                               "/usr/share/radioberry/gateware", "/lib/firmware"};

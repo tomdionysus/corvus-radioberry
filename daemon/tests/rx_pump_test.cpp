@@ -2,6 +2,8 @@
 #include "device/rx_pump.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <thread>
 #include <vector>
 
 #include "fake_device.hpp"
@@ -115,10 +117,48 @@ TEST_CASE("commands go out before the read, and the layout follows them", "[rx]"
     CHECK(rig.pump.receivers() == 6);
 }
 
+TEST_CASE("idle, the pump waits without limit and polls nothing", "[rx]") {
+    Rig rig;
+    REQUIRE(rig.pump.start());
+    CHECK(rig.device.stats_calls == 1);
+    rig.now = 10s;  // statistics long overdue, but nothing streams
+    REQUIRE(rig.pump.step());
+    CHECK(rig.device.last_timeout_ms == -1);
+    CHECK(rig.device.stats_calls == 1);
+    // Run set: the wait is bounded and statistics are due at once.
+    rig.control.set_run(true);
+    REQUIRE(rig.pump.step());
+    CHECK(rig.device.last_timeout_ms == 0);  // the rig's wait_ms
+    CHECK(rig.device.stats_calls == 2);
+}
+
+TEST_CASE("a queued command or wake() ends an untimed wait", "[rx]") {
+    Rig rig;
+    rig.device.idle_wait_ms = 2000;  // the fake sleeps on the wake event up to this
+    REQUIRE(rig.pump.start());
+    const auto t0 = std::chrono::steady_clock::now();
+    std::thread waker([&] {
+        std::this_thread::sleep_for(20ms);
+        rig.control.set(hl2::rx_frequency(0, 14074000));
+    });
+    REQUIRE(rig.pump.step());  // nothing to send yet: sleeps until the command
+    waker.join();
+    std::thread stopper([&] {
+        std::this_thread::sleep_for(20ms);
+        rig.pump.wake();
+    });
+    REQUIRE(rig.pump.step());  // sends it, then sleeps until wake()
+    stopper.join();
+    CHECK(rig.device.commands.size() == 1);
+    CHECK(std::chrono::steady_clock::now() - t0 < 1500ms);
+}
+
 TEST_CASE("statistics are polled on their period and on an overrun", "[rx]") {
     Rig rig;
     REQUIRE(rig.pump.start());
     CHECK(rig.device.stats_calls == 1);
+    rig.control.set_run(true);  // only a streaming radio is watched
+    REQUIRE(rig.pump.flush_commands());
     rig.now = 50ms;
     rig.pump.step();
     CHECK(rig.device.stats_calls == 1);
@@ -170,6 +210,7 @@ TEST_CASE("a device error is reported once and ends the pump", "[rx]") {
         INFO(op);
         Rig rig;
         REQUIRE(rig.pump.start());
+        rig.control.set_run(true);
         rig.control.set(hl2::general(0, 2));
         rig.device.always_readable = true;
         rig.now = 100ms;  // statistics due, short of the stall time

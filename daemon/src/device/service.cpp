@@ -51,6 +51,7 @@ void DeviceService::stop() {
     }
     control_.safe();
     stop_rx_ = true;
+    rx_pump_.wake();
     rx_thread_.join();
     stop_tx_ = true;
     tx_ring_.wake();
