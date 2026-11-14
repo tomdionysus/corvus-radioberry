@@ -20,7 +20,10 @@
  *   TX DMA reads rp1-pio's bounce buffers: up to RB_DMA_SLOTS periods
  *   are in flight per direction and a FIFO-priority
  *   kernel thread refills them, so the state machines never wait for a
- *   restart.
+ *   restart. The gateware-v2 image (radioberry-rpi5-pio.rbf) takes its
+ *   commands in the framed protocol (rb_frame.h); module parameter
+ *   pio_released_image=1 loads the released image (radioberry.rbf), which
+ *   takes the 48-bit command blocks.
  * - Pi 4 (BCM2711), which has no PIO: a FIFO-priority kernel thread
  *   clocks both buses through the GPIO block's set, clear and level
  *   registers with the same handshakes (rb_bitbang.h), at a lower rate.
@@ -102,7 +105,13 @@ static inline u32 rb_bb_lev(struct rb_bb_io *io)
 
 static bool load_gateware = true;
 module_param(load_gateware, bool, 0444);
-MODULE_PARM_DESC(load_gateware, "Load " RB_FIRMWARE_NAME " into the FPGA on probe (default 1)");
+MODULE_PARM_DESC(load_gateware, "Load the gateware into the FPGA on probe (default 1)");
+
+static bool pio_released_image;
+module_param(pio_released_image, bool, 0444);
+MODULE_PARM_DESC(pio_released_image,
+		 "Pi 5: load the released image " RB_FIRMWARE_NAME
+		 " instead of the gateware-v2 image radioberry-rpi5-pio.rbf (default 0)");
 
 static unsigned int rx_clkdiv = RB_RX_CLKDIV_DEFAULT;
 module_param(rx_clkdiv, uint, 0444);
@@ -223,6 +232,11 @@ struct rb_transport {
 	 */
 	int (*command)(struct rb_dev *rb, const u8 *tx, u8 *rx);
 	const char *firmware; /* NULL: RB_FIRMWARE_NAME */
+	/*
+	 * A gateware-v2 image with the framed protocol (rb_frame.h): the
+	 * transport its CAPS register must report. 0: the released image.
+	 */
+	u8 caps_transport;
 };
 
 struct rb_dev {
@@ -492,7 +506,7 @@ static int rb_configure_fpga(struct rb_dev *rb, const u8 *image, size_t size)
 	}
 	if (!gpiod_get_value_cansleep(rb->conf_done)) {
 		dev_err(rb->dev, "CONF_DONE stayed low: %s does not match this FPGA\n",
-			RB_FIRMWARE_NAME);
+			rb->tp->firmware ? rb->tp->firmware : RB_FIRMWARE_NAME);
 		return -EIO;
 	}
 	for (i = 0; i < 64; i++) {
@@ -517,6 +531,13 @@ static int rb_load_gateware(struct rb_dev *rb)
 	if (!ret)
 		dev_info(rb->dev, "gateware %s configured (%zu bytes)\n", name, fw->size);
 	release_firmware(fw);
+	/*
+	 * A framed image starts with its registers cleared: identify it again
+	 * and send it the flags and CONTROL afresh.
+	 */
+	rb->i2s_identified = false;
+	rb->i2s_flags_sent = false;
+	rb->i2s_control_sent = false;
 	if (ret)
 		return ret;
 
@@ -1287,6 +1308,7 @@ static const struct rb_transport rb_bb_transport = {
 #define RB_PCM_MODE_CLKM BIT(23)
 
 #define RB_I2S_FIRMWARE "radioberry-rpi4-i2s.rbf"
+#define RB_PIO2_FIRMWARE "radioberry-rpi5-pio.rbf"
 #define RB_I2S_PERIODS 16
 #define RB_I2S_MAX_PERIOD 4096 /* words */
 #define RB_I2S_TX_LEAD 4	   /* TX periods kept filled ahead of the DMA, about 8 ms */
@@ -1338,10 +1360,11 @@ static int rb_breg_write(struct rb_dev *rb, u8 addr, u32 value)
 }
 
 /*
- * Identity in the PIO gateware's reply layout (rb_reply_parse()), once the
- * image is running: its transmitter (none in the receive image), the
+ * Identity in the released PIO gateware's reply layout (rb_reply_parse()),
+ * once the image is running: its transmitter (none in a receive image), the
  * receivers it carries, the Hermes-Lite 2 core level clients see. Zeros
- * until then, so rb_read_identity() keeps polling.
+ * until then, so rb_read_identity() keeps polling. The image must be built
+ * for this transport (its CAPS register says which).
  */
 static int rb_i2s_identify(struct rb_dev *rb, u8 status)
 {
@@ -1357,9 +1380,10 @@ static int rb_i2s_identify(struct rb_dev *rb, u8 status)
 		ret = rb_breg_read(rb, RB_BREG_CAPS, &caps);
 	if (ret)
 		return ret;
-	if (id != RB_ID_RBV2 || RB_CAPS_TRANSPORT(caps) != RB_CAPS_TRANSPORT_I2S) {
-		dev_err_ratelimited(rb->dev, "not a gateware-v2 I2S image: id 0x%08x caps 0x%08x\n",
-				    id, caps);
+	if (id != RB_ID_RBV2 || RB_CAPS_TRANSPORT(caps) != rb->tp->caps_transport) {
+		dev_err_ratelimited(rb->dev,
+				    "not a gateware-v2 image for the %s transport: id 0x%08x caps 0x%08x\n",
+				    rb->tp->name, id, caps);
 		return 0;
 	}
 	memset(rb->i2s_reply, 0, sizeof(rb->i2s_reply));
@@ -1896,16 +1920,41 @@ static const struct rb_transport rb_i2s_transport = {
 	.rx_resume = rb_i2s_rx_resume,
 	.command = rb_i2s_command,
 	.firmware = RB_I2S_FIRMWARE,
+	.caps_transport = RB_CAPS_TRANSPORT_I2S,
 };
 
 /*
- * The transport for this SoC, or NULL. On a Pi 4, the I2S transport when
- * the radioberry-i2s overlay has given this device the PCM block.
+ * Pi 5 with the gateware-v2 image (radioberry-rpi5-pio.rbf): the same PIO
+ * state machines and programs as the released image, and that image's
+ * framed protocol for commands (rb_i2s_command(): the parts that program
+ * the PCM block do nothing without one). Its FIFOs are never cleared, so
+ * the RX hold around a receiver-count change is no longer needed; it is
+ * kept, and costs one stop of the RX clock. rb_load_gateware() makes the
+ * driver identify a reloaded image afresh.
+ */
+static const struct rb_transport rb_pio2_transport = {
+	.name = "rp1-pio",
+	.rx_values_max = RB_PIO_RX_VALUES_MAX,
+	.up = rb_pio_up,
+	.down = rb_pio_down,
+	.rx_hold = rb_pio_rx_hold,
+	.rx_release = rb_pio_rx_release,
+	.rx_pause = rb_pio_rx_pause,
+	.rx_resume = rb_pio_rx_resume,
+	.command = rb_i2s_command,
+	.firmware = RB_PIO2_FIRMWARE,
+	.caps_transport = RB_CAPS_TRANSPORT_PIO,
+};
+
+/*
+ * The transport for this SoC, or NULL. On a Pi 5, the gateware-v2 image
+ * unless pio_released_image is set. On a Pi 4, the I2S transport when the
+ * radioberry-i2s overlay has given this device the PCM block.
  */
 static const struct rb_transport *rb_select_transport(struct device_node *np)
 {
 	if (of_machine_is_compatible("brcm,bcm2712"))
-		return &rb_pio_transport;
+		return pio_released_image ? &rb_pio_transport : &rb_pio2_transport;
 	if (of_machine_is_compatible("brcm,bcm2711") && of_property_present(np, "radioberry,pcm"))
 		return &rb_i2s_transport;
 	if (of_machine_is_compatible("brcm,bcm2711"))
@@ -2430,7 +2479,8 @@ static ssize_t transport_show(struct device *dev, struct device_attribute *attr,
 static DEVICE_ATTR_RO(transport);
 
 /*
- * Pi 4 I2S only. 1 puts the image's AD9866 in digital loopback: TxDAC and
+ * Gateware-v2 images only (Pi 4 I2S, Pi 5 PIO by default). 1 puts the
+ * image's AD9866 in digital loopback: TxDAC and
  * IAMP powered down, TX quiet and every PA line held low, transmit samples
  * back on the receive bus. For a self-test of the transmit path; the
  * transmitter still has to be keyed (PTT and permission) for samples to
@@ -2450,7 +2500,7 @@ static ssize_t tx_loopback_store(struct device *dev, struct device_attribute *at
 	bool on;
 	int ret;
 
-	if (rb->tp != &rb_i2s_transport)
+	if (!rb->tp->caps_transport)
 		return -EOPNOTSUPP;
 	ret = kstrtobool(buf, &on);
 	if (ret)
@@ -2463,7 +2513,12 @@ static ssize_t tx_loopback_store(struct device *dev, struct device_attribute *at
 }
 static DEVICE_ATTR_RW(tx_loopback);
 
-/* Pi 4 I2S only: the image's transmit counters and the driver's own. */
+/*
+ * Gateware-v2 images only: the image's link counters and the driver's own
+ * (the driver_ lines count only on the I2S transport; on the PIO image
+ * words_to_pi counts values, and tx_seq_gaps, tx_bad_frames and
+ * tx_realigns stay 0).
+ */
 static ssize_t i2s_counters_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	static const struct {
@@ -2483,7 +2538,7 @@ static ssize_t i2s_counters_show(struct device *dev, struct device_attribute *at
 	u32 v;
 	int ret = 0;
 
-	if (rb->tp != &rb_i2s_transport)
+	if (!rb->tp->caps_transport)
 		return -EOPNOTSUPP;
 	mutex_lock(&rb->cmd_lock);
 	for (i = 0; i < ARRAY_SIZE(regs) && !ret; i++) {

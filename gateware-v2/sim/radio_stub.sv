@@ -9,7 +9,7 @@
 `timescale 1ns / 1ps
 module radio #(
     parameter NR = 3, parameter NT = 1, parameter LRDATA = 0, parameter VNA = 1,
-    parameter CLK_FREQ = 76800000, parameter PERIOD = 256
+    parameter CLK_FREQ = 76800000, parameter PERIOD = 256, parameter TX_PERIOD = 64
 ) (
     input clk, input clk_2x, input rst_channels, input rst_all, input rst_nco,
     input link_running, input link_master, input [23:0] lm_data, input lm_valid,
@@ -33,7 +33,6 @@ module radio #(
     // input hold. Takes one sample every TX_PERIOD clocks, sending the top
     // 12 bits of I to the DAC, and drains samples at the same rate outside
     // transmit, as the core does.
-    parameter TX_PERIOD = 64;
     logic        txs = 1'b0;
     int          ttick = 0;
     logic [31:0] tx_last = 32'd0;

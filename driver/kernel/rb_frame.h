@@ -58,7 +58,7 @@
 #define RB_BREG_CRC_ERR 0x07
 #define RB_BREG_FRAMES 0x08
 #define RB_BREG_FIFO_FULL 0x09
-#define RB_BREG_I2S_TX 0x0a   /* words sent to the Pi with data */
+#define RB_BREG_I2S_TX 0x0a   /* words (I2S) or values (PIO) sent to the Pi */
 #define RB_BREG_I2S_RX 0x0b   /* transmit samples taken from the Pi */
 #define RB_BREG_SEQ_GAPS 0x0f /* transmit samples whose sequence number skipped */
 #define RB_BREG_TX_OVF 0x10   /* transmit samples dropped, FIFO full */
@@ -82,6 +82,7 @@
 #define RB_CAPS_TRANSPORT(c) (((c) >> 8) & 0xfu)
 #define RB_CAPS_FPGA(c) (((c) >> 12) & 0xfu)
 #define RB_CAPS_TRANSPORT_I2S 1
+#define RB_CAPS_TRANSPORT_PIO 2
 
 /*
  * The I2S link: bit clock = RB_I2S_FAST_HZ / divider, 32 bits a word, two

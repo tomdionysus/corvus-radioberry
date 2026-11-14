@@ -21,6 +21,14 @@ if [ "$1" = configure ]; then
     elif [ -L /usr/lib/firmware/radioberry-rpi4-i2s.rbf ]; then
         rm -f /usr/lib/firmware/radioberry-rpi4-i2s.rbf
     fi
+    # On a Raspberry Pi 5 it loads the gateware-v2 PIO image (unless its
+    # pio_released_image parameter is set), built for the 10CL025 only.
+    pio="/usr/share/radioberry/gateware/rpi5-pio/$fpga/radioberry-rpi5-pio.rbf"
+    if [ -f "$pio" ]; then
+        ln -sfn "$pio" /usr/lib/firmware/radioberry-rpi5-pio.rbf
+    elif [ -L /usr/lib/firmware/radioberry-rpi5-pio.rbf ]; then
+        rm -f /usr/lib/firmware/radioberry-rpi5-pio.rbf
+    fi
 
     # The firmware reads overlays from /boot/firmware/overlays, a FAT
     # file system dpkg cannot manage files on.

@@ -4,7 +4,7 @@ set -e
 
 case "$1" in
     remove | purge)
-        for f in radioberry.rbf radioberry-rpi4-i2s.rbf; do
+        for f in radioberry.rbf radioberry-rpi4-i2s.rbf radioberry-rpi5-pio.rbf; do
             if [ -L "/usr/lib/firmware/$f" ]; then
                 rm -f "/usr/lib/firmware/$f"
             fi
