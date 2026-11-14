@@ -16,19 +16,21 @@ void name_thread(const char* name) { ::pthread_setname_np(::pthread_self(), name
 std::optional<std::string> make_thread_realtime(const char* name, int priority) {
     sched_param param{};
     param.sched_priority = priority;
+    std::optional<std::string> why;  // nothing: it worked
     const int e = ::pthread_setschedparam(::pthread_self(), SCHED_FIFO, &param);
     if (e != 0) {
-        return std::string("SCHED_FIFO ") + std::to_string(priority) + " for " + name + ": " +
-               std::generic_category().message(e);
+        why = std::string("SCHED_FIFO ") + std::to_string(priority) + " for " + name + ": " +
+              std::generic_category().message(e);
     }
-    return std::nullopt;
+    return why;
 }
 
 std::optional<std::string> lock_memory(int flags) {
+    std::optional<std::string> why;  // nothing: it worked
     if (::mlockall(flags) != 0) {
-        return std::string("locking memory: ") + std::generic_category().message(errno);
+        why = std::string("locking memory: ") + std::generic_category().message(errno);
     }
-    return std::nullopt;
+    return why;
 }
 
 }  // namespace radioberry::daemon

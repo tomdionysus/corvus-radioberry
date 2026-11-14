@@ -130,7 +130,12 @@ step "coverage"
 [ -d build-coverage ] && find build-coverage -name '*.gcda' -delete
 cmake --preset coverage >/dev/null
 cmake --build --preset coverage -j "$jobs"
-cmake --build --preset coverage --target coverage
+if ! cmake --build --preset coverage --target coverage; then
+    echo "lines not covered:"
+    awk -F'[:,]' '/^SF:/ { file = $2 } /^DA:/ && $3 == 0 { print file ":" $2 }' \
+        build-coverage/coverage/coverage.info
+    exit 1
+fi
 
 # cmake --install puts the header in /usr/local/include, radioberry-dev in
 # /usr/include.
