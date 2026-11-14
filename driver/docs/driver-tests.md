@@ -1,16 +1,16 @@
 # Driver hardware tests
 
-`rbdrivertest` ([tools/driver-tests/](https://github.com/tomdionysus/corvus-radioberry/blob/main/tools/driver-tests/)) tests
+`rbdrivertest` ([tools/driver-tests/](../../tools/driver-tests/)) tests
 `radioberry.ko` through `/dev/radioberry` on a Raspberry Pi 4 or 5 with
 the RadioBerry attached. The unit tests cover the driver's pure logic in
-userspace ([driver/tests/](https://github.com/tomdionysus/corvus-radioberry/blob/main/driver/tests/)); this harness covers the
+userspace ([driver/tests/](../tests/)); this harness covers the
 kernel glue: the character device, the ioctls, the streams and the
 gateware.
 
 It is receive only. No command sets PTT or the TX permission bit, and
 every TX sample written is zero, so the gateware drains and discards
 them. It needs no permission to run under the safety rules in
-[CONTRIBUTING.md](https://github.com/tomdionysus/corvus-radioberry/blob/main/CONTRIBUTING.md).
+[CONTRIBUTING.md](../../CONTRIBUTING.md).
 
 ## Running it
 
@@ -30,7 +30,7 @@ such as `[read]` runs part of it). `RADIOBERRY_DEVICE=/dev/other` tests
 another device node; sysfs is always read from
 `/sys/bus/spi/devices/spi0.0/`.
 
-[tools/ci-pi.sh](https://github.com/tomdionysus/corvus-radioberry/blob/main/tools/ci-pi.sh) runs it at the end of every CI run
+[tools/ci-pi.sh](../../tools/ci-pi.sh) runs it at the end of every CI run
 when `/dev/radioberry` exists and can be opened, and reports it skipped
 otherwise ("no /dev/radioberry", or "/dev/radioberry is busy" while
 `radioberry.service` or another program holds it).
@@ -50,12 +50,7 @@ otherwise ("no /dev/radioberry", or "/dev/radioberry is busy" while
 | after close the gateware reports no transmit state | closing sends the safe command: PTT clear in the statistics and in the gateware's reply |
 | RX is idle while run is clear and resumes whole when it is set | no RX words for 300 ms after open and after a run-clear command (with a receiver-count change meanwhile); with run set again, three-receiver frames whole, more than 12 000 in 300 ms, no resyncs or dropped words, no stall |
 | the daemon's device layer streams through the driver | `radioberryd`'s device layer for one second: 47 000 to 49 000 frames, no sequence gaps, no dropped blocks, no faults, TX zeros written with PTT clear |
-| the RX stream never stalled during the run | runs last: sysfs `rx_stalled` is 0 and `rx_stalls` did not change, so no [receive lock-up](fault-rx-lockup.md) happened during the run |
-
-The receiver-count test is also the pattern that triggers the gateware's
-receive lock-up when the driver's RX clock hold is disabled
-(`rx_clock_hold_us=0`); the [fault report](fault-rx-lockup.md) describes
-running it in a loop to measure the lock-up rate.
+| the RX stream never stalled during the run | runs last: sysfs `rx_stalled` is 0 and `rx_stalls` did not change |
 
 [Driver under a debug kernel](kernel-debug.md) describes a run of this
 harness and more under a debug kernel.

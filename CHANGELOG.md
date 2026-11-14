@@ -5,10 +5,26 @@ packages carry the same number.
 
 ## Unreleased
 
+- New gateware, one image per board, both for the 10CL025: `rpi5-pio`
+  (Raspberry Pi 5, RP1 PIO) and `rpi4-i2s` (Raspberry Pi 4, I2S into the
+  PCM block with DMA). Both use a framed control protocol with a CRC, a
+  keying register that clears itself unless renewed, read-back of board
+  state, and link and transmit counters.
+- Driver: loads the image for its board; on the Pi 4 it takes the PCM
+  block and its pins itself, so `dtoverlay=radioberry` alone is enough on
+  both boards. The receive clock hold, the CPU-clocked Pi 4 buses and the
+  48-bit command path are gone. Sysfs `counters` and `tx_loopback`.
+- `radioberryd`: transmit samples go to the radio only while keyed; no
+  false RX stall when the first client starts after an idle period.
+- Packages: no FPGA question; an upgrade installs both images and the
+  plain overlay. The installed config sets `frequency_ppm: 22.9` and
+  `realtime: false`.
+- The 10CL016 is no longer supported.
+- Removed: `rbload`, `rbbus`.
 - `wsprrx`: example WSPR receive client, the sister of `ft8rx`; also
   decodes `.c2` files.
-- Docs: frequency calibration procedure; the Raspberry Pi 4 receive CPU
-  finding; Code of Conduct.
+- Docs: frequency calibration procedure; Code of Conduct; README per
+  component (driver, daemon, gateware); gateware review.
 
 ## 0.4.1 - 2026-11-11
 

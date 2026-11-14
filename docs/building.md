@@ -9,23 +9,26 @@ sudo apt install build-essential cmake pkg-config device-tree-compiler \
     linux-headers-$(uname -r) libliquid-dev libgpiod-dev libi2c-dev \
     libyaml-cpp-dev nlohmann-json3-dev libspdlog-dev libsystemd-dev catch2
 
-cmake -S . -B build -DFPGATYPE=CL025   # CL016 if the RadioBerry has a CL016 FPGA
+cmake -S . -B build
 cmake --build build -j
 ctest --test-dir build
 sudo cmake --install build
 ```
 
-The FPGA type is printed on the chip: `10CL025YE144C8G` is a CL025,
-`10CL016YE144C8G` a CL016. Then enable the driver, configure and start the
-service as in the [Quickstart](quickstart.md), steps 2 to 5.
+Then enable the driver, configure and start the service as in the
+[Quickstart](quickstart.md), steps 2 to 5.
 
 To build the Debian packages instead, see [Debian packages](packaging.md).
+The gateware images come prebuilt; building them needs an x86-64 machine
+([gateware/README.md](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/README.md)).
+Each component's README describes building it on its own:
+[driver](https://github.com/tomdionysus/corvus-radioberry/blob/main/driver/README.md),
+[daemon](https://github.com/tomdionysus/corvus-radioberry/blob/main/daemon/README.md).
 
 ## Build options
 
 | Option | Effect |
 |---|---|
-| `-DFPGATYPE=CL025\|CL016` | which gateware is installed as `/lib/firmware/radioberry.rbf` (default CL025) |
 | `-DKERNEL_RELEASE=` | build the module for another kernel (default: the running one, if its headers are installed) |
 | `-DRADIOBERRY_BUILD_MODULE=OFF` | skip the module |
 | `-DRADIOBERRY_ABI_INCLUDE_DIR=/usr/local/include` | build the tools and daemon against the installed ABI header; configuration fails if its ABI version differs from the source tree's |
@@ -38,10 +41,9 @@ To build the Debian packages instead, see [Debian packages](packaging.md).
 |---|---|
 | kernel module | `/lib/modules/$(uname -r)/updates/radioberry.ko` (then `depmod`) |
 | overlay | `/boot/firmware/overlays/radioberry.dtbo` |
-| gateware for `FPGATYPE` | `/lib/firmware/radioberry.rbf` |
-| both gateware images | `/usr/local/share/radioberry/gateware/rpi-5/<type>/` |
+| gateware images | `/lib/firmware/radioberry-rpi5-pio.rbf` and `radioberry-rpi4-i2s.rbf`, and `/usr/local/share/radioberry/gateware/<image>/CL025/` |
 | ABI header | `/usr/local/include/radioberry_ioctl.h` |
-| `rbprobe`, `rbcat`, `rbctl`, `rbload`, `rbbus`, `p1probe`, `p2probe` | `/usr/local/bin/` |
+| `rbprobe`, `rbcat`, `rbctl`, `p1probe`, `p2probe` | `/usr/local/bin/` |
 | `radioberryd` | `/usr/local/sbin/` |
 | `radioberry.service`, sysusers.d entry, udev rule | `/usr/local/lib/systemd/system/`, `/usr/local/lib/sysusers.d/`, `/usr/local/lib/udev/rules.d/` |
 | `i2c-dev` loaded at boot | `/usr/local/lib/modules-load.d/radioberry.conf` |

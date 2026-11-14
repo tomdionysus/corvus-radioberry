@@ -3,6 +3,19 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-14: Adopted the new gateware. The old `gateware/` (Hermes-Lite 2
+  PIO images, CL016 and CL025) removed; `gateware-v2/` is now `gateware/`
+  with the Hermes-Lite 2 source archive and the Quartus Dockerfile, its
+  own README and `docs/`. Driver: the PIO and I2S transports only, the Pi
+  4's PCM pins set by the driver (one overlay on both boards; on the Pi 4
+  with the test module, `ft8rx` 20 m 67 decodes over P1 and 69 over P2,
+  none lost), no RX clock hold, no 48-bit command path, `rbload` and
+  `rbbus` removed. Packages: no FPGA question, both images installed.
+  Installed config `frequency_ppm: 22.9`, `realtime: false`. Daemon: no
+  false RX stall at the first client after idle. Driver and daemon READMEs
+  and `docs/` folders; components table in the README. The Pi 4 SMI work
+  (`TODO/RPI4-SMI.md`, branch `item/rpi4-smi`) is superseded by the I2S
+  image and its plan removed from here.
 - 2026-11-14: Pi 5 transmit through the `rpi5-pio` image: TX bit 4 (pin
   105) strict setup slack -2.72 ns, as the Pi 4 build; digital loopback
   self-test passed (+1 kHz tone at -18.7 dBFS, opposite sideband -144.7,

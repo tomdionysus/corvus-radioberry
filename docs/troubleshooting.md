@@ -14,9 +14,13 @@ can run. The daemon logs to `journalctl -u radioberry`.
 
 ## The gateware does not load
 
-`rbprobe` reports CONF_DONE low: the installed image is for the other
-FPGA. Read the chip's marking (`10CL025...` or `10CL016...`), run
-`sudo dpkg-reconfigure radioberry` and reboot.
+`rbprobe` reports CONF_DONE low, or the kernel log says the image "is
+built for a 10CL025 FPGA": the gateware is for the 10CL025 only. Read the
+chip's marking; a board with a 10CL016 is not supported yet.
+
+On a Raspberry Pi 4, "the PCM block is enabled for audio" in the kernel
+log means `dtparam=i2s=on` or an audio overlay is in `config.txt`: remove
+it and reboot.
 
 ## Receive stops
 
@@ -61,10 +65,11 @@ Set `frequency_ppm` for your board
 
 Use Ethernet for clients, especially when transmitting over Protocol 2.
 
-## Raspberry Pi 4 stutters or drops samples
+## The Pi stutters or drops samples
 
 `vcgencmd get_throttled` other than `0x0` means under-voltage or
-throttling; use a 5 V 3 A supply.
+throttling; use the official supply (5 V 3 A for a Pi 4, 5 V 5 A for a
+Pi 5).
 
 ## Still stuck
 

@@ -33,7 +33,7 @@ These findings are not being worked on now.
 | 1.7 | CL016 timing closes | The CL016 is not supported; a CL016 variant needs someone with the board to test it | ✗ |
 | 2.1 | A receiver-count change must not stop the stream | Neither image ever clears a FIFO; on the Pi 5 the receive FIFO's read side runs on the Pi's own clock. Simulation: in order across 2 to 3 receivers with the clock running, 3 to 1 with it held, and program restarts mid-value. Hardware: `rbdrivertest` passes on both boards | ✓ |
 | 2.2 | No samples of a removed receiver reach clients after a change | The frame index restarts at a change and the driver delivers nothing until two clean frames of the new layout have arrived | ✓ |
-| 2.3 | Every transition is tested, including rapid ones and the driver's RX hold turned off | 2 to 3 and 3 to 1 in simulation; not every pair, not back-to-back, not on hardware with the hold off | ✗ |
+| 2.3 | Every transition is tested, including rapid ones, with no RX clock hold in the driver | The driver no longer holds the RX clock. 2 to 3 and 3 to 1 in simulation; not every pair, not back-to-back, no hardware stress run | ✗ |
 | 2.4 | A stalled stream is detected and recovered | The driver detects and reports a stall (`rx_stalled`, `rx_stalls`); the gateware has no watchdog and nothing recovers automatically | ✗ |
 | 2.5 | Data left over from before a pause is not delivered as new | Up to 1024 values held in the FIFO across a long pause are delivered first when RX resumes | ✗ |
 | 3.1 | Every clock domain and crossing is documented | Listed in each image's top-level header | ✓ |
@@ -57,7 +57,7 @@ These findings are not being worked on now.
 | 7.5 | PTT transitions and CW keying are shaped and measured | The radio core shapes CW; PTT transitions are not shaped; key clicks not measured | ✗ |
 | 8 | NCO and CORDIC spurs are measured before any change | Radio core unmodified, not measured; the TX loopback self-test shows the carrier at -138 dBFS and the opposite sideband at -145 dBFS | ✗ |
 | 9.1 | The gateware is identified and versioned | ID, VERSION and CAPS registers in the framed control protocol | ✓ |
-| 9.2 | Stream and link events are counted | Frames, CRC errors, FIFO-full events, values sent, TX samples, overflows, underruns, keying watchdog trips, AD9866 writes, sticky status bits; in sysfs `i2s_counters` and `rbprobe` | ✓ |
+| 9.2 | Stream and link events are counted | Frames, CRC errors, FIFO-full events, values sent, TX samples, overflows, underruns, keying watchdog trips, AD9866 writes, sticky status bits; in sysfs `counters` and `rbprobe` | ✓ |
 | 9.3 | Clocks are measured against an independent reference | Not in the radio images | ✗ |
 | 9.4 | Counts are kept per receiver | Not implemented | ✗ |
 | 9.5 | AD9866 set-up is verified by reading back | Readback exists (`AD_READ`) but is not run automatically | ✗ |

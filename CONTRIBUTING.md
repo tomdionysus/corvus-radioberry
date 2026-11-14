@@ -1,20 +1,22 @@
 # Contributing
 
 Read this, [README.md](README.md), [TODO/ACTIVE.md](TODO/ACTIVE.md) (open
-work and standing decisions), [docs/design.md](docs/design.md) and
-[gateware/README.md](gateware/README.md) before starting. Do not reopen a
+work and standing decisions), [docs/design.md](docs/design.md) and the
+README of the component you are changing
+([driver](driver/README.md), [daemon](daemon/README.md),
+[gateware](gateware/README.md)) before starting. Do not reopen a
 standing decision in [TODO/ACTIVE.md](TODO/ACTIVE.md) without saying so.
 
 ## Repository layout
 
 ```
-docs/      design, driver, driver tests, daemon, tools, platform, PA, examples, fault report, kernel debug, packaging, building, status, quickstart, Pi 4, Pi 5, troubleshooting, reporting issues, original software, testing, licensing
+docs/      user documentation: quickstart, reference, design overview, test results
 debian/    Debian packaging (built by tools/build-deb.sh)
-gateware/  gateware source, built bitfiles per FPGA, provenance, toolchain
-driver/    kernel module, device tree overlay, ABI header, logic tests
-daemon/    radioberryd: device layer, session, transmit policy, Protocols 1 and 2, systemd files
+driver/    kernel module, device tree overlay, ABI header, logic tests, docs/
+daemon/    radioberryd: device layer, session, transmit policy, Protocols 1 and 2, systemd files, docs/
+gateware/  FPGA images, their RTL, the Hermes-Lite 2 source archive, build tools, docs/
 examples/  ft8rx and wsprrx, example FT8 and WSPR clients (optional build)
-tools/     rbprobe, rbcat, rbctl, rbload, p1probe, p2probe, shared library, driver tests, CI and check scripts, gateware build
+tools/     rbprobe, rbcat, rbctl, p1probe, p2probe, shared library, driver tests, CI and check scripts
 TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
 ```
 
@@ -90,16 +92,16 @@ TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
 
 ## Gateware
 
-- Never edit the gateware source.
-  [tools/build-gateware.sh](tools/build-gateware.sh) rebuilds the
-  bitfiles on an x86-64 machine with Quartus Prime Lite
-  ([gateware/QUARTUS.md](gateware/QUARTUS.md)); installing Quartus
-  requires the person running it to accept the Quartus licence agreement,
-  so ask before doing it.
-- Commit rebuilt bitfiles together with the
-  [gateware/PROVENANCE.md](gateware/PROVENANCE.md) table the script
-  updates, and add new hashes to the `rbprobe` catalogue
-  ([tools/common/src/gateware_catalog.cpp](tools/common/src/gateware_catalog.cpp)).
+- Never edit the Hermes-Lite 2 source archive in `gateware/source/`;
+  changes go in `gateware/rtl/`.
+- [gateware/README.md](gateware/README.md) has the build: Quartus Prime
+  Lite in Docker on an x86-64 machine. Installing Quartus requires the
+  person running it to accept the Quartus licence agreement, so ask
+  before doing it.
+- A changed image passes its simulation and shows positive setup and hold
+  slack on every clock before it is committed, together with its row in
+  [gateware/docs/provenance.md](gateware/docs/provenance.md). `rbprobe`
+  takes the image hashes from the files at configure time.
 
 ## Commits
 
@@ -113,13 +115,15 @@ TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
 
 - Docs state the current facts: what exists, how to install and use it,
   what was measured. No history, no plans (those belong in `TODO/`).
-- No dates (except in [docs/kernel-debug.md](docs/kernel-debug.md), a dated
-  test record), personal names, callsigns, machine paths, addresses,
+- No dates (except in
+  [driver/docs/kernel-debug.md](driver/docs/kernel-debug.md), a dated test
+  record), personal names, callsigns, machine paths, addresses,
   hostnames, serials or other identifiers of the development hardware or
   its network. Describe hosts generically.
 - [README.md](README.md) holds only the overview, status, installation,
-  build options, roadmap, the AI statement and the licence;
-  everything else goes in `docs/`.
+  build options, roadmap, the AI statement and the licence. User
+  documentation goes in `docs/`; a component's development documents go
+  in its own `docs/`.
 - Name other files in the repository with relative Markdown links.
 - [TODO/ACTIVE.md](TODO/ACTIVE.md) is the single list of open work; add
   items with an acceptance test. [TODO/COMPLETED.md](TODO/COMPLETED.md) is
@@ -129,9 +133,10 @@ TODO/      ACTIVE.md (open work) and COMPLETED.md (done work)
 
 - No transmit test on the development board without the board owner's
   explicit permission for that test, asked at the time. Anything that
-  sets PTT (command bit 32) or the TX permission bit (bit 42), or writes
-  samples while either is set, is a transmit test. Receive tests, and
-  TX-path tests with both bits clear, need no permission.
+  sets a bit of the KEYING register (PTT or the transmit permission), or
+  writes samples while either is set, is a transmit test, whatever the
+  drive and PA settings. Receive tests, and TX-path tests with both bits
+  clear, need no permission.
 - The PA stage is never enabled by default and never without a dummy load
   on the first test of any new code path that can key the transmitter.
 - Any code that can assert MOX, PA enable or drive must have a timeout or

@@ -44,8 +44,10 @@ CN301 pins are direct FPGA pins: 1 5V, 2 3V3, 3 ptt_out / exttr (FPGA
 144), 4 inttr (143), 5 keyer dash (142), 6 keyer dot (141), 7 preamp bias
 (137), 8 envpa (136), 9 and 10 unused (135, 133), 13 PTT in (121), 14 key
 in (120), 15/16 FPGA SDA/SCL (119/115), 17/18 SDA/SCL from the Pi header,
-19/20 GND. What drives each output is in
-[gateware/README.md](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/README.md) section 6.
+19/20 GND. The gateware holds every PA line low unless the radio is
+keyed with the transmit permission and PA allowed set; envpa and the
+bias line also need PA enable
+([gateware/docs/interfaces.md](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/docs/interfaces.md)).
 
 The board's PTT, key and paddle inputs go to the FPGA's CN301 pins, not to
 the Pi, so they work whatever software runs.

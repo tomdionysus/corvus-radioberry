@@ -18,7 +18,7 @@ image's ([interfaces.md](interfaces.md), Pi 5 link).
   clock domains is reset, so a Pi clock may stop and start at any edge.
   The released image cleared its receive FIFO asynchronously in that
   domain, which is what locked it up
-  ([docs/fault-rx-lockup.md](../../docs/fault-rx-lockup.md)).
+  ([receive lock-up](https://github.com/tomdionysus/corvus-radioberry/blob/v0.4.1/docs/fault-rx-lockup.md)).
 - Pins as the released PIO image: RX clock GPIO 6 (FPGA 54), data GPIO 18
   to 21 (33, 44, 43, 42), sample-ready GPIO 25 (31); TX clock GPIO 4
   (55), data GPIO 5 (32), ready GPIO 12 (49). The RX nibble, sample-ready
@@ -111,6 +111,5 @@ On air through piHPSDR and WSJT-X, 20 m FT8, PA allowed, drive ceiling
   with the same tools: 25 dB in loopback (-18.7 against -43.6 dBFS) and
   48 dB keyed into the dummy load (-16.9 against -64.9 dBFS), while the
   output power matches. Cause not known.
-- Not tested: the Pi 4 on this driver build (it shares the identity check
-  and the reload handling); a receiver-count stress run with the driver's
-  RX hold turned off (`rx_clock_hold_us=0`).
+- Not tested: a receiver-count stress run on this image now that the
+  driver no longer holds the RX clock across commands.

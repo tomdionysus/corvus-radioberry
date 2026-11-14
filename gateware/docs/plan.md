@@ -255,7 +255,7 @@ Decided (owner, 2026-11-13):
 3. `ft8rx` over Protocols 1 and 2 with no packets lost.
 4. piHPSDR and WSJT-X on the Pi 4's desktop decode FT8, with decodes
    matching PSK Reporter spots.
-5. CPU cost measured against [the earlier finding](../../docs/finding-rpi4-cpu.md).
+5. CPU cost measured against [the earlier finding](https://github.com/tomdionysus/corvus-radioberry/blob/v0.4.1/docs/finding-rpi4-cpu.md).
 6. MOX from piHPSDR is refused and logged; nothing on the transmit side
    moves (checked with the gateware's own status).
 7. The Raspberry Pi 5 build and CI unchanged.

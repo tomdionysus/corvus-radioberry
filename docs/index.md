@@ -22,7 +22,7 @@ Source: [github.com/tomdionysus/corvus-radioberry](https://github.com/tomdionysu
 - [Kernels](kernels.md): 6.12 and 6.18 differences, tested kernels
 - [radioberryd](daemon.md): configuration, protocols, clients
 - [Frequency calibration](calibration.md): measuring `frequency_ppm`
-- [Tools](tools.md): `rbprobe`, `rbcat`, `rbctl`, `rbload`, `rbbus`, `p1probe`, `p2probe`
+- [Tools](tools.md): `rbprobe`, `rbcat`, `rbctl`, `p1probe`, `p2probe`
 - [Kernel driver](driver.md): device interface, sysfs, parameters
 - [Debian packages and apt repositories](packaging.md)
 - [Building from source](building.md)
@@ -34,13 +34,14 @@ Source: [github.com/tomdionysus/corvus-radioberry](https://github.com/tomdionysu
 
 - [Design](design.md)
 - [Test results](testing.md)
-- [Driver hardware tests](driver-tests.md)
-- [Driver under a debug kernel](kernel-debug.md)
-- [Gateware review](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/docs/review.md): findings and progress
-- [The gateware's receive lock-up](fault-rx-lockup.md)
-- [CPU cost of receive on the Raspberry Pi 4](finding-rpi4-cpu.md)
+- [Driver](https://github.com/tomdionysus/corvus-radioberry/blob/main/driver/README.md):
+  building it, [design](https://github.com/tomdionysus/corvus-radioberry/blob/main/driver/docs/design.md),
+  [hardware tests](https://github.com/tomdionysus/corvus-radioberry/blob/main/driver/docs/driver-tests.md)
+- [Daemon](https://github.com/tomdionysus/corvus-radioberry/blob/main/daemon/README.md):
+  building it, [design](https://github.com/tomdionysus/corvus-radioberry/blob/main/daemon/docs/design.md)
 - [Gateware](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/README.md):
   building it, [interfaces](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/docs/interfaces.md),
-  [provenance](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/docs/provenance.md)
+  [provenance](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/docs/provenance.md),
+  [review](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/docs/review.md)
 - [Contributing](https://github.com/tomdionysus/corvus-radioberry/blob/main/CONTRIBUTING.md)
 - [Licensing](licensing.md)

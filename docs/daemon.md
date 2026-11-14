@@ -30,11 +30,11 @@ Stop the service before running anything else that opens
 | `port` | `--port N` | `1024` | Protocol 1 port and Protocol 2 base port |
 | `mac` | `--mac XX:XX:XX:XX:XX:XX` | the interface's | MAC reported by discovery |
 | `client_timeout_ms` | `--client-timeout-ms N` | `3000` | silence that ends a client's stream |
-| `frequency_ppm` | `--frequency-ppm P` | `0` | the radio's frequency error, positive if it tunes high ([Frequency calibration](calibration.md)) |
+| `frequency_ppm` | `--frequency-ppm P` | `22.9` as installed (`0` without the file) | the radio's frequency error, positive if it tunes high ([Frequency calibration](calibration.md)) |
 | `iq_convention` | `--iq-convention C` | `hl2` | `hl2`: I/Q as the Hermes-Lite 2 sends it; `standard`: I and Q swapped both ways, for plain complex-baseband clients ([sample order](examples.md#sample-order)) |
 | `p2_rx_gain` | `--p2-rx-gain DB` | `14` | Protocol 2 LNA gain, -12 to 48 dB, less the client's step attenuation |
 | `protocols` | `--protocols LIST` | `1,2` | protocols to serve: `1`, `2` or `1,2` |
-| `realtime` | `--realtime BOOL` | `true` | SCHED_FIFO threads and locked memory |
+| `realtime` | `--realtime BOOL` | `false` as installed (`true` without the file) | SCHED_FIFO threads and locked memory |
 | `allow_tx` | `--allow-tx BOOL` | `false` | let the owning client transmit |
 | `allow_pa` | `--allow-pa BOOL` | `false` | pass on the client's PA enable while transmitting |
 | `drive_ceiling` | `--drive-ceiling N` | `150` as installed (`0` without the file) | highest drive level sent, 0 to 255 |
@@ -64,7 +64,7 @@ Stop the service before running anything else that opens
   Protocol 2 samples still pass through the decimator, so its filter holds
   the client's signal when transmission starts.
 - PA allowed (`RADIOBERRY_CMD_PA_ALLOWED`) is set with MOX only with
-  `allow_pa: true`; gateware-v2 images gate every PA line on it.
+  `allow_pa: true`; the gateware holds every PA line low without it.
 - No PA interlock is claimed.
 
 ## Idle
@@ -93,11 +93,12 @@ Run is clear, so the driver streams nothing either.
 
 ## Real-time
 
-The two device threads run at SCHED_FIFO 20 and the network threads at
-SCHED_FIFO 10, below the driver's kernel thread (SCHED_FIFO 50), and
-memory is locked. UDP sockets carry DSCP EF and SO_PRIORITY 6. Run by hand
-without CAP_SYS_NICE and CAP_IPC_LOCK, `radioberryd` logs a warning and
-runs without them.
+With `realtime: true` the two device threads run at SCHED_FIFO 20 and the
+network threads at SCHED_FIFO 10, below the driver's kernel thread on the
+Pi 5 (SCHED_FIFO 50), and memory is locked. The installed config leaves it
+off. UDP sockets carry DSCP EF and SO_PRIORITY 6 either way. Run
+by hand without CAP_SYS_NICE and CAP_IPC_LOCK, `radioberryd` logs a
+warning and runs without real-time.
 
 ## Clients
 

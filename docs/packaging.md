@@ -8,7 +8,7 @@ same packages serve both.
 
 | Package | Architecture | Contents |
 |---|---|---|
-| `radioberry` | arm64 | `radioberryd` and `radioberry.service`, `rbprobe`, `rbcat`, `rbctl`, `rbload`, `rbbus`, `p1probe`, `p2probe`, sysusers.d entry, udev rule, modules-load.d entry for `i2c-dev`, `/etc/radioberry/config.yaml`, the gateware images, the overlays |
+| `radioberry` | arm64 | `radioberryd` and `radioberry.service`, `rbprobe`, `rbcat`, `rbctl`, `p1probe`, `p2probe`, sysusers.d entry, udev rule, modules-load.d entry for `i2c-dev`, `/etc/radioberry/config.yaml`, the gateware images, the overlay |
 | `radioberry-dkms` | all | the driver source, built by DKMS for every installed kernel |
 | `radioberry-dev` | all | `radioberry_ioctl.h` |
 | `radioberry-dbgsym` | arm64 | debug symbols for `radioberry` |
@@ -45,14 +45,13 @@ sudo apt install ./build-deb/radioberry_*_arm64.deb \
     ./build-deb/radioberry-dkms_*_all.deb
 ```
 
-The install asks which FPGA the RadioBerry has (CL025 or CL016; the
-marking on the chip's package says which) and does the following:
+The install does the following:
 
 | What | Where |
 |---|---|
 | kernel module, built by DKMS for each installed kernel | `/lib/modules/<kernel>/updates/dkms/radioberry.ko.xz` |
-| gateware for the chosen FPGA | links in `/usr/lib/firmware/` into `/usr/share/radioberry/gateware/`: `radioberry.rbf` (the Hermes-Lite 2 PIO image, `rpi-5/<type>/`), and for a CL025 `radioberry-rpi5-pio.rbf` (Pi 5, `rpi5-pio/CL025/`) and `radioberry-rpi4-i2s.rbf` (Pi 4 I2S, `rpi4-i2s/CL025/`) |
-| overlays | copied from `/usr/share/radioberry/overlays/` to `/boot/firmware/overlays/radioberry.dtbo` and `radioberry-i2s.dtbo` |
+| gateware images | `/usr/share/radioberry/gateware/<image>/CL025/`, linked as `/usr/lib/firmware/radioberry-rpi5-pio.rbf` and `radioberry-rpi4-i2s.rbf` |
+| overlay | copied from `/usr/share/radioberry/overlays/` to `/boot/firmware/overlays/radioberry.dtbo` |
 | tools | `/usr/bin/` |
 | `radioberryd` | `/usr/sbin/` |
 | unit, sysusers.d entry, udev rule | `/usr/lib/systemd/system/`, `/usr/lib/sysusers.d/`, `/usr/lib/udev/rules.d/` |
@@ -60,27 +59,18 @@ marking on the chip's package says which) and does the following:
 | daemon config (conffile) | `/etc/radioberry/config.yaml` |
 
 The install does not edit `/boot/firmware/config.txt`. If it has no
-`dtoverlay=radioberry` line the install prints a reminder; add, at the
-end,
+`dtoverlay=radioberry` line the install prints a reminder; add
 
 ```
-[all]
 dtparam=i2c_arm=on
 dtoverlay=radioberry
-[pi4]
-dtoverlay=radioberry-i2s
-[all]
 ```
 
-and reboot. The `[pi4]` line gives a Raspberry Pi 4 the I2S transport;
-without it a Pi 4 uses the CPU-clocked transport. A Pi 5 ignores it. `radioberry.service` is enabled at install and started then if
+and reboot. `radioberry.service` is enabled at install and started then if
 `/dev/radioberry` exists, otherwise at the next boot. Check with `rbprobe`.
 
 Transmit and the PA are off in the installed `config.yaml`
 ([Quickstart](quickstart.md#3-configure)).
-
-To change the FPGA type later: `sudo dpkg-reconfigure radioberry`, then
-reboot (the driver loads the gateware when it binds at boot).
 
 ### Upgrades and kernel updates
 
@@ -101,7 +91,7 @@ when the packaged default changed as well.
 ### Removing
 
 `sudo apt remove radioberry radioberry-dkms` stops the service and removes
-the programs, the DKMS modules, the overlay and the firmware link. The
+the programs, the DKMS modules, the overlay and the firmware links. The
 module stays loaded until the next reboot. `config.yaml` and the
 `radioberry` user remain; `sudo apt purge radioberry` deletes
 `/etc/radioberry`. The `dtoverlay=radioberry` line in `config.txt` is left

@@ -65,7 +65,7 @@ Nothing in the session sets PTT or the TX permission bit.
 | kmemleak scan | 21 records from `rp1_pio_sm_xfer_data()` (below) |
 
 Rates under KASAN run about 1% below nominal because the kernel is
-slower; on the stock kernel they are exact ([Test results](testing.md)). The probes
+slower; on the stock kernel they are exact ([Test results](../../docs/testing.md)). The probes
 were run with a 10% tolerance for that reason.
 
 ## Findings
@@ -95,7 +95,7 @@ data arrives to complete the transfers. The fix belongs in `rp1-pio`:
 free the records of terminated transfers, and free on its error paths.
 
 Driver 0.4.1 gives receive transfers its own DMA buffers
-([Kernels](kernels.md)). Under the same kernel it drew no KASAN, DMA API
+([Kernels](../../docs/kernels.md)). Under the same kernel it drew no KASAN, DMA API
 or UBSAN report, and kmemleak reported 4 records from
 `rp1_pio_sm_xfer_data()`, from transmit transfers in flight at teardown.
 

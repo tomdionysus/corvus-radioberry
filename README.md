@@ -8,15 +8,14 @@
 
 A self-contained software stack for the
 [RadioBerry 2.x HF transceiver HAT](https://github.com/pa3gsb/Radioberry-2.x/wiki)
-on a Raspberry Pi 4 or 5:
+on a Raspberry Pi 4 or 5 with a 10CL025 FPGA:
 
-- `radioberry.ko`, the Linux kernel driver
-- `radioberryd`, a daemon serving openHPSDR Protocol 1 and Protocol 2 to
-  clients such as piHPSDR and WSJT-X
-- `rbprobe`, which checks every layer from the Pi to the FPGA and says
-  what is wrong
-- control of an [AURSINC PA5W V2](https://www.aursinc.com/products/aursinc-radioberry-preamp-board-v2-output-1-5w-3w-for-hf-power-ampfier-10w-100w-pa-for-raspberry-pi-4-4b) amplifier board
-- FPGA gateware built from its GPL source
+| Component | What it is |
+|---|---|
+| [Driver](driver/README.md) | `radioberry.ko`, the Linux kernel driver: loads the gateware, streams samples over the Pi 5's PIO or the Pi 4's PCM block |
+| [Daemon](daemon/README.md) | `radioberryd`, serving openHPSDR Protocol 1 and Protocol 2 to clients such as piHPSDR and WSJT-X, with control of an [AURSINC PA5W V2](https://www.aursinc.com/products/aursinc-radioberry-preamp-board-v2-output-1-5w-3w-for-hf-power-ampfier-10w-100w-pa-for-raspberry-pi-4-4b) amplifier board |
+| [Gateware](gateware/README.md) | the FPGA images, one per Pi, built from GPL source |
+| [Tools](docs/tools.md) | `rbprobe`, which checks every layer from the Pi to the FPGA and says what is wrong, and other diagnostics |
 
 It installs as Debian packages against the current Raspberry Pi OS kernel,
 with no kernel patches; the driver is rebuilt on every kernel update.
@@ -57,15 +56,8 @@ doesn't yet: [docs/status.md](docs/status.md). Changes per version:
 
 ## Roadmap
 
-- If someone out there could test this with a CL016 based RadioBerry, that
-  would be great. The CL016 build has a timing issue on the AD9866 TX data
-  outputs that moves with the FPGA fitter seed, and no seed tried so far
-  meets it ([gateware/PROVENANCE.md](gateware/PROVENANCE.md)). I'd also
-  like to crack that.
-- There's also a bug in the gateware: the receive stream can lock up at a
-  receiver-count change ([docs/fault-rx-lockup.md](docs/fault-rx-lockup.md)).
-  I've worked around this in the driver, but the real fix belongs in the
-  gateware itself.
+- I'd like to make a variant of the gateware for CL016 based RadioBerry
+  boards, if someone with one will test it for me.
 - An external review of the gateware lists what would make it more
   reliable, observable and numerically careful; the
   [gateware review](gateware/docs/review.md) has each finding and how far

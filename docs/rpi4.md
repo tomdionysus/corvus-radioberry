@@ -3,30 +3,16 @@
 ## Requirements
 
 Raspberry Pi 4 Model B, Raspberry Pi OS (Debian 13 trixie, 64-bit), a
-6.12 or 6.18 `rpt-rpi-v8` kernel. Same packages, overlay and gateware as
-the Pi 5. [Kernels](kernels.md) has the differences between the series.
+6.12 or 6.18 `rpt-rpi-v8` kernel. Same packages and overlay as the Pi 5.
+[Kernels](kernels.md) has the differences between the series.
 
-## Tested kernels
-
-6.12.25, 6.12.34, 6.12.47, 6.12.62, 6.12.75, 6.18.29, 6.18.33, 6.18.34,
-6.18.39, 6.18.50, 6.18.60 (`+rpt-rpi-v8`; 6.12.75 with one accepted
-anomaly). The tests: [Kernels](kernels.md#tested-kernels).
+The RadioBerry uses the Pi's PCM (I2S) block on GPIO 18 to 21, so leave
+`dtparam=i2s=on` and audio HAT overlays out of `config.txt`.
 
 ## Capacity
 
-Two receivers at 48 ksps or one at 96: enough for FT8 receive and
-transmit. The Pi 4 has no PIO, so a kernel thread clocks the RadioBerry's
-buses. From one receiver at 96 ksps up, that thread holds one CPU core
-at 100% while streaming, most of it polling for the next value; the
-client still receives every sample, up to one receiver at 384 ksps, and
-has the other three cores
-([CPU cost of receive](finding-rpi4-cpu.md)).
+The I2S link carries about 1.54 million RX values per second: for example
+six receivers at 96 ksps, four at 192 ksps or two at 384 ksps. Samples
+move by DMA; piHPSDR at 192 ksps used at most 13% CPU.
 
-## Driver parameters
-
-| Parameter | Default | Meaning |
-|---|---|---|
-| `bb_rx_values_max` | 192000 | RX values per second offered to clients; higher values cost a whole CPU core |
-| `bb_settle_reads` | 0 | extra pin reads after each bus clock pulse |
-
-The common parameters are in [Kernel driver](driver.md).
+The common driver parameters are in [Kernel driver](driver.md).

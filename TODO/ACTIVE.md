@@ -7,32 +7,25 @@ item is removed from here and recorded at the top of
 
 ## Where things stand
 
-- Released: v0.4.1 (Raspberry Pi 4 and 5, Linux 6.12 and 6.18,
-  [docs/kernels.md](../docs/kernels.md)), as Debian packages from the
-  apt repository and on GitHub. Its Pi 5 path (RP1 PIO with the
-  Hermes-Lite 2 PIO gateware 75.3) is unchanged on the development branch.
-- Development branch `item/new-direction`: gateware-v2
-  ([gateware-v2/plan.md](../gateware-v2/plan.md)), separate gateware per
-  board. Raspberry Pi 4: the `rpi4-i2s` image, an I2S link into the
-  BCM2711 PCM block driven by the driver directly (no ALSA), the framed
-  SPI control protocol ([driver/kernel/rb_frame.h](../driver/kernel/rb_frame.h)),
-  receive and transmit. On air through piHPSDR and WSJT-X: FT8 decoded by
-  stations across Europe and in North America; 13% CPU at 192 ksps.
-  Transmit power into a dummy load, drive 32 to 170: about 1 dB per AD9866
-  gain code over codes 10 to 25, compression starting near 4.5 W.
-- `radioberryd`: Protocol 1 (HL2 dialect) and Protocol 2, one owning
-  client, transmit only with `--allow-tx` through the transmit policy and
-  fail-safes; it no longer sets the TX buffer latency or PTT hang time
-  (address 0x17): the gateware owns them.
-  Raspberry Pi 5: the `rpi5-pio` image on the released PIO wire with the
-  framed control protocol, receive and transmit; an FT8 contact on 20 m.
+- Released: v0.4.1 (Raspberry Pi 4 and 5, Linux 6.12 and 6.18), as Debian
+  packages from the apt repository and on GitHub, with the Hermes-Lite 2
+  PIO gateware.
+- Development branch `item/new-direction`, to be 0.5.0: this project's own
+  gateware ([gateware/README.md](../gateware/README.md)), one image per
+  board, 10CL025 only. Raspberry Pi 5: `rpi5-pio`, receive and transmit,
+  an FT8 contact on 20 m. Raspberry Pi 4: `rpi4-i2s`, I2S into the PCM
+  block driven by the driver directly (no ALSA), receive and transmit, on
+  air through piHPSDR and WSJT-X; 13% CPU at 192 ksps. Both use the
+  framed SPI control protocol
+  ([driver/kernel/rb_frame.h](../driver/kernel/rb_frame.h)). The driver
+  has only these two transports and sets up the Pi 4's PCM pins itself.
 
 ## Standing decisions
 
 - C++20 throughout; C only in the kernel module and the ABI header.
-- Unit tests on every component, aiming at complete coverage; kernel
-  module logic compiled into a userspace test binary. Catch2 v3, gcov with
-  lcov reports, ASan and UBSan test builds.
+- Unit tests on every component with 100% line coverage, enforced by the
+  coverage build; kernel module logic compiled into a userspace test
+  binary. Catch2 v3, gcov with lcov reports, ASan and UBSan test builds.
 - Testing effort: each test once; a repeat needs a reason (a flaky test,
   odd behaviour). ASan, TSan and the full CI run for releases, not for
   every commit.
@@ -43,25 +36,15 @@ item is removed from here and recorded at the top of
   module. Users install the Debian packages (the module through DKMS,
   built by [tools/build-deb.sh](../tools/build-deb.sh)); `cmake --install`
   is for development only.
-- Gateware: one image per board and FPGA. Released Pi 5 path: the
-  Hermes-Lite 2 RadioBerry PIO variants (75.3) built unmodified from
-  `gateware/source/` ([tools/build-gateware.sh](../tools/build-gateware.sh)).
-  gateware-v2 images: `gateware-v2/projects/`, built by
-  `gateware-v2/tools/build.sh`; the Hermes-Lite 2 radio core read
-  unmodified from `gateware/source/`. Quartus Prime Lite 23.1std.1 in
-  Docker on an x86-64 machine; bitfiles are committed and the Pi only
-  installs them. The radio never appears as a sound card.
-- The driver picks its transport from the SoC and each transport names its
-  image: Pi 5 PIO with `rpi5-pio` (the released image with
-  `pio_released_image=1`); Pi 4 I2S when the `radioberry-i2s` overlay is
-  loaded, else the CPU-clocked buses with the PIO image. The gateware-v2
-  images are built for the 10CL025 only.
-- Development FPGA is a 10CL025. The driver supports CL016 and CL025.
-- The PIO gateware's RX lock-up
-  ([docs/fault-rx-lockup.md](../docs/fault-rx-lockup.md)) is worked around
-  by the driver's RX clock hold (`rx_clock_hold_us`, default 200) on the
-  released image; the `rpi5-pio` image has no FIFO clear and so no
-  lock-up (the hold is kept and harmless).
+- Gateware: one image per board, 10CL025 only, built from `gateware/`
+  with Quartus Prime Lite 23.1std.1 in Docker on an x86-64 machine;
+  bitfiles are committed and the Pi only installs them. The Hermes-Lite 2
+  radio core is read unmodified from `gateware/source/`. The radio never
+  appears as a sound card.
+- The driver picks its transport from the SoC: Pi 5 PIO with `rpi5-pio`,
+  Pi 4 I2S with `rpi4-i2s`. One overlay, `dtoverlay=radioberry`, on both.
+- CL016: not supported; a variant only if someone with the board will
+  test it (README roadmap).
 - The daemon assumes nothing about the image: gateware details (FIFO
   sizes, latencies) belong to the gateware and the driver.
 - No transmit test without the board owner's explicit permission for that
@@ -69,8 +52,9 @@ item is removed from here and recorded at the top of
   PTT is a transmission. Transmit code is proved first against fakes.
 - Names: daemon `radioberryd`, unit `radioberry.service`, config
   `/etc/radioberry/config.yaml`, module `radioberry.ko`, C++ namespace
-  `radioberry`, tools `rbprobe`, `rbcat`, `rbctl`, `rbload`, `p1probe`,
-  `p2probe`.
+  `radioberry`, tools `rbprobe`, `rbcat`, `rbctl`, `p1probe`, `p2probe`.
+- Installed config: `frequency_ppm: 22.9`, `realtime: false`, transmit
+  off.
 - Config files in YAML via yaml-cpp. Tool output in three forms: human
   text (default), `--json` via nlohmann/json, `--yaml` via yaml-cpp.
 - Logging with spdlog: stderr in the foreground, journal as a service.
@@ -87,62 +71,68 @@ item is removed from here and recorded at the top of
   48 to 384 ksps, no wideband, diversity or audio.
 - RX capacity: about 2.37 million values per second over the Pi 5's PIO
   bus (six receivers at 192 ksps), 1.536 million over the Pi 4's I2S link
-  (four at 192 ksps), 192 000 on the Pi 4's CPU-clocked buses. The daemon
-  runs fewer receivers than asked for above it, never fewer than one.
+  (four at 192 ksps). The daemon runs fewer receivers than asked for above
+  it, never fewer than one.
 - Code style: clang-format 19, Google base, 4-space indent, 100 columns;
   `-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Werror`. The kernel
   module and ABI header use kernel style and are not clang-formatted.
 - Version string from `git describe`, embedded at configure time.
 
-## 1. gateware-v2 (`gateware-v2/`, `driver/`)
+## 1. Release 0.5.0
 
+- [ ] CI on a claimed cluster Pi: format, SPDX, checkpatch, sparse,
+      clang-tidy, tests, and 100% line coverage (add tests or remove dead
+      code until the gate passes).
+- [ ] Packages built from the branch; on each Pi, an upgrade from 0.4.1
+      with apt comes up on the new image with `dtoverlay=radioberry` alone
+      (the Pi 4 with the old `[pi4] dtoverlay=radioberry-i2s` line removed
+      or left, warned by `postinst`). Acceptance: `rbprobe` exits 0,
+      `ft8rx` decodes over P1 and P2 with nothing lost, on both boards.
+- [ ] Kernel matrix on both boards with the new driver
+      ([docs/kernels.md](../docs/kernels.md) lists 0.4.1's results).
+- [ ] Release gate per board (clean-down, README install, FT8 receive, the
+      owner's contact); version 0.5.0.
+
+## 2. Gateware (`gateware/`, `driver/`)
+
+- [ ] [Gateware review](../gateware/docs/review.md) findings: not being
+      worked on now.
 - [ ] Pi 5 receive level of its own transmission: with the same tools the
       Pi 5 sees the tone 25 dB stronger in loopback (-18.7 against -43.6
       dBFS) and 48 dB stronger keyed into the dummy load (-16.9 against
       -64.9) than the Pi 4; output power matches (1.4 W against 1.35 W at
       drive 128). Cause unknown. Acceptance: explained by a measurement.
-- [ ] Pi 4 install instructions: the README quickstart and the
-      `postinst` message name only `dtoverlay=radioberry`, which gives a
-      Pi 4 the CPU-clocked transport. Add `[pi4] dtoverlay=radioberry-i2s`
-      `[all]`, or fold the PCM fragment into one overlay that still
-      applies on a Pi 5. Acceptance: a clean Pi 4 following the README
-      comes up on the I2S transport.
 - [ ] Pi 4 transmit, 30 m: the image counted 482 TX underruns across the
       30 m transmissions (drive 150, capped from 162), none on 40 m before
       or after. Cause unknown. Acceptance: the cause found from a counter
-      log of one 30 m transmission (`/root/txcount-log.sh` pattern).
+      log of one 30 m transmission.
 - [ ] Transmit drive curve: power rose about 1.06 dB per AD9866 gain code
       against the datasheet's 0.5 dB. Cause unknown (PA gain with level,
       TxDAC/IAMP split, the board's register 0x0e). Measurement first.
 - [ ] TX bit 4 (FPGA pin 105) misses the AD9866 setup by 2.7 ns in the
       slow model and is relaxed in the constraints
-      ([hardware_discovery.md](../gateware-v2/hardware_discovery.md)
+      ([hardware-discovery.md](../gateware/docs/hardware-discovery.md)
       section 4). Watch the `strict` line of `tools/worst.sh` on every
       build; investigate if bits 4 or 10 of transmitted samples show
       errors.
-- [ ] Documentation for gateware-v2: the TX bus in hardware_discovery, a
-      README for gateware-v2 like gateware/README.md, the driver's
-      `tx_loopback` and `i2s_counters` sysfs files, docs/daemon.md.
+- [ ] Receiver-count stress run on hardware now that the driver holds no
+      RX clock (review finding 2.3).
 - [ ] Optional: a lock-phase status bit in the I2S image, so each TX
       stream's realign is attributable (explanation now inferred).
+- [ ] A CL016 variant, if someone with a CL016 board will test it.
 
-## 2. Kernel driver remainder (`driver/`)
+## 3. Kernel driver remainder (`driver/`)
 
-- [ ] Raspberry Pi 4 on 6.12.75: the harness test "the daemon's device
-      layer streams through the driver" failed once in 11 runs (a gap,
-      `rx_blocks_dropped` 31, RX queue full) on the CPU-clocked transport.
-      Find the cause. Acceptance: the cause identified, and fixed if it is
-      ours.
 - [ ] Upstream review: the driver has not been through review on the
       kernel mailing lists.
 
-## 3. Daemon (`daemon/`)
+## 4. Daemon (`daemon/`)
 
 - [ ] HL2 drive compatibility: the HL2 gateware takes 0x09's top four
       bits as AD9866 TX gain codes 0 to 15, the RadioBerry images map the
       whole byte to codes 0 to 39, and the PA hat is not the HL2's, so HL2
       software sends far too little drive. With the measured curve
-      (section 1), decide whether `radioberryd` maps HL2 drive to
+      (section 2), decide whether `radioberryd` maps HL2 drive to
       RadioBerry codes. Current piHPSDR (dl1ycf 900b1c94,
       `radio_calc_drive_level`) sends the 0x09 byte as a 0.5 dB attenuator
       step and the rest in the TX I/Q amplitude.
@@ -156,7 +146,7 @@ item is removed from here and recorded at the top of
       behind. Confirm with per-socket drops (`ss -uamp`) while it runs;
       a larger `net.core.rmem_default` is the board owner's decision.
 
-## 4. Tools (`tools/`)
+## 5. Tools (`tools/`)
 
 - [ ] `rbprobe` reports an install of the original RadioBerry software. Its
       installer is a shell script, so dpkg cannot see it, and both installs
@@ -183,12 +173,6 @@ item is removed from here and recorded at the top of
       `postinst` prints the same. Acceptance: tests through
       the fake source for each signal alone and combined, and no finding on
       a Pi with only the packages installed.
-
-## 5. Gateware (released PIO images)
-
-- [ ] Test the CL016 image on a CL016 board, receive and transmit, when
-      one is available. (The `rpi4-i2s` image has no CL016 build; not
-      pursued.)
 
 ## 6. Hardware validation
 

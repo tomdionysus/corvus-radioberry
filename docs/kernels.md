@@ -8,8 +8,8 @@ driver for it; nothing needs reinstalling.
 
 ## Differences between 6.12 and 6.18
 
-The Raspberry Pi 4 driver clocks the RadioBerry's buses from the CPU and
-uses no interface that differs between the two series. The Raspberry Pi 5
+The Raspberry Pi 4 driver uses the PCM block and its DMA channels, which
+do not differ between the two series. The Raspberry Pi 5
 driver streams through the RP1's PIO with the kernel's `rp1-pio` driver
 and the `dw-axi-dmac` DMA controller, which differ:
 
@@ -25,14 +25,14 @@ and the `dw-axi-dmac` DMA controller, which differ:
 
 Each kernel, installed from the Raspberry Pi OS archive with its headers
 (DKMS built the driver at install), booted on the board with a 10CL025
-RadioBerry and gateware 75.3, passed:
+RadioBerry, passed:
 
 - `rbprobe`: radio can run
 - `ft8rx` on 40 m, four 15 s periods each over Protocol 1 and Protocol 2:
   decodes, no packets lost
 - `rbcat --seconds 10 --tx-zeros`: 48 000 frames per second, no resyncs
   or dropped words, TX taken at 48 000 words per second
-- `rbdrivertest` ([Driver hardware tests](driver-tests.md)): all tests
+- `rbdrivertest` ([Driver hardware tests](https://github.com/tomdionysus/corvus-radioberry/blob/main/driver/docs/driver-tests.md)): all tests
 
 | Kernel | Raspberry Pi 4 (`rpi-v8`) | Raspberry Pi 5 (`rpi-2712`) |
 |---|---|---|

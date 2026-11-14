@@ -41,7 +41,7 @@ From [Hardware discovery](hardware-discovery.md).
 
 The Raspberry Pi 4 limit that started this: clocking a bus from the CPU
 costs a core from 192 000 values per second
-([CPU cost of receive](../../docs/finding-rpi4-cpu.md)).
+([CPU cost of receive](https://github.com/tomdionysus/corvus-radioberry/blob/v0.4.1/docs/finding-rpi4-cpu.md)).
 
 ## 3. Strategies
 

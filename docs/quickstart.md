@@ -1,8 +1,9 @@
 # Quickstart
 
 For a Raspberry Pi 4 or 5 running Raspberry Pi OS (Debian 13 trixie,
-64-bit) with the RadioBerry fitted. If the original RadioBerry software
-was installed, [remove it first](original-software.md).
+64-bit) with a RadioBerry fitted whose FPGA is a 10CL025 (the chip's
+marking starts `10CL025`). If the original RadioBerry software was
+installed, [remove it first](original-software.md).
 
 ## 1. Install
 
@@ -14,24 +15,14 @@ sudo curl -fsSLo /etc/apt/sources.list.d/tomcully.sources https://tomcully.com/a
 sudo apt update && sudo apt install radioberry
 ```
 
-The install asks which FPGA the RadioBerry has: read the chip's marking,
-`10CL025...` or `10CL016...`.
-
 ## 2. Enable the driver
 
-Add to the end of `/boot/firmware/config.txt`:
+Add to `/boot/firmware/config.txt`:
 
 ```
-[all]
 dtparam=i2c_arm=on
 dtoverlay=radioberry
-[pi4]
-dtoverlay=radioberry-i2s
-[all]
 ```
-
-The `[pi4]` line gives a Raspberry Pi 4 the I2S transport; a Pi 5
-ignores it.
 
 Reboot, then check:
 
@@ -49,7 +40,7 @@ default. The ones most set:
 
 | Key | Default | Set it to |
 |---|---|---|
-| `frequency_ppm` | `0` | your RadioBerry's frequency error ([calibration](calibration.md)) |
+| `frequency_ppm` | `22.9` | your RadioBerry's frequency error ([calibration](calibration.md)); 22.9 is typical |
 | `allow_tx` | `false` | `true` to transmit |
 | `allow_pa` | `false` | `true` to use the PA; connect a rated antenna or dummy load first |
 | `drive_ceiling` | `150` | the highest drive sent, 0 to 255 |
