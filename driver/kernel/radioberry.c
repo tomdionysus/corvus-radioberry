@@ -12,26 +12,21 @@
  * stops the streams, reloads the gateware, re-reads its identity and
  * restarts the streams.
  *
- * The streams have two transports, chosen at probe from the SoC; the rest
- * of the driver is shared:
+ * Each board has its own gateware image and transport, chosen at probe
+ * from the SoC; commands go to both images in the same framed protocol
+ * (rb_frame.h), and the rest of the driver is shared:
  *
- * - Pi 5 (BCM2712): two RP1 PIO state machines, built only on the stock
- *   rp1-pio kernel API. RX DMA writes the driver's own coherent buffers,
- *   TX DMA reads rp1-pio's bounce buffers: up to RB_DMA_SLOTS periods
- *   are in flight per direction and a FIFO-priority
- *   kernel thread refills them, so the state machines never wait for a
- *   restart. The gateware-v2 image (radioberry-rpi5-pio.rbf) takes its
- *   commands in the framed protocol (rb_frame.h); module parameter
- *   pio_released_image=1 loads the released image (radioberry.rbf), which
- *   takes the 48-bit command blocks.
- * - Pi 4 (BCM2711), which has no PIO: a FIFO-priority kernel thread
- *   clocks both buses through the GPIO block's set, clear and level
- *   registers with the same handshakes (rb_bitbang.h), at a lower rate.
- * - Pi 4 with the radioberry-i2s overlay: the gateware-v2 receive image
- *   (radioberry-rpi4-i2s.rbf) drives an I2S link into the BCM2711's PCM
- *   block, which this driver programs directly with cyclic DMA; commands
- *   use that image's framed protocol (rb_frame.h). Transmit is not wired
- *   in that image: the driver reports no transmitter and discards TX words.
+ * - Pi 5 (BCM2712), radioberry-rpi5-pio.rbf: two RP1 PIO state machines,
+ *   built only on the stock rp1-pio kernel API. RX DMA writes the
+ *   driver's own coherent buffers, TX DMA reads rp1-pio's bounce buffers:
+ *   up to RB_DMA_SLOTS periods are in flight per direction and a
+ *   FIFO-priority kernel thread refills them, so the state machines never
+ *   wait for a restart.
+ * - Pi 4 (BCM2711), radioberry-rpi4-i2s.rbf: an I2S link into the
+ *   BCM2711's PCM block, the FPGA as clock master. The driver finds the
+ *   block itself, puts GPIO 18 to 21 in their PCM function and programs it
+ *   directly with cyclic DMA; its device tree node stays disabled, so no
+ *   sound card appears.
  *
  * The PIO programs and the overall design follow the original RadioBerry
  * Pi 5 driver, released into the public domain under the Unlicense.
@@ -67,36 +62,9 @@
 #include "rb_frame.h"
 #include "rb_pio.h"
 
-/* BCM2711 GPIO block registers for the CPU-clocked buses. */
-#define RB_BCM2711_GPSET0 0x1c
-#define RB_BCM2711_GPCLR0 0x28
-#define RB_BCM2711_GPLEV0 0x34
-
-struct rb_bb_io {
-	void __iomem *base;
-};
-
-static inline void rb_bb_set(struct rb_bb_io *io, u32 mask)
-{
-	writel_relaxed(mask, io->base + RB_BCM2711_GPSET0);
-}
-
-static inline void rb_bb_clr(struct rb_bb_io *io, u32 mask)
-{
-	writel_relaxed(mask, io->base + RB_BCM2711_GPCLR0);
-}
-
-static inline u32 rb_bb_lev(struct rb_bb_io *io)
-{
-	return readl_relaxed(io->base + RB_BCM2711_GPLEV0);
-}
-
-#include "rb_bitbang.h"
-
 #define RB_DRIVER_VERSION ((0u << 16) | (4u << 8) | 1u)
 #define RB_DRIVER_VERSION_STRING "0.4.1"
 
-#define RB_FIRMWARE_NAME "radioberry.rbf"
 #define RB_DMA_SLOTS 4
 #define RB_RX_SLOT_BYTES (32 * 1024)
 #define RB_RX_MIN_PERIOD 256
@@ -106,12 +74,6 @@ static inline u32 rb_bb_lev(struct rb_bb_io *io)
 static bool load_gateware = true;
 module_param(load_gateware, bool, 0444);
 MODULE_PARM_DESC(load_gateware, "Load the gateware into the FPGA on probe (default 1)");
-
-static bool pio_released_image;
-module_param(pio_released_image, bool, 0444);
-MODULE_PARM_DESC(pio_released_image,
-		 "Pi 5: load the released image " RB_FIRMWARE_NAME
-		 " instead of the gateware-v2 image radioberry-rpi5-pio.rbf (default 0)");
 
 static unsigned int rx_clkdiv = RB_RX_CLKDIV_DEFAULT;
 module_param(rx_clkdiv, uint, 0444);
@@ -129,28 +91,7 @@ static unsigned int tx_ring_kib = 64;
 module_param(tx_ring_kib, uint, 0444);
 MODULE_PARM_DESC(tx_ring_kib, "TX ring size in KiB, rounded up to a power of two (default 64)");
 
-/*
- * Pi 4 (CPU-clocked buses) only. The RX limit is what the daemon lets
- * clients ask for: two receivers at 48 ksps or one at 96. Above it the
- * thread takes a whole core (docs/testing.md).
- */
-#define RB_BB_RX_VALUES_MAX_DEFAULT 192000
-static unsigned int bb_rx_values_max = RB_BB_RX_VALUES_MAX_DEFAULT;
-module_param(bb_rx_values_max, uint, 0444);
-MODULE_PARM_DESC(bb_rx_values_max,
-		 "Pi 4: RX values per second offered to userspace (default 192000)");
-
-static unsigned int bb_settle_reads;
-module_param(bb_settle_reads, uint, 0444);
-MODULE_PARM_DESC(bb_settle_reads, "Pi 4: extra pin reads after each bus clock pulse (default 0)");
-
-#define RB_BB_RX_BATCH 256     /* words per RX run, at most 2048 clocks */
-#define RB_BB_RX_MAX_IDLE 64   /* idle clocks before the thread rests */
-#define RB_BB_TX_MAX_POLLS 64  /* polling edges per word before giving up */
-#define RB_BB_IDLE_MIN_US 500  /* rest with nothing to move: the gateware's */
-#define RB_BB_IDLE_MAX_US 1000 /* RX FIFO lasts 10 ms at 96 000 values/s */
-
-/* The PIO bus's RX ceiling, measured (gateware/README.md section 5). */
+/* The PIO bus's RX ceiling at the default divider (gateware/docs/interfaces.md). */
 #define RB_PIO_RX_VALUES_MAX 2370000
 
 /* rp1-pio's own values (drivers/misc/rp1-pio.c): FIFO depth, DMACTRL base. */
@@ -177,23 +118,6 @@ MODULE_PARM_DESC(debug, "0: quiet; 1: rate-limited resyncs, overruns, underruns,
 /* RX words must arrive within this time while run is set, or the stream is stalled. */
 #define RB_STALL_MS 200
 
-/*
- * Workaround for the PIO gateware's receive lock-up, docs/fault-rx-lockup.md.
- * The gateware clears its RX FIFO asynchronously at every receiver-count
- * change, and the FIFO's read side and the state machine that streams it to
- * the Pi run on the clock this driver's RX state machine drives. If that
- * clock has an edge while the clear is asserted or released, the read-out
- * can lock up for good (only a gateware reload recovers). With the RX state
- * machine stopped across the command the clock stands still and the window
- * cannot be hit: measured 0 lock-ups in 4500 changes against 17 in 1800
- * without the hold. 0 disables the hold (for measuring the fault).
- */
-#define RB_RX_CLOCK_HOLD_US_DEFAULT 200
-static unsigned int rx_clock_hold_us = RB_RX_CLOCK_HOLD_US_DEFAULT;
-module_param(rx_clock_hold_us, uint, 0644);
-MODULE_PARM_DESC(rx_clock_hold_us,
-		 "Stop the RX state machine, so the Pi's RX clock is still, from before a receiver-count command until this many microseconds after it (default 200; 0: never, exposes the gateware's RX lock-up)");
-
 struct rb_stream {
 	int sm;
 	int prog_offset;
@@ -208,35 +132,22 @@ struct rb_stream {
 
 struct rb_dev;
 
-/* How the RX and TX streams reach the gateware. */
+/* How the RX and TX streams reach the gateware, and which image it runs. */
 struct rb_transport {
 	const char *name;
-	u32 rx_values_max; /* 0: bb_rx_values_max */
+	u32 rx_values_max;
 	/* Starts both streams and their kernel thread; undoes itself on failure. */
 	int (*up)(struct rb_dev *rb);
 	/* Stops everything up() started. Safe to call when it is not running. */
 	void (*down)(struct rb_dev *rb);
-	/* Stops the RX clock (true) until rx_release(); false if not running. */
-	bool (*rx_hold)(struct rb_dev *rb);
-	void (*rx_release)(struct rb_dev *rb);
 	/*
 	 * Stops RX after rx_paused is set, returning once no RX is clocked;
 	 * restarts it after rx_paused is cleared. Safe while not running.
 	 */
 	void (*rx_pause)(struct rb_dev *rb);
 	void (*rx_resume)(struct rb_dev *rb);
-	/*
-	 * Optional: sends one command block (RB_CMD_BYTES) its own way and
-	 * fills rx[] as the PIO gateware would reply. NULL: the block goes out
-	 * as one 48-bit SPI transfer.
-	 */
-	int (*command)(struct rb_dev *rb, const u8 *tx, u8 *rx);
-	const char *firmware; /* NULL: RB_FIRMWARE_NAME */
-	/*
-	 * A gateware-v2 image with the framed protocol (rb_frame.h): the
-	 * transport its CAPS register must report. 0: the released image.
-	 */
-	u8 caps_transport;
+	const char *firmware;
+	u8 caps_transport; /* the link its image's CAPS register reports */
 };
 
 struct rb_dev {
@@ -247,7 +158,6 @@ struct rb_dev {
 	struct rb_identity id;
 
 	struct mutex cmd_lock; /* SPI commands */
-	u8 *spi_tx, *spi_rx;   /* DMA-safe command buffers */
 	bool ptt;
 	bool run; /* run bit of the last command sent */
 	/*
@@ -267,16 +177,6 @@ struct rb_dev {
 	struct device *pio_dma_dev; /* the RP1 DMA controller, a reference held */
 	struct rb_stream rx, tx;
 
-	/* Pi 4: CPU-clocked buses. bb_lock is held while the thread clocks. */
-	struct rb_bb_io bbio;
-	struct rb_bb_bus bb;
-	struct mutex bb_lock;
-	struct gpio_desc *bb_rx_clk, *bb_tx_clk, *bb_tx_data, *bb_rx_ready, *bb_tx_ready;
-	struct gpio_descs *bb_rx_data;
-	u32 *bb_rx_words;
-	u32 *bb_tx_words;
-	unsigned int bb_tx_count, bb_tx_pos; /* words in bb_tx_words, words sent */
-
 	spinlock_t rx_lock; /* parser, rx ring, rx statistics */
 	struct rb_rx_parser parser;
 	struct rb_ring rx_ring;
@@ -293,7 +193,7 @@ struct rb_dev {
 	bool tx_starved;
 	wait_queue_head_t tx_wait;
 
-	/* Pi 4 I2S transport (gateware-v2 image). */
+	/* Pi 4 I2S transport. */
 	void __iomem *pcm;
 	struct dma_chan *pcm_rx, *pcm_tx;
 	dma_cookie_t pcm_rx_cookie, pcm_tx_cookie;
@@ -312,17 +212,19 @@ struct rb_dev {
 	u64 pcm_tx_fifo_errors;	/* PCM TX FIFO ran dry (the image realigns) */
 	unsigned int i2s_div;		/* the divider the streams run at */
 	unsigned int i2s_div_want;	/* for the current receivers and rate */
+
+	/* The image's framed control protocol (both boards). */
 	u8 *frame_tx, *frame_rx;	/* DMA-safe */
 	u8 frame_seq;
-	u8 i2s_status2;		/* from the last reply */
-	u8 i2s_flags;		/* run, permission, PA allowed, PTT (0x80) last sent */
-	bool i2s_flags_sent;
-	u32 i2s_control;	/* CONTROL last written */
-	bool i2s_control_sent;
-	bool i2s_loopback;	/* sysfs tx_loopback */
-	struct delayed_work i2s_keepalive; /* rewrites KEYING while it is set */
-	u8 i2s_reply[RB_CMD_BYTES]; /* identity in the PIO reply layout, once valid */
-	bool i2s_identified;
+	u8 status2;		/* from the last reply */
+	u8 flags;		/* run, permission, PA allowed, PTT (0x80) last sent */
+	bool flags_sent;
+	u32 control;		/* CONTROL last written */
+	bool control_sent;
+	bool loopback;		/* sysfs tx_loopback */
+	struct delayed_work keepalive; /* rewrites KEYING while it is set */
+	u8 reply[RB_CMD_BYTES];	/* identity in the reply layout, once valid */
+	bool identified;
 
 	struct mutex io_lock; /* read and write bounce buffers */
 	u8 *io_buf;
@@ -339,34 +241,23 @@ struct rb_dev {
 
 /* ---- SPI control ---------------------------------------------------- */
 
+static int rb_frame_command(struct rb_dev *rb, const u8 *tx, u8 *rx);
+
+/*
+ * Sends one command block (RB_CMD_BYTES, the radioberry_command layout) to
+ * the image and fills rx[] with the reply in the same layout, if rx is set.
+ */
 static int rb_command_locked(struct rb_dev *rb, const u8 *tx, u8 *rx)
 {
-	struct spi_transfer t = {
-		.tx_buf = rb->spi_tx,
-		.rx_buf = rb->spi_rx,
-		.len = RB_CMD_BYTES,
-	};
+	u8 reply[RB_CMD_BYTES];
 	int ret;
 
 	lockdep_assert_held(&rb->cmd_lock);
-	if (rb->tp->command) {
-		u8 reply[RB_CMD_BYTES];
-
-		ret = rb->tp->command(rb, tx, reply);
-		if (ret)
-			return ret;
-		if (rx)
-			memcpy(rx, reply, RB_CMD_BYTES);
-		rb->ptt = rb_cmd_ptt(tx);
-		WRITE_ONCE(rb->run, (tx[0] & RADIOBERRY_CMD_RUN) != 0);
-		return 0;
-	}
-	memcpy(rb->spi_tx, tx, RB_CMD_BYTES);
-	ret = spi_sync_transfer(rb->spi, &t, 1);
+	ret = rb_frame_command(rb, tx, reply);
 	if (ret)
 		return ret;
 	if (rx)
-		memcpy(rx, rb->spi_rx, RB_CMD_BYTES);
+		memcpy(rx, reply, RB_CMD_BYTES);
 	rb->ptt = rb_cmd_ptt(tx);
 	WRITE_ONCE(rb->run, (tx[0] & RADIOBERRY_CMD_RUN) != 0);
 	return 0;
@@ -378,11 +269,9 @@ static int rb_command_locked(struct rb_dev *rb, const u8 *tx, u8 *rx)
  * driver stops the RX clock and the bus and the thread go idle. On resume
  * the parser settles, as after a receiver-count change, since the words
  * that follow the pause need not continue the frame in progress, and frames
- * queued before the pause are dropped. settle_us: the command that set run
- * also changed the receiver count, so the clock stays still that long for
- * the gateware's RX FIFO clear (rx_clock_hold_us).
+ * queued before the pause are dropped.
  */
-static void rb_rx_gate(struct rb_dev *rb, unsigned int settle_us)
+static void rb_rx_gate(struct rb_dev *rb)
 {
 	unsigned long flags;
 
@@ -392,8 +281,6 @@ static void rb_rx_gate(struct rb_dev *rb, unsigned int settle_us)
 		rb->tp->rx_pause(rb);
 		rb_trace(rb, "RX paused: run clear\n");
 	} else if (READ_ONCE(rb->run) && rb->rx_paused) {
-		if (settle_us)
-			usleep_range(settle_us, settle_us + settle_us / 4);
 		spin_lock_irqsave(&rb->rx_lock, flags);
 		rb_rx_set_receivers(&rb->parser, rb->receivers);
 		rb_ring_reset(&rb->rx_ring);
@@ -415,7 +302,7 @@ static int rb_command_safe(struct rb_dev *rb, u8 *rx)
 	mutex_lock(&rb->cmd_lock);
 	ret = rb_command_locked(rb, tx, rx);
 	if (!ret)
-		rb_rx_gate(rb, 0);
+		rb_rx_gate(rb);
 	mutex_unlock(&rb->cmd_lock);
 	return ret;
 }
@@ -505,8 +392,8 @@ static int rb_configure_fpga(struct rb_dev *rb, const u8 *image, size_t size)
 		return -EIO;
 	}
 	if (!gpiod_get_value_cansleep(rb->conf_done)) {
-		dev_err(rb->dev, "CONF_DONE stayed low: %s does not match this FPGA\n",
-			rb->tp->firmware ? rb->tp->firmware : RB_FIRMWARE_NAME);
+		dev_err(rb->dev, "CONF_DONE stayed low: %s is built for a 10CL025 FPGA\n",
+			rb->tp->firmware);
 		return -EIO;
 	}
 	for (i = 0; i < 64; i++) {
@@ -518,7 +405,7 @@ static int rb_configure_fpga(struct rb_dev *rb, const u8 *image, size_t size)
 
 static int rb_load_gateware(struct rb_dev *rb)
 {
-	const char *name = rb->tp->firmware ? rb->tp->firmware : RB_FIRMWARE_NAME;
+	const char *name = rb->tp->firmware;
 	const struct firmware *fw;
 	int ret;
 
@@ -532,17 +419,20 @@ static int rb_load_gateware(struct rb_dev *rb)
 		dev_info(rb->dev, "gateware %s configured (%zu bytes)\n", name, fw->size);
 	release_firmware(fw);
 	/*
-	 * A framed image starts with its registers cleared: identify it again
-	 * and send it the flags and CONTROL afresh.
+	 * The image starts with its registers cleared: identify it again and
+	 * send it the flags and CONTROL afresh.
 	 */
-	rb->i2s_identified = false;
-	rb->i2s_flags_sent = false;
-	rb->i2s_control_sent = false;
+	rb->identified = false;
+	rb->flags_sent = false;
+	rb->control_sent = false;
 	if (ret)
 		return ret;
 
-	/* The gateware holds itself in reset for about 1.7 s after loading. */
-	msleep(1800);
+	/*
+	 * The image sets up the AD9866 within a few milliseconds of loading;
+	 * rb_read_identity() polls until it reports set up and running.
+	 */
+	msleep(20);
 	return 0;
 }
 
@@ -703,10 +593,9 @@ static bool rb_work_pending(struct rb_dev *rb)
 }
 
 /*
- * The gateware has been seen to stop delivering RX words for good until
- * it is reloaded. Notes the first RB_STALL_MS without words while run is
- * set, and the resumption, so the condition is visible in the log and in
- * sysfs (rx_stalled, rx_stalls).
+ * Notes the first RB_STALL_MS without RX words while run is set, and the
+ * resumption, so a stopped stream is visible in the log and in sysfs
+ * (rx_stalled, rx_stalls).
  */
 static void rb_check_stall(struct rb_dev *rb)
 {
@@ -1016,278 +905,31 @@ static int rb_pio_up(struct rb_dev *rb)
 	return 0;
 }
 
-/* Stops the RX state machine, so the RX clock stands still. */
-static bool rb_pio_rx_hold(struct rb_dev *rb)
-{
-	struct rp1_pio_sm_set_enabled_args off = { .mask = (u16)BIT(rb->rx.sm) };
-
-	return rb->pio && rp1_pio_sm_set_enabled(rb->pio, &off) == 0;
-}
-
-static void rb_pio_rx_release(struct rb_dev *rb)
-{
-	struct rp1_pio_sm_set_enabled_args on = { .mask = (u16)BIT(rb->rx.sm), .enable = 1 };
-
-	rp1_pio_sm_set_enabled(rb->pio, &on);
-}
-
 /*
  * The RX state machine stops, so the clock stands still and nothing reaches
  * the DMA; the periods in flight wait for it and the thread sleeps.
  */
+static void rb_pio_rx_enable(struct rb_dev *rb, bool on)
+{
+	struct rp1_pio_sm_set_enabled_args args = { .enable = on };
+
+	if (!rb->pio || rb->rx.sm < 0)
+		return;
+	args.mask = (u16)BIT(rb->rx.sm);
+	rp1_pio_sm_set_enabled(rb->pio, &args);
+}
+
 static void rb_pio_rx_pause(struct rb_dev *rb)
 {
-	if (rb->pio && rb->rx.sm >= 0)
-		rb_pio_rx_hold(rb);
+	rb_pio_rx_enable(rb, false);
 }
 
 static void rb_pio_rx_resume(struct rb_dev *rb)
 {
-	if (rb->pio && rb->rx.sm >= 0)
-		rb_pio_rx_release(rb);
+	rb_pio_rx_enable(rb, true);
 }
 
-static const struct rb_transport rb_pio_transport = {
-	.name = "rp1-pio",
-	.rx_values_max = RB_PIO_RX_VALUES_MAX,
-	.up = rb_pio_up,
-	.down = rb_pio_down,
-	.rx_hold = rb_pio_rx_hold,
-	.rx_release = rb_pio_rx_release,
-	.rx_pause = rb_pio_rx_pause,
-	.rx_resume = rb_pio_rx_resume,
-};
-
-/* ---- CPU-clocked buses (Pi 4) --------------------------------------- */
-
-/* Moves TX words from the ring to the gateware; called with bb_lock held. */
-static bool rb_bb_tx(struct rb_dev *rb)
-{
-	unsigned long flags;
-	unsigned int sent;
-	bool underrun;
-	u32 bytes;
-
-	if (rb->bb_tx_pos == rb->bb_tx_count) {
-		spin_lock_irqsave(&rb->tx_lock, flags);
-		bytes = rb_ring_get(&rb->tx_ring, (u8 *)rb->bb_tx_words, RB_TX_SLOT_BYTES);
-		underrun = !bytes && rb->ptt && !rb->tx_starved;
-		if (underrun) {
-			rb->stats.tx_underruns++;
-			rb->tx_starved = true;
-		}
-		if (bytes)
-			rb->tx_starved = false;
-		spin_unlock_irqrestore(&rb->tx_lock, flags);
-		if (underrun)
-			rb_debug(rb, "TX underrun with PTT set\n");
-		if (!bytes)
-			return false;
-		wake_up_interruptible(&rb->tx_wait);
-		rb->bb_tx_count = bytes / 4;
-		rb->bb_tx_pos = 0;
-	}
-	sent = rb_bb_tx_run(&rb->bb, rb->bb_tx_words + rb->bb_tx_pos,
-			    rb->bb_tx_count - rb->bb_tx_pos, RB_BB_TX_MAX_POLLS);
-	rb->bb_tx_pos += sent;
-	spin_lock_irqsave(&rb->tx_lock, flags);
-	rb->stats.tx_words += sent;
-	spin_unlock_irqrestore(&rb->tx_lock, flags);
-	return true;
-}
-
-/* While RX is paused: wake for TX words, for resume, or to stop. */
-static bool rb_bb_paused_wake(struct rb_dev *rb)
-{
-	unsigned long flags;
-	bool tx_data;
-
-	if (kthread_should_stop() || !READ_ONCE(rb->rx_paused))
-		return true;
-	spin_lock_irqsave(&rb->tx_lock, flags);
-	tx_data = rb_ring_used(&rb->tx_ring) != 0;
-	spin_unlock_irqrestore(&rb->tx_lock, flags);
-	return tx_data;
-}
-
-static int rb_bb_worker(void *arg)
-{
-	struct rb_dev *rb = arg;
-	unsigned int got;
-	bool paused, tx_busy;
-
-	while (!kthread_should_stop()) {
-		mutex_lock(&rb->bb_lock);
-		/* Read under bb_lock: rb_bb_rx_pause() waits for this run. */
-		paused = READ_ONCE(rb->rx_paused);
-		got = paused ? 0 :
-			       rb_bb_rx_run(&rb->bb, rb->bb_rx_words, RB_BB_RX_BATCH,
-					    RB_BB_RX_MAX_IDLE);
-		tx_busy = rb_bb_tx(rb);
-		mutex_unlock(&rb->bb_lock);
-		if (got && rb_rx_consume(rb, rb->bb_rx_words, got))
-			wake_up_interruptible(&rb->rx_wait);
-		rb_check_stall(rb);
-		if (got || tx_busy)
-			cond_resched();
-		else if (paused)
-			wait_event_interruptible_timeout(rb->work_wait, rb_bb_paused_wake(rb),
-							 msecs_to_jiffies(100));
-		else
-			usleep_range(RB_BB_IDLE_MIN_US, RB_BB_IDLE_MAX_US);
-	}
-	return 0;
-}
-
-static void rb_bb_put_gpios(struct rb_dev *rb)
-{
-	struct gpio_desc **out[] = { &rb->bb_rx_clk, &rb->bb_tx_clk, &rb->bb_tx_data,
-				     &rb->bb_rx_ready, &rb->bb_tx_ready };
-	unsigned int i;
-
-	for (i = 0; i < ARRAY_SIZE(out); i++) {
-		if (!IS_ERR_OR_NULL(*out[i]))
-			gpiod_put(*out[i]);
-		*out[i] = NULL;
-	}
-	if (!IS_ERR_OR_NULL(rb->bb_rx_data))
-		gpiod_put_array(rb->bb_rx_data);
-	rb->bb_rx_data = NULL;
-}
-
-static void rb_bb_down(struct rb_dev *rb)
-{
-	if (rb->worker) {
-		kthread_stop(rb->worker);
-		rb->worker = NULL;
-	}
-	if (rb->bbio.base) {
-		rb_bb_clr(&rb->bbio, RB_BB_RX_CLK | RB_BB_TX_CLK | RB_BB_TX_DATA);
-		iounmap(rb->bbio.base);
-		rb->bbio.base = NULL;
-	}
-	rb_bb_put_gpios(rb);
-	kfree(rb->bb_rx_words);
-	kfree(rb->bb_tx_words);
-	rb->bb_rx_words = NULL;
-	rb->bb_tx_words = NULL;
-	rb->bb_tx_count = 0;
-	rb->bb_tx_pos = 0;
-}
-
-/*
- * The stream pins as the overlay lists them, claimed through gpiolib (which
- * sets their direction and the inputs' pull-downs), and the GPIO block's
- * registers mapped for the clocking itself.
- */
-static int rb_bb_up(struct rb_dev *rb)
-{
-	struct device_node *np;
-	int ret;
-
-	rb->bb_rx_clk = gpiod_get(rb->dev, "rx-clk", GPIOD_OUT_LOW);
-	rb->bb_tx_clk = gpiod_get(rb->dev, "tx-clk", GPIOD_OUT_LOW);
-	rb->bb_tx_data = gpiod_get(rb->dev, "tx-data", GPIOD_OUT_LOW);
-	rb->bb_rx_ready = gpiod_get(rb->dev, "rx-ready", GPIOD_IN);
-	rb->bb_tx_ready = gpiod_get(rb->dev, "tx-ready", GPIOD_IN);
-	rb->bb_rx_data = gpiod_get_array(rb->dev, "rx-data", GPIOD_IN);
-	if (IS_ERR(rb->bb_rx_clk) || IS_ERR(rb->bb_tx_clk) || IS_ERR(rb->bb_tx_data) ||
-	    IS_ERR(rb->bb_rx_ready) || IS_ERR(rb->bb_tx_ready) || IS_ERR(rb->bb_rx_data)) {
-		dev_err(rb->dev, "cannot claim the stream GPIOs (an older overlay?)\n");
-		ret = -ENODEV;
-		goto fail;
-	}
-	if (rb->bb_rx_data->ndescs != 4) {
-		dev_err(rb->dev, "rx-data-gpios needs 4 GPIOs, not %u\n", rb->bb_rx_data->ndescs);
-		ret = -EINVAL;
-		goto fail;
-	}
-
-	/* The set, clear and level registers of the block those GPIOs are on. */
-	np = of_parse_phandle(rb->dev->of_node, "rx-clk-gpios", 0);
-	if (!np || !of_device_is_compatible(np, "brcm,bcm2711-gpio")) {
-		of_node_put(np);
-		dev_err(rb->dev, "the stream GPIOs are not on the BCM2711 GPIO block\n");
-		ret = -ENODEV;
-		goto fail;
-	}
-	rb->bbio.base = of_iomap(np, 0);
-	of_node_put(np);
-	if (!rb->bbio.base) {
-		ret = -ENOMEM;
-		goto fail;
-	}
-
-	rb->bb_rx_words = kcalloc(RB_BB_RX_BATCH, sizeof(u32), GFP_KERNEL);
-	rb->bb_tx_words = kzalloc(RB_TX_SLOT_BYTES, GFP_KERNEL);
-	if (!rb->bb_rx_words || !rb->bb_tx_words) {
-		ret = -ENOMEM;
-		goto fail;
-	}
-	memset(&rb->bb, 0, sizeof(rb->bb));
-	rb->bb.io = &rb->bbio;
-	rb->bb.settle_reads = bb_settle_reads;
-	rb->bb_tx_count = 0;
-	rb->bb_tx_pos = 0;
-
-	rb->worker = kthread_run(rb_bb_worker, rb, "radioberry");
-	if (IS_ERR(rb->worker)) {
-		ret = PTR_ERR(rb->worker);
-		rb->worker = NULL;
-		goto fail;
-	}
-	sched_set_fifo(rb->worker);
-	dev_info(rb->dev, "RX and TX clocked by the CPU, up to %u RX values per second\n",
-		 bb_rx_values_max);
-	return 0;
-
-fail:
-	rb_bb_down(rb);
-	return ret;
-}
-
-/* Waits for the thread to finish its run; it clocks nothing until released. */
-static bool rb_bb_rx_hold(struct rb_dev *rb)
-{
-	if (!rb->worker)
-		return false;
-	mutex_lock(&rb->bb_lock);
-	return true;
-}
-
-static void rb_bb_rx_release(struct rb_dev *rb)
-{
-	mutex_unlock(&rb->bb_lock);
-}
-
-/*
- * The thread reads rx_paused under bb_lock before each run, so once the
- * run in progress ends it clocks no more RX and sleeps.
- */
-static void rb_bb_rx_pause(struct rb_dev *rb)
-{
-	mutex_lock(&rb->bb_lock);
-	mutex_unlock(&rb->bb_lock);
-}
-
-static void rb_bb_rx_resume(struct rb_dev *rb)
-{
-	wake_up(&rb->work_wait);
-}
-
-static const struct rb_transport rb_bb_transport = {
-	.name = "cpu",
-	.rx_values_max = 0,
-	.up = rb_bb_up,
-	.down = rb_bb_down,
-	.rx_hold = rb_bb_rx_hold,
-	.rx_release = rb_bb_rx_release,
-	.rx_pause = rb_bb_rx_pause,
-	.rx_resume = rb_bb_rx_resume,
-};
-
-
-/* ---- I2S into the PCM block (Pi 4, gateware-v2 image) ---------------- */
+/* ---- I2S into the PCM block (Pi 4) ---------------------------------- */
 
 /* BCM2711 PCM registers and bits (BCM2711 ARM Peripherals, chapter 7). */
 #define RB_PCM_CS 0x00
@@ -1308,14 +950,14 @@ static const struct rb_transport rb_bb_transport = {
 #define RB_PCM_MODE_CLKM BIT(23)
 
 #define RB_I2S_FIRMWARE "radioberry-rpi4-i2s.rbf"
-#define RB_PIO2_FIRMWARE "radioberry-rpi5-pio.rbf"
+#define RB_PIO_FIRMWARE "radioberry-rpi5-pio.rbf"
 #define RB_I2S_PERIODS 16
 #define RB_I2S_MAX_PERIOD 4096 /* words */
 #define RB_I2S_TX_LEAD 4	   /* TX periods kept filled ahead of the DMA, about 8 ms */
-#define RB_I2S_KEEPALIVE_MS 250	   /* KEYING rewrites; the image clears it after 1 s */
+#define RB_KEEPALIVE_MS 250	   /* KEYING rewrites; the image clears it after 1 s */
 /* What the image reports to clients: the Hermes-Lite 2 core it carries. */
-#define RB_I2S_HL2_MAJOR 75
-#define RB_I2S_HL2_MINOR 3
+#define RB_HL2_MAJOR 75
+#define RB_HL2_MINOR 3
 
 /* One frame each way. -EIO when the reply's header or CRC is wrong. */
 static int rb_frame_xfer(struct rb_dev *rb, bool write, bool board, u8 addr, u32 data,
@@ -1336,7 +978,7 @@ static int rb_frame_xfer(struct rb_dev *rb, bool write, bool board, u8 addr, u32
 		if (ret)
 			return ret;
 		if (rb_frame_reply(rb->frame_rx, &st, &v, &st2)) {
-			rb->i2s_status2 = st2;
+			rb->status2 = st2;
 			if (value)
 				*value = v;
 			if (status)
@@ -1360,18 +1002,18 @@ static int rb_breg_write(struct rb_dev *rb, u8 addr, u32 value)
 }
 
 /*
- * Identity in the released PIO gateware's reply layout (rb_reply_parse()),
- * once the image is running: its transmitter (none in a receive image), the
- * receivers it carries, the Hermes-Lite 2 core level clients see. Zeros
- * until then, so rb_read_identity() keeps polling. The image must be built
- * for this transport (its CAPS register says which).
+ * Identity in the command reply layout (rb_reply_parse()), once the image is
+ * running: its transmitter, the receivers it carries, the Hermes-Lite 2 core
+ * level clients see. Zeros until then, so rb_read_identity() keeps polling.
+ * The image must be built for this board's link (its CAPS register says
+ * which).
  */
-static int rb_i2s_identify(struct rb_dev *rb, u8 status)
+static int rb_identify(struct rb_dev *rb, u8 status)
 {
 	u32 id, caps;
 	int ret;
 
-	if (rb->i2s_identified)
+	if (rb->identified)
 		return 0;
 	if ((status & (RB_FS_SET_UP | RB_FS_RUNNING)) != (RB_FS_SET_UP | RB_FS_RUNNING))
 		return 0;
@@ -1382,16 +1024,16 @@ static int rb_i2s_identify(struct rb_dev *rb, u8 status)
 		return ret;
 	if (id != RB_ID_RBV2 || RB_CAPS_TRANSPORT(caps) != rb->tp->caps_transport) {
 		dev_err_ratelimited(rb->dev,
-				    "not a gateware-v2 image for the %s transport: id 0x%08x caps 0x%08x\n",
-				    rb->tp->name, id, caps);
+				    "%s is not the image for this board: id 0x%08x caps 0x%08x\n",
+				    rb->tp->firmware, id, caps);
 		return 0;
 	}
-	memset(rb->i2s_reply, 0, sizeof(rb->i2s_reply));
-	rb->i2s_reply[3] = (u8)((RB_CAPS_TX(caps) << 6) | (RB_CAPS_RECEIVERS(caps) << 2) |
+	memset(rb->reply, 0, sizeof(rb->reply));
+	rb->reply[3] = (u8)((RB_CAPS_TX(caps) << 6) | (RB_CAPS_RECEIVERS(caps) << 2) |
 				(RB_CAPS_FPGA(caps) & 3));
-	rb->i2s_reply[4] = RB_I2S_HL2_MAJOR;
-	rb->i2s_reply[5] = RB_I2S_HL2_MINOR;
-	rb->i2s_identified = true;
+	rb->reply[4] = RB_HL2_MAJOR;
+	rb->reply[5] = RB_HL2_MINOR;
+	rb->identified = true;
 	return 0;
 }
 
@@ -1649,30 +1291,30 @@ static void rb_i2s_dma_done(void *param)
 	rb_check_stall(rb);
 }
 
-#define RB_I2S_FLAG_PTT 0x80
+#define RB_FLAG_PTT 0x80
 
-static u32 rb_i2s_keying(u8 flags)
+static u32 rb_keying(u8 flags)
 {
-	return (flags & RB_I2S_FLAG_PTT ? RB_KEYING_PTT : 0) |
+	return (flags & RB_FLAG_PTT ? RB_KEYING_PTT : 0) |
 	       (flags & RADIOBERRY_CMD_TX_PERMIT ? RB_KEYING_PERMIT : 0);
 }
 
 /* CONTROL from the flags and the loopback setting, written when it changes. */
-static int rb_i2s_write_control(struct rb_dev *rb)
+static int rb_write_control(struct rb_dev *rb)
 {
-	u32 control = (rb->i2s_flags & RADIOBERRY_CMD_RUN ? RB_CONTROL_RUN : 0) |
-		      (rb->i2s_flags & RADIOBERRY_CMD_PA_ALLOWED ? RB_CONTROL_PA_ALLOWED : 0) |
-		      (rb->i2s_loopback ? RB_CONTROL_LOOPBACK : 0);
+	u32 control = (rb->flags & RADIOBERRY_CMD_RUN ? RB_CONTROL_RUN : 0) |
+		      (rb->flags & RADIOBERRY_CMD_PA_ALLOWED ? RB_CONTROL_PA_ALLOWED : 0) |
+		      (rb->loopback ? RB_CONTROL_LOOPBACK : 0);
 	int ret;
 
 	lockdep_assert_held(&rb->cmd_lock);
-	if (rb->i2s_control_sent && control == rb->i2s_control)
+	if (rb->control_sent && control == rb->control)
 		return 0;
 	ret = rb_breg_write(rb, RB_BREG_CONTROL, control);
 	if (ret)
 		return ret;
-	rb->i2s_control = control;
-	rb->i2s_control_sent = true;
+	rb->control = control;
+	rb->control_sent = true;
 	return 0;
 }
 
@@ -1680,36 +1322,37 @@ static int rb_i2s_write_control(struct rb_dev *rb)
  * The image clears KEYING unless it is written again within a second, so a
  * host that stops (a crash, a hung kernel) stops the transmitter. While
  * PTT or the permission bit is set this rewrites it every
- * RB_I2S_KEEPALIVE_MS.
+ * RB_KEEPALIVE_MS.
  */
-static void rb_i2s_keepalive(struct work_struct *work)
+static void rb_keepalive(struct work_struct *work)
 {
-	struct rb_dev *rb = container_of(to_delayed_work(work), struct rb_dev, i2s_keepalive);
+	struct rb_dev *rb = container_of(to_delayed_work(work), struct rb_dev, keepalive);
 	u32 keying;
 
 	mutex_lock(&rb->cmd_lock);
-	keying = rb->i2s_flags_sent ? rb_i2s_keying(rb->i2s_flags) : 0;
+	keying = rb->flags_sent ? rb_keying(rb->flags) : 0;
 	if (keying && rb_breg_write(rb, RB_BREG_KEYING, keying))
 		dev_err_ratelimited(rb->dev, "KEYING keepalive failed\n");
 	mutex_unlock(&rb->cmd_lock);
 	if (keying)
-		schedule_delayed_work(&rb->i2s_keepalive, msecs_to_jiffies(RB_I2S_KEEPALIVE_MS));
+		schedule_delayed_work(&rb->keepalive, msecs_to_jiffies(RB_KEEPALIVE_MS));
 }
 
 /*
  * One command block, in the image's framed protocol: the Hermes-Lite 2
  * command to the radio space; run and PA allowed, when they change, to the
  * board's CONTROL register, PTT and the permission bit to KEYING (kept
- * alive while set); a receiver-count or rate change sets the bit clock.
- * rx[] gets the reply in the PIO layout: byte 0 from status 2 (the core's
- * CW or the jack's PTT, the jack's key), then the identity.
+ * alive while set); on the Pi 4 a receiver-count or rate change sets the
+ * I2S bit clock. rx[] gets the reply in the command layout: byte 0 from
+ * status 2 (the core's CW or the jack's PTT, the jack's key), then the
+ * identity.
  */
-static int rb_i2s_command(struct rb_dev *rb, const u8 *tx, u8 *rx)
+static int rb_frame_command(struct rb_dev *rb, const u8 *tx, u8 *rx)
 {
 	u8 flags = (u8)((tx[0] & (RADIOBERRY_CMD_RUN | RADIOBERRY_CMD_TX_PERMIT |
 				  RADIOBERRY_CMD_PA_ALLOWED)) |
-			(rb_cmd_ptt(tx) ? RB_I2S_FLAG_PTT : 0));
-	bool first = !rb->i2s_flags_sent;
+			(rb_cmd_ptt(tx) ? RB_FLAG_PTT : 0));
+	bool first = !rb->flags_sent;
 	unsigned int receivers, rate_code;
 	u8 status;
 	int ret;
@@ -1718,23 +1361,23 @@ static int rb_i2s_command(struct rb_dev *rb, const u8 *tx, u8 *rx)
 	if (ret)
 		return ret;
 	/* Keying off before PA allowed goes; PA allowed before keying goes on. */
-	if (!first && rb_i2s_keying(flags) != rb_i2s_keying(rb->i2s_flags) &&
-	    !rb_i2s_keying(flags)) {
+	if (!first && rb_keying(flags) != rb_keying(rb->flags) &&
+	    !rb_keying(flags)) {
 		ret = rb_breg_write(rb, RB_BREG_KEYING, 0);
 		if (ret)
 			return ret;
 	}
-	rb->i2s_flags = flags;
-	rb->i2s_flags_sent = true;
-	ret = rb_i2s_write_control(rb);
+	rb->flags = flags;
+	rb->flags_sent = true;
+	ret = rb_write_control(rb);
 	if (ret)
 		return ret;
-	if (rb_i2s_keying(flags)) {
-		ret = rb_breg_write(rb, RB_BREG_KEYING, rb_i2s_keying(flags));
+	if (rb_keying(flags)) {
+		ret = rb_breg_write(rb, RB_BREG_KEYING, rb_keying(flags));
 		if (ret)
 			return ret;
-		mod_delayed_work(system_wq, &rb->i2s_keepalive,
-				 msecs_to_jiffies(RB_I2S_KEEPALIVE_MS));
+		mod_delayed_work(system_wq, &rb->keepalive,
+				 msecs_to_jiffies(RB_KEEPALIVE_MS));
 	} else if (first) {
 		ret = rb_breg_write(rb, RB_BREG_KEYING, 0);
 		if (ret)
@@ -1751,12 +1394,12 @@ static int rb_i2s_command(struct rb_dev *rb, const u8 *tx, u8 *rx)
 		}
 	}
 
-	ret = rb_i2s_identify(rb, status);
+	ret = rb_identify(rb, status);
 	if (ret)
 		return ret;
-	if (rb->i2s_identified) {
-		memcpy(rx, rb->i2s_reply, RB_CMD_BYTES);
-		rx[0] = rb_frame_reply_flags(rb->i2s_status2);
+	if (rb->identified) {
+		memcpy(rx, rb->reply, RB_CMD_BYTES);
+		rx[0] = rb_frame_reply_flags(rb->status2);
 	} else {
 		memset(rx, 0, RB_CMD_BYTES);
 	}
@@ -1797,16 +1440,57 @@ static void rb_i2s_down(struct rb_dev *rb)
 	rb->pcm_copy = NULL;
 	rb->pcm_values = NULL;
 	rb->i2s_div = 0;
-	/* A reload restarts the image: identify it and send the flags again. */
-	rb->i2s_identified = false;
-	rb->i2s_flags_sent = false;
-	rb->i2s_control_sent = false;
+}
+
+/* BCM2711 GPIO block: function select and pull registers. */
+#define RB_GPFSEL(pin) (0x00 + ((pin) / 10) * 4)
+#define RB_GPFSEL_SHIFT(pin) (((pin) % 10) * 3)
+#define RB_GPFSEL_ALT0 4u
+#define RB_GPPULL(pin) (0xe4 + ((pin) / 16) * 4)
+#define RB_GPPULL_SHIFT(pin) (((pin) % 16) * 2)
+#define RB_I2S_PIN_FIRST 18 /* GPIO 18 to 21: bit clock, frame sync, data in, data out */
+#define RB_I2S_PINS 4
+
+/*
+ * Puts GPIO 18 to 21 in their PCM function (alt 0) with no pulls. They are
+ * the RadioBerry's wires to the FPGA and nothing else claims them; the
+ * block's own pin control driver is not asked because the PCM node, whose
+ * pin states would carry them, stays disabled.
+ */
+static int rb_i2s_pins(struct rb_dev *rb)
+{
+	struct device_node *np;
+	void __iomem *gpio;
+	unsigned int pin;
+	u32 v;
+
+	np = of_find_compatible_node(NULL, NULL, "brcm,bcm2711-gpio");
+	if (!np) {
+		dev_err(rb->dev, "no BCM2711 GPIO block in the device tree\n");
+		return -ENODEV;
+	}
+	gpio = of_iomap(np, 0);
+	of_node_put(np);
+	if (!gpio)
+		return -ENOMEM;
+	for (pin = RB_I2S_PIN_FIRST; pin < RB_I2S_PIN_FIRST + RB_I2S_PINS; pin++) {
+		v = readl(gpio + RB_GPPULL(pin));
+		v &= ~(3u << RB_GPPULL_SHIFT(pin));
+		writel(v, gpio + RB_GPPULL(pin));
+		v = readl(gpio + RB_GPFSEL(pin));
+		v &= ~(7u << RB_GPFSEL_SHIFT(pin));
+		v |= RB_GPFSEL_ALT0 << RB_GPFSEL_SHIFT(pin);
+		writel(v, gpio + RB_GPFSEL(pin));
+	}
+	iounmap(gpio);
+	return 0;
 }
 
 /*
- * The PCM block from the overlay's radioberry,pcm phandle. Its node stays
- * disabled, so the stock I2S driver never binds it and no sound card
- * exists; only its registers and its DMA requests are used.
+ * The BCM2711's PCM block, found by its compatible string. Its node must
+ * stay disabled (no audio overlay or dtparam=i2s=on), so the stock I2S
+ * driver never binds it and no sound card exists; only its registers and
+ * its DMA requests are used.
  */
 static int rb_i2s_up(struct rb_dev *rb)
 {
@@ -1816,9 +1500,20 @@ static int rb_i2s_up(struct rb_dev *rb)
 	unsigned long flags;
 	int ret;
 
-	np = of_parse_phandle(rb->dev->of_node, "radioberry,pcm", 0);
-	if (!np)
+	np = of_find_compatible_node(NULL, NULL, "brcm,bcm2835-i2s");
+	if (!np) {
+		dev_err(rb->dev, "no PCM block in the device tree\n");
 		return -ENODEV;
+	}
+	if (of_device_is_available(np)) {
+		dev_err(rb->dev,
+			"the PCM block is enabled for audio (dtparam=i2s=on or an audio overlay); the RadioBerry needs it\n");
+		ret = -EBUSY;
+		goto out;
+	}
+	ret = rb_i2s_pins(rb);
+	if (ret)
+		goto out;
 	ret = of_address_to_resource(np, 0, &res);
 	if (ret)
 		goto out;
@@ -1875,16 +1570,6 @@ out:
 	return ret;
 }
 
-/* The image's FIFO is cleared synchronously: nothing to hold. */
-static bool rb_i2s_rx_hold(struct rb_dev *rb)
-{
-	return false;
-}
-
-static void rb_i2s_rx_release(struct rb_dev *rb)
-{
-}
-
 /*
  * Run clear: nothing streams, so nothing runs. The PCM block and both DMA
  * channels stop and the image's link is disabled: no bit clock, no DMA, no
@@ -1914,57 +1599,36 @@ static const struct rb_transport rb_i2s_transport = {
 	.rx_values_max = RB_I2S_VALUES_MAX,
 	.up = rb_i2s_up,
 	.down = rb_i2s_down,
-	.rx_hold = rb_i2s_rx_hold,
-	.rx_release = rb_i2s_rx_release,
 	.rx_pause = rb_i2s_rx_pause,
 	.rx_resume = rb_i2s_rx_resume,
-	.command = rb_i2s_command,
 	.firmware = RB_I2S_FIRMWARE,
 	.caps_transport = RB_CAPS_TRANSPORT_I2S,
 };
 
-/*
- * Pi 5 with the gateware-v2 image (radioberry-rpi5-pio.rbf): the same PIO
- * state machines and programs as the released image, and that image's
- * framed protocol for commands (rb_i2s_command(): the parts that program
- * the PCM block do nothing without one). Its FIFOs are never cleared, so
- * the RX hold around a receiver-count change is no longer needed; it is
- * kept, and costs one stop of the RX clock. rb_load_gateware() makes the
- * driver identify a reloaded image afresh.
- */
-static const struct rb_transport rb_pio2_transport = {
+static const struct rb_transport rb_pio_transport = {
 	.name = "rp1-pio",
 	.rx_values_max = RB_PIO_RX_VALUES_MAX,
 	.up = rb_pio_up,
 	.down = rb_pio_down,
-	.rx_hold = rb_pio_rx_hold,
-	.rx_release = rb_pio_rx_release,
 	.rx_pause = rb_pio_rx_pause,
 	.rx_resume = rb_pio_rx_resume,
-	.command = rb_i2s_command,
-	.firmware = RB_PIO2_FIRMWARE,
+	.firmware = RB_PIO_FIRMWARE,
 	.caps_transport = RB_CAPS_TRANSPORT_PIO,
 };
 
-/*
- * The transport for this SoC, or NULL. On a Pi 5, the gateware-v2 image
- * unless pio_released_image is set. On a Pi 4, the I2S transport when the
- * radioberry-i2s overlay has given this device the PCM block.
- */
-static const struct rb_transport *rb_select_transport(struct device_node *np)
+/* The transport for this SoC, or NULL. */
+static const struct rb_transport *rb_select_transport(void)
 {
 	if (of_machine_is_compatible("brcm,bcm2712"))
-		return pio_released_image ? &rb_pio_transport : &rb_pio2_transport;
-	if (of_machine_is_compatible("brcm,bcm2711") && of_property_present(np, "radioberry,pcm"))
-		return &rb_i2s_transport;
+		return &rb_pio_transport;
 	if (of_machine_is_compatible("brcm,bcm2711"))
-		return &rb_bb_transport;
+		return &rb_i2s_transport;
 	return NULL;
 }
 
 static u32 rb_rx_values_max(const struct rb_dev *rb)
 {
-	return rb->tp->rx_values_max ? rb->tp->rx_values_max : bb_rx_values_max;
+	return rb->tp->rx_values_max;
 }
 
 static int rb_streams_up(struct rb_dev *rb)
@@ -2067,10 +1731,9 @@ static int rb_open(struct inode *inode, struct file *file)
 
 /*
  * The general settings a fresh client assumes: one receiver at 48 ksps.
- * Sent on close by transports with their own command path (the I2S one),
- * so a client that left more receivers or another rate behind, or was
- * killed, cannot leave the next one reading frames of the wrong layout:
- * a client that wants the defaults never sends them.
+ * Sent on close, so a client that left more receivers or another rate
+ * behind, or was killed, cannot leave the next one reading frames of the
+ * wrong layout: a client that wants the defaults never sends them.
  */
 static void rb_observe_command(struct rb_dev *rb, const u8 *tx);
 
@@ -2083,7 +1746,7 @@ static void rb_command_defaults(struct rb_dev *rb)
 	ret = rb_command_locked(rb, tx, NULL);
 	if (!ret) {
 		rb_observe_command(rb, tx);
-		rb_rx_gate(rb, 0);
+		rb_rx_gate(rb);
 	}
 	mutex_unlock(&rb->cmd_lock);
 	if (ret)
@@ -2103,8 +1766,7 @@ static int rb_release(struct inode *inode, struct file *file)
 	ret = rb_command_safe(rb, NULL);
 	if (ret)
 		dev_err(rb->dev, "safe command on close failed: %d\n", ret);
-	if (rb->tp->command)
-		rb_command_defaults(rb);
+	rb_command_defaults(rb);
 	atomic_set(&rb->open, 0);
 	return 0;
 }
@@ -2281,12 +1943,8 @@ static long rb_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		info.fpga_type = rb->id.fpga_type;
 		info.receivers = rb->id.receivers;
 		info.transmitters = rb->id.transmitters;
-		if (rb->tp == &rb_bb_transport)
-			info.transport = RADIOBERRY_TRANSPORT_CPU;
-		else if (rb->tp == &rb_i2s_transport)
-			info.transport = RADIOBERRY_TRANSPORT_I2S;
-		else
-			info.transport = RADIOBERRY_TRANSPORT_PIO;
+		info.transport = rb->tp == &rb_i2s_transport ? RADIOBERRY_TRANSPORT_I2S :
+							       RADIOBERRY_TRANSPORT_PIO;
 		info.rx_values_max = rb_rx_values_max(rb);
 		spin_lock_irqsave(&rb->rx_lock, flags);
 		info.active_receivers = (u8)rb->receivers;
@@ -2296,43 +1954,17 @@ static long rb_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	}
 	case RADIOBERRY_IOC_COMMAND: {
 		struct radioberry_command c;
-		unsigned int hold = READ_ONCE(rx_clock_hold_us);
-		unsigned int receivers, rate_code;
-		bool count_change, held = false;
 
 		if (copy_from_user(&c, uarg, sizeof(c)))
 			return -EFAULT;
 		rb_cmd_sanitise(c.tx);
 		mutex_lock(&rb->cmd_lock);
-		/*
-		 * RX lock-up workaround (see rx_clock_hold_us above and
-		 * docs/fault-rx-lockup.md, "The workaround"): a receiver-count
-		 * change clears the gateware's RX FIFO, whose read side runs on the
-		 * clock this driver's RX state machine drives. With the state
-		 * machine stopped that clock is still while the clear is asserted
-		 * and released. While RX is paused the clock is already still; a
-		 * command that also sets run keeps it so for the hold time
-		 * (rb_rx_gate()).
-		 */
-		count_change = rb_cmd_general(c.tx, &receivers, &rate_code) &&
-			       receivers != READ_ONCE(rb->receivers);
-		if (hold && count_change && !rb->rx_paused) {
-			held = rb->tp->rx_hold(rb);
-			if (held)
-				usleep_range(20, 30);
-		}
 		ret = rb_command_locked(rb, c.tx, c.rx);
 		if (!ret) {
 			rb->stats.commands++;
 			rb_observe_command(rb, c.tx);
+			rb_rx_gate(rb);
 		}
-		if (held) {
-			usleep_range(hold, hold + hold / 4);
-			rb->tp->rx_release(rb);
-			rb_trace(rb, "RX clock held for the receiver-count change\n");
-		}
-		if (!ret)
-			rb_rx_gate(rb, count_change ? hold : 0);
 		mutex_unlock(&rb->cmd_lock);
 		if (ret)
 			return ret;
@@ -2469,7 +2101,7 @@ static ssize_t rx_stalls_show(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(rx_stalls);
 
-/* How the streams reach the gateware: "rp1-pio" (Pi 5), "cpu" or "i2s" (Pi 4). */
+/* How the streams reach the gateware: "rp1-pio" (Pi 5) or "i2s" (Pi 4). */
 static ssize_t transport_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct rb_dev *rb = dev_get_drvdata(dev);
@@ -2479,18 +2111,17 @@ static ssize_t transport_show(struct device *dev, struct device_attribute *attr,
 static DEVICE_ATTR_RO(transport);
 
 /*
- * Gateware-v2 images only (Pi 4 I2S, Pi 5 PIO by default). 1 puts the
- * image's AD9866 in digital loopback: TxDAC and
- * IAMP powered down, TX quiet and every PA line held low, transmit samples
- * back on the receive bus. For a self-test of the transmit path; the
- * transmitter still has to be keyed (PTT and permission) for samples to
- * flow. Written to the image at once.
+ * 1 puts the image's AD9866 in digital loopback: TxDAC and IAMP powered
+ * down, every PA line held low, transmit samples back on the receive bus.
+ * For a self-test of the transmit path; the transmitter still has to be
+ * keyed (PTT and permission) for samples to flow. Written to the image at
+ * once.
  */
 static ssize_t tx_loopback_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct rb_dev *rb = dev_get_drvdata(dev);
 
-	return sysfs_emit(buf, "%d\n", READ_ONCE(rb->i2s_loopback) ? 1 : 0);
+	return sysfs_emit(buf, "%d\n", READ_ONCE(rb->loopback) ? 1 : 0);
 }
 
 static ssize_t tx_loopback_store(struct device *dev, struct device_attribute *attr,
@@ -2500,26 +2131,23 @@ static ssize_t tx_loopback_store(struct device *dev, struct device_attribute *at
 	bool on;
 	int ret;
 
-	if (!rb->tp->caps_transport)
-		return -EOPNOTSUPP;
 	ret = kstrtobool(buf, &on);
 	if (ret)
 		return ret;
 	mutex_lock(&rb->cmd_lock);
-	WRITE_ONCE(rb->i2s_loopback, on);
-	ret = rb->i2s_flags_sent ? rb_i2s_write_control(rb) : 0;
+	WRITE_ONCE(rb->loopback, on);
+	ret = rb->flags_sent ? rb_write_control(rb) : 0;
 	mutex_unlock(&rb->cmd_lock);
 	return ret ? ret : (ssize_t)count;
 }
 static DEVICE_ATTR_RW(tx_loopback);
 
 /*
- * Gateware-v2 images only: the image's link counters and the driver's own
- * (the driver_ lines count only on the I2S transport; on the PIO image
- * words_to_pi counts values, and tx_seq_gaps, tx_bad_frames and
- * tx_realigns stay 0).
+ * The image's link and transmit counters and the driver's own. On the Pi 5
+ * words_to_pi counts values, and tx_seq_gaps, tx_bad_frames, tx_realigns
+ * and the driver_ lines stay 0.
  */
-static ssize_t i2s_counters_show(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t counters_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	static const struct {
 		u8 reg;
@@ -2530,7 +2158,7 @@ static ssize_t i2s_counters_show(struct device *dev, struct device_attribute *at
 		{ RB_BREG_TX_OVF, "tx_overflows" },  { RB_BREG_TX_UNDER, "tx_underruns" },
 		{ RB_BREG_REALIGNS, "tx_realigns" }, { RB_BREG_STATUS2, "status2" },
 		{ RB_BREG_CONTROL, "control" },
-		{ RB_BREG_KEYING, "keying" },	     { RB_BREG_I2S, "i2s" },
+		{ RB_BREG_KEYING, "keying" },	     { RB_BREG_I2S, "link" },
 	};
 	struct rb_dev *rb = dev_get_drvdata(dev);
 	ssize_t n = 0;
@@ -2538,8 +2166,6 @@ static ssize_t i2s_counters_show(struct device *dev, struct device_attribute *at
 	u32 v;
 	int ret = 0;
 
-	if (!rb->tp->caps_transport)
-		return -EOPNOTSUPP;
 	mutex_lock(&rb->cmd_lock);
 	for (i = 0; i < ARRAY_SIZE(regs) && !ret; i++) {
 		ret = rb_breg_read(rb, regs[i].reg, &v);
@@ -2553,7 +2179,7 @@ static ssize_t i2s_counters_show(struct device *dev, struct device_attribute *at
 			   READ_ONCE(rb->pcm_tx_late), READ_ONCE(rb->pcm_tx_fifo_errors));
 	return n;
 }
-static DEVICE_ATTR_RO(i2s_counters);
+static DEVICE_ATTR_RO(counters);
 
 static struct attribute *rb_attrs[] = {
 	&dev_attr_gateware_version.attr,
@@ -2565,7 +2191,7 @@ static struct attribute *rb_attrs[] = {
 	&dev_attr_rx_stalls.attr,
 	&dev_attr_transport.attr,
 	&dev_attr_tx_loopback.attr,
-	&dev_attr_i2s_counters.attr,
+	&dev_attr_counters.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(rb);
@@ -2581,12 +2207,10 @@ static int rb_alloc_rings(struct rb_dev *rb)
 	rb->tx_ring_buf = kvzalloc(tx_size, GFP_KERNEL);
 	rb->io_buf = kzalloc(RB_CHUNK_BYTES, GFP_KERNEL);
 	rb->pack_buf = kzalloc(RB_CHUNK_BYTES, GFP_KERNEL);
-	rb->spi_tx = kzalloc(RB_CMD_BYTES, GFP_KERNEL);
-	rb->spi_rx = kzalloc(RB_CMD_BYTES, GFP_KERNEL);
 	rb->frame_tx = kzalloc(RB_FRAME_BYTES, GFP_KERNEL);
 	rb->frame_rx = kzalloc(RB_FRAME_BYTES, GFP_KERNEL);
 	if (!rb->rx_ring_buf || !rb->tx_ring_buf || !rb->io_buf || !rb->pack_buf ||
-	    !rb->spi_tx || !rb->spi_rx || !rb->frame_tx || !rb->frame_rx)
+	    !rb->frame_tx || !rb->frame_rx)
 		return -ENOMEM;
 	rb_ring_init(&rb->rx_ring, rb->rx_ring_buf, rx_size);
 	rb_ring_init(&rb->tx_ring, rb->tx_ring_buf, tx_size);
@@ -2599,8 +2223,6 @@ static void rb_free(struct rb_dev *rb)
 	kvfree(rb->tx_ring_buf);
 	kfree(rb->io_buf);
 	kfree(rb->pack_buf);
-	kfree(rb->spi_tx);
-	kfree(rb->spi_rx);
 	kfree(rb->frame_tx);
 	kfree(rb->frame_rx);
 }
@@ -2635,7 +2257,7 @@ static int rb_probe(struct spi_device *spi)
 		return -ENOMEM;
 	rb->spi = spi;
 	rb->dev = &spi->dev;
-	rb->tp = rb_select_transport(spi->dev.of_node);
+	rb->tp = rb_select_transport();
 	if (!rb->tp)
 		return dev_err_probe(rb->dev, -ENODEV,
 				     "not a Raspberry Pi 4 or 5 (BCM2711 or BCM2712)\n");
@@ -2643,13 +2265,12 @@ static int rb_probe(struct spi_device *spi)
 	rb_stream_reset(&rb->tx);
 	mutex_init(&rb->cmd_lock);
 	mutex_init(&rb->io_lock);
-	mutex_init(&rb->bb_lock);
 	spin_lock_init(&rb->rx_lock);
 	spin_lock_init(&rb->tx_lock);
 	init_waitqueue_head(&rb->rx_wait);
 	init_waitqueue_head(&rb->tx_wait);
 	init_waitqueue_head(&rb->work_wait);
-	INIT_DELAYED_WORK(&rb->i2s_keepalive, rb_i2s_keepalive);
+	INIT_DELAYED_WORK(&rb->keepalive, rb_keepalive);
 	atomic_set(&rb->rx.inflight, 0);
 	atomic_set(&rb->tx.inflight, 0);
 	spi_set_drvdata(spi, rb);
@@ -2703,7 +2324,7 @@ err_streams:
 	rb_stop_streams(rb);
 err_safe:
 	rb_command_safe(rb, NULL);
-	cancel_delayed_work_sync(&rb->i2s_keepalive);
+	cancel_delayed_work_sync(&rb->keepalive);
 err_free:
 	rb_free(rb);
 	return ret;
@@ -2716,7 +2337,7 @@ static void rb_remove(struct spi_device *spi)
 	misc_deregister(&rb->misc);
 	rb_stop_streams(rb);
 	rb_command_safe(rb, NULL);
-	cancel_delayed_work_sync(&rb->i2s_keepalive);
+	cancel_delayed_work_sync(&rb->keepalive);
 	rb_free(rb);
 }
 

@@ -69,7 +69,7 @@ step "SPDX headers"
 sh tools/check-spdx.sh
 
 kernel_sources="driver/kernel/radioberry.c driver/kernel/rb_logic.h driver/kernel/rb_pio.h
-    driver/kernel/rb_bitbang.h driver/include/radioberry_ioctl.h"
+    driver/kernel/rb_frame.h driver/include/radioberry_ioctl.h"
 kbuild=/lib/modules/$(uname -r)/build
 checkpatch=${CHECKPATCH:-$kbuild/scripts/checkpatch.pl}
 if [ -f "$checkpatch" ]; then

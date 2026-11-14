@@ -7,7 +7,7 @@
  * driver's rb2-rx-stream.c and rb2-tx-stream.c
  * (SBC/rpi-5/device_driver/pio-mode/driver/src/), released into the public
  * domain under the Unlicense. Their handshakes are described in
- * gateware/README.md sections 5 and 7.
+ * gateware/docs/interfaces.md ("Pi 5 link").
  */
 #ifndef RB_PIO_H
 #define RB_PIO_H

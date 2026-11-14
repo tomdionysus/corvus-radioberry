@@ -49,7 +49,7 @@ TEST_CASE("reply byte 0 carries CW or PTT in bit 0 and the jack's key in bit 2")
 }
 
 TEST_CASE("the image samples the Pi's data half a bit after it arrives") {
-    // Measured working points (gateware-v2/linktest_results.md).
+    // Measured working points (gateware/docs/linktest-results.md).
     CHECK(rb_i2s_link_reg(2) == (2u << 24 | 1u << 16 | 2u << 8 | 1u));
     CHECK(rb_i2s_link_reg(4) == (1u << 24 | 2u << 16 | 4u << 8 | 1u));
     CHECK(rb_i2s_link_reg(6) == (1u << 24 | 1u << 16 | 6u << 8 | 1u));

@@ -1,9 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
- * The framed control protocol of the gateware-v2 images and the I2S frame
+ * The framed control protocol of the gateware images and the I2S frame
  * format of the Raspberry Pi 4 image, as pure logic with no kernel
  * dependencies so it is tested in userspace (driver/tests/frame_test.cpp).
- * The gateware side is gateware-v2/rtl/common/rbv_spi.sv.
+ * The gateware side is gateware/rtl/common/rbv_spi.sv; the registers are
+ * listed in gateware/docs/interfaces.md.
  *
  * A frame is 8 bytes each way, SPI mode 3, most significant bit first.
  *   Host to FPGA:  byte 0  bit 7 write, bit 6 space (0 radio, 1 board),
@@ -162,7 +163,7 @@ static inline unsigned int rb_i2s_div(unsigned int rate_code, unsigned int recei
 
 /*
  * The I2S register for a divider, enabled: where the image samples the
- * Pi's data. Measured on the Pi 4 (gateware-v2/linktest_results.md): the
+ * Pi's data. Measured on the Pi 4 (gateware/docs/linktest-results.md): the
  * data for a bit arrives about 16 ns after the image's rising clock edge;
  * the image samples (div + 9) / 2 fast clocks after that edge, half a bit
  * later plus a margin.
@@ -174,7 +175,7 @@ static inline u32 rb_i2s_link_reg(unsigned int div)
 	return (c / div) << 24 | (c % div) << 16 | (u32)div << 8 | 1u;
 }
 
-/* The flags word that follows a transmit sample (gateware-v2 rbv_i2s.sv). */
+/* The flags word that follows a transmit sample (gateware rbv_i2s.sv). */
 static inline u32 rb_i2s_tx_flags(u32 sample, u16 seq)
 {
 	u32 x = sample ^ (sample >> 8) ^ (sample >> 16) ^ (sample >> 24) ^ seq ^ ((u32)seq >> 8);

@@ -32,16 +32,13 @@
 #define RADIOBERRY_CMD_RUN (1u << 0)
 #define RADIOBERRY_CMD_CWX (1u << 1)
 #define RADIOBERRY_CMD_TX_PERMIT (1u << 2)
-/*
- * The PA board may be keyed (its T/R relay, bias and enable lines). Only
- * gateware-v2 images act on it; the PIO gateware ignores this bit.
- */
+/* The PA board may be keyed (its T/R relay, bias and enable lines). */
 #define RADIOBERRY_CMD_PA_ALLOWED (1u << 3)
 
 /* Byte 1 of a command is Hermes-Lite 2 C0: address << 1 | PTT. */
 #define RADIOBERRY_CMD_PTT (1u << 0)
 
-#define RADIOBERRY_FPGA_CL016 1
+#define RADIOBERRY_FPGA_CL016 1 /* no image is built for it */
 #define RADIOBERRY_FPGA_CL025 2
 
 struct radioberry_info {
@@ -63,13 +60,15 @@ struct radioberry_info {
 };
 
 #define RADIOBERRY_TRANSPORT_PIO 1 /* Raspberry Pi 5: RP1 PIO state machines */
-#define RADIOBERRY_TRANSPORT_CPU 2 /* Raspberry Pi 4: clocked by a kernel thread */
-#define RADIOBERRY_TRANSPORT_I2S 4 /* Raspberry Pi 4: I2S into the PCM block (gateware-v2) */
+#define RADIOBERRY_TRANSPORT_CPU 2 /* Raspberry Pi 4 up to release 0.4.1: CPU-clocked */
+#define RADIOBERRY_TRANSPORT_I2S 4 /* Raspberry Pi 4: I2S into the PCM block */
 
 /*
  * One gateware command. tx[0] holds RADIOBERRY_CMD_* flags, tx[1..5] the
- * Hermes-Lite 2 C0..C4 bytes. On return rx[] holds the gateware's reply
- * word (see gateware/README.md section 4).
+ * Hermes-Lite 2 C0..C4 bytes. On return rx[] holds the reply: byte 0 bit 2
+ * the jack's CW key, bit 0 the core's CW or the jack's PTT; byte 3
+ * transmitters << 6 | receivers << 2 | FPGA type; bytes 4 and 5 the
+ * Hermes-Lite 2 core version clients are shown.
  */
 struct radioberry_command {
 	__u8 tx[6];

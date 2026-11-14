@@ -9,8 +9,8 @@ DKMS_SRC = debian/radioberry-dkms/usr/src/radioberry-$(DEB_VERSION_UPSTREAM)
 %:
 	dh $@ --buildsystem=cmake
 
-# The driver is built on the target by DKMS, and the gateware the driver
-# loads is linked by the install script for the FPGA the user chooses.
+# The driver is built on the target by DKMS, and the gateware images the
+# driver loads are linked into /usr/lib/firmware by the install script.
 # /boot/firmware is FAT, where dpkg cannot replace a file (it needs a hard
 # link), so the overlay is installed under /usr and copied by postinst.
 override_dh_auto_configure:
@@ -25,8 +25,7 @@ override_dh_install:
 	dh_install
 	install -d $(DKMS_SRC)/include
 	install -m 644 driver/kernel/Kbuild driver/kernel/radioberry.c \
-		driver/kernel/rb_logic.h driver/kernel/rb_pio.h driver/kernel/rb_bitbang.h \
-		driver/kernel/rb_frame.h \
+		driver/kernel/rb_logic.h driver/kernel/rb_pio.h driver/kernel/rb_frame.h \
 		$(DKMS_SRC)/
 	install -m 644 driver/include/radioberry_ioctl.h $(DKMS_SRC)/include/
 
