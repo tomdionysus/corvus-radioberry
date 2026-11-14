@@ -22,8 +22,9 @@ port: 1024
 client_timeout_ms: 3000
 
 # The radio's frequency error in ppm, positive if it tunes high; every RX and
-# TX frequency is corrected.
-frequency_ppm: 0
+# TX frequency is corrected. 22.9 is typical of these boards; measure your own
+# (docs/calibration.md).
+frequency_ppm: 22.9
 
 # I/Q order: hl2 for Hermes-Lite 2 software such as piHPSDR, standard for
 # plain complex-baseband clients.
@@ -36,7 +37,7 @@ p2_rx_gain: 14
 protocols: 1,2
 
 # Run the stream threads at SCHED_FIFO and lock memory (needs CAP_SYS_NICE and CAP_IPC_LOCK).
-realtime: true
+realtime: false
 
 # Log detail: trace, debug, info, warn or error.
 log_level: info
