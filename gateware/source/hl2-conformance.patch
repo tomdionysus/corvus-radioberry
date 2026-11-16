@@ -1,0 +1,191 @@
+Standard-conformance edits to the Hermes-Lite 2 radio core in
+Hermes-Lite2-3e467fd-radioberry-pio.tar.xz (IEEE 1800-2005), applied by
+tools/build.sh after unpacking it:
+
+- radio.v: generate blocks RECEIVER2 and DEBUGRX, named like the parameters
+  of the same names, renamed RECEIVER2_g and DEBUGRX_g.
+- receiver.v, vna_scanner.v: body parameters CICRATE and RATE48 given a
+  default (every instance sets them).
+- radio.v: outputs assigned in always blocks declared output reg.
+- radio.v, vna_scanner.v, receiver_nco.v: always @* blocks written
+  always_comb, which also runs at time zero, so a simulator computes their
+  outputs before the first clock as the hardware has them.
+
+Both images are byte for byte the same with and without these edits.
+
+diff -ru a/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/radio.v b/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/radio.v
+--- a/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/radio.v	2026-07-30 08:16:02.000000000 +0100
++++ b/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/radio.v	2026-11-16 03:16:07.103480410 +0000
+@@ -109,42 +109,42 @@
+ input         link_master            ;
+ input  [23:0] lm_data                ;
+ input         lm_valid               ;
+-output        ls_valid               ;
++output reg    ls_valid               ;
+ input         ls_done                ;
+ input         ds_cmd_ptt             ;
+ input         run                    ;
+ input         qmsec_pulse            ;
+ input         ext_keydown            ;
+ input         ext_ptt                ;
+-output        tx_on                  ;
+-output        cw_on                  ;
++output reg    tx_on                  ;
++output reg    cw_on                  ;
+ output [18:0] cw_profile             ;
+ input         clk_envelope           ;
+ output        tx_envelope_pwm_out    ;
+ output        tx_envelope_pwm_out_inv;
+ input  [31:0] tx_tdata               ;
+ input         tx_tlast               ;
+-output        tx_tready              ;
++output reg    tx_tready              ;
+ input         tx_tvalid              ;
+ input  [ 3:0] tx_tuser               ;
+-output        tx_twait               ;
++output reg    tx_twait               ;
+ input  [31:0] lr_tdata               ;
+ input  [ 2:0] lr_tid                 ;
+ input         lr_tlast               ;
+ output        lr_tready              ;
+ input         lr_tvalid              ;
+-output [11:0] tx_data_dac            ;
++output reg [11:0] tx_data_dac            ;
+ input  [11:0] rx_data_adc            ;
+-output [23:0] rx_tdata               ;
+-output        rx_tlast               ;
++output reg [23:0] rx_tdata               ;
++output reg    rx_tlast               ;
+ input         rx_tready              ;
+-output        rx_tvalid              ;
+-output [ 1:0] rx_tuser               ;
++output reg    rx_tvalid              ;
++output reg [ 1:0] rx_tuser               ;
+ // Command slave interface
+ input  [ 5:0]        cmd_addr ;
+ input  [31:0]        cmd_data ;
+ input                cmd_rqst ;
+-output               cmd_ack  ;
++output reg           cmd_ack  ;
+ output logic [15:0]  debug_out;
+ 
+ 
+@@ -231,7 +231,7 @@
+   PWM_max <= PWM_max_next;
+ end
+ 
+-always @* begin
++always_comb begin
+   cmd_state_next = cmd_state;
+   cmd_ack = 1'b0;
+   vna_next = vna;
+@@ -321,7 +321,7 @@
+ assign freqcomp = cmd_data * M2 + M3;
+ 
+ // Map address to phase index
+-always @* begin
++always_comb begin
+   if (link_running & link_master) begin
+     case(cmd_addr[4:0])
+       5'h01   : nco_index = 4'hf; // TX
+@@ -537,7 +537,7 @@
+   );
+ end
+ 
+-if (NR >= 3) begin: RECEIVER2
++if (NR >= 3) begin: RECEIVER2_g
+   receiver_nco #(.CICRATE(CICRATE)) receiver_2 (
+     .rst_all(rst_all),
+     .clock(clk),
+@@ -729,7 +729,7 @@
+   end
+ end
+ 
+-always @* begin
++always_comb begin
+   // Sequential
+   rxus_state_next = rxus_state;
+   chan_next = chan;
+@@ -970,7 +970,7 @@
+   tx_fir_q      <= tx_fir_q_next;
+ end
+ 
+-always @* begin
++always_comb begin
+   cwx_keyup   = tx_tuser[1] & tx_tvalid;
+   cwx_keydown = tx_tuser[2] & tx_tvalid;
+   ptt         = tx_tuser[3] & tx_tvalid;
+@@ -1357,7 +1357,7 @@
+ endgenerate
+ 
+ 
+-generate if (DEBUGRX == 1) begin: DEBUGRX
++generate if (DEBUGRX == 1) begin: DEBUGRX_g
+ 
+ logic [3:0] synthetic_count;
+ logic signed [11:0] synthetic_adc;
+@@ -1382,7 +1382,7 @@
+   end
+ end
+ 
+-always @* begin
++always_comb begin
+   case (debugsel)
+     2'h0: debug_out = debugreg0;
+     2'h1: debug_out = debugreg1;
+@@ -1400,7 +1400,7 @@
+ 
+ // i from 0 to 12
+ //int(round((2**11-1)*np.sin(2*np.pi*i/13+(np.pi/2)+.01)))
+-always @* begin
++always_comb begin
+   case (synthetic_count)
+     4'h0: synthetic_adc = 2047;
+     4'h1: synthetic_adc = 1803;
+diff -ru a/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/receiver_nco.v b/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/receiver_nco.v
+--- a/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/receiver_nco.v	2026-07-30 08:16:02.000000000 +0100
++++ b/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/receiver_nco.v	2026-11-16 03:16:07.115199474 +0000
+@@ -137,7 +137,7 @@
+ 
+ end else begin
+ 
+-  always @(*) begin
++  always_comb begin
+     out_data_I = out_data_I2;
+     out_data_Q = out_data_Q2;
+   end
+diff -ru a/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/receiver.v b/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/receiver.v
+--- a/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/receiver.v	2026-07-30 08:16:02.000000000 +0100
++++ b/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/receiver.v	2026-11-16 03:16:07.099359394 +0000
+@@ -42,7 +42,7 @@
+   output signed [17:0] cordic_outdata_Q
+   );
+ 
+-  parameter CICRATE;
++  parameter CICRATE = 0;
+ 
+ // gain adjustment, Hermes reduced by 6dB to match previous receiver code.
+ // Hermes-Lite gain reduced to calibrate QtRadio
+diff -ru a/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/vna_scanner.v b/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/vna_scanner.v
+--- a/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/vna_scanner.v	2026-07-30 08:16:02.000000000 +0100
++++ b/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/vna_scanner.v	2026-11-16 03:16:07.104157005 +0000
+@@ -46,8 +46,8 @@
+   input               [15:0] vna_count
+ );
+ 
+-parameter CICRATE;
+-parameter RATE48;   // The decimation for 48000 sps
++parameter CICRATE = 0;
++parameter RATE48 = 0;   // The decimation for 48000 sps
+ 
+ localparam DECIMATION = (RATE48 * CICRATE * 8) * 6; // The decimation; the number of clocks per output sample
+ 
+@@ -93,7 +93,7 @@
+   end
+ end
+ 
+-always @* begin
++always_comb begin
+   tx_freq_next        = tx_freq;
+   //tx_zero_next        = tx_zero;
+   vna_state_next      = vna_state;

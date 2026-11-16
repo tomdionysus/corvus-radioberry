@@ -21,9 +21,10 @@ receivers and transmit with one.
   control registers and the SPI protocol, AD9866 start-up, keying and PA
   lines, and the links to the Pi.
 - `source/`: the Hermes-Lite 2 radio core (receivers, decimation, NCOs,
-  transmit DSP), a `git archive` of the Hermes-Lite 2 repository used
-  unmodified: [docs/provenance.md](docs/provenance.md) has the commit,
-  hashes, licences and the fitter seed of each image.
+  transmit DSP), a `git archive` of the Hermes-Lite 2 repository, built
+  with three standard-conformance edits that leave the images unchanged
+  (`hl2-conformance.patch`): [docs/provenance.md](docs/provenance.md) has
+  the commit, hashes, licences and the fitter seed of each image.
 
 ## Layout
 

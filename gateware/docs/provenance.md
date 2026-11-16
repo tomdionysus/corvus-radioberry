@@ -18,10 +18,15 @@ git archive --format=tar --prefix=Hermes-Lite2-3e467fd/ 3e467fd \
     gateware/variants/radioberry_pio_cl016 README.md | xz -9e
 ```
 
-[tools/build.sh](../tools/build.sh) unpacks it for every build. The images
-use its radio core (`gateware/rtl/radio_openhpsdr1/radio.v` and the
-modules it instantiates, listed in each project file) unmodified; the
-RadioBerry and Hermes-Lite 2 board logic in the archive is not used.
+[tools/build.sh](../tools/build.sh) unpacks it for every build and applies
+[../source/hl2-conformance.patch](../source/hl2-conformance.patch): three
+edits that make the core conform to IEEE 1800-2005 (block labels distinct
+from parameter names, body parameters with defaults, outputs assigned in
+`always` blocks declared `reg`). Both images are byte for byte the same with
+and without the patch. The images use the core
+(`gateware/rtl/radio_openhpsdr1/radio.v` and the modules it instantiates,
+listed in each project file); the RadioBerry and Hermes-Lite 2 board logic
+in the archive is not used.
 
 ## Images
 

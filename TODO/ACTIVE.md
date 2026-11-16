@@ -36,7 +36,8 @@ item is removed from here and recorded at the top of
 - Gateware: one image per board, 10CL025 only, built from `gateware/`
   with Quartus Prime Lite 23.1std.1 in Docker on an x86-64 machine;
   bitfiles are committed and the Pi only installs them. The Hermes-Lite 2
-  radio core is read unmodified from `gateware/source/`. The radio never
+  radio core is read from `gateware/source/` with its standard-conformance
+  patch (images unchanged by it). The radio never
   appears as a sound card.
 - The driver picks its transport from the SoC: Pi 5 PIO with `rpi5-pio`,
   Pi 4 I2S with `rpi4-i2s`. One overlay, `dtoverlay=radioberry`, on both.
@@ -87,6 +88,19 @@ item is removed from here and recorded at the top of
 
 - [ ] [Gateware review](../gateware/docs/review.md) findings: not being
       worked on now.
+- [ ] Improve the Hermes-Lite 2 radio core, in three stages. (a) Clean-up
+      with byte-for-byte identical images: unused generate branches and
+      parameters for this configuration, the rest of the core made
+      standard-conforming so a simulator and Quartus read the same source.
+      (b) Audit without changing the image (review items 5, 6 and 8):
+      fixed-point widths and rounding through the receive chain, decimation
+      passband, stopband and alias rejection at each rate, NCO and CORDIC
+      spurs, by simulation of the conforming core and confirmed on the
+      board. (c) Changes that alter the image, only where (b) finds
+      something, each measured before and after on the board, with the
+      board owner's go-ahead per change. Acceptance per stage: (a) the
+      image hashes unchanged; (b) each figure measured and written up;
+      (c) the improvement measured.
 - [ ] Pi 5 receive level of its own transmission: with the same tools the
       Pi 5 sees the tone 25 dB stronger in loopback (-18.7 against -43.6
       dBFS) and 48 dB stronger keyed into the dummy load (-16.9 against
