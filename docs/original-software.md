@@ -19,6 +19,14 @@ sudo depmod
 sudo systemctl daemon-reload
 ```
 
+Its SoapySDR module, if installed, claims `driver=radioberry` as
+`soapysdr-module-radioberry` does; remove it (`rbprobe` reports it):
+
+```
+sudo rm -f /usr/local/lib/SoapySDR/modules*/libSoapyRadioberrySDR.so \
+    /usr/local/lib/*/SoapySDR/modules*/libSoapyRadioberrySDR.so
+```
+
 Its overlay (`/boot/firmware/overlays/radioberry.dtbo`) is replaced when
 this software is installed. Its gateware, `/lib/firmware/radioberry.rbf`,
 is not used and can be deleted. Keep `dtoverlay=radioberry` in

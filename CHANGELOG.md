@@ -3,6 +3,13 @@
 Changes per released version, newest first. Versions are git tags; the
 packages carry the same number.
 
+## Unreleased (0.6.0)
+
+- SoapySDR module, `soapysdr-module-radioberry` (optional): receive on the
+  gateware's receivers, transmit at 48 ksps, under `radioberryd`'s
+  transmit rules. Build option `RADIOBERRY_BUILD_SOAPY`; package build
+  profile `pkg.radioberry.nosoapy`.
+
 ## 0.5.0 - 2026-11-14
 
 - New gateware, one image per board, both for the 10CL025: `rpi5-pio`

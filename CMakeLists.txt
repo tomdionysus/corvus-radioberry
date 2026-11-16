@@ -17,6 +17,7 @@ endif()
 
 option(RADIOBERRY_BUILD_TESTS "Build the unit tests" ON)
 option(RADIOBERRY_BUILD_EXAMPLES "Build the example clients (examples/)" OFF)
+option(RADIOBERRY_BUILD_SOAPY "Build the SoapySDR module (soapy/); needs libsoapysdr-dev" OFF)
 
 set(RADIOBERRY_FIRMWARE_DIR "/lib/firmware" CACHE PATH "Where the driver's gateware is installed")
 
@@ -47,6 +48,10 @@ add_subdirectory(gateware)
 if(RADIOBERRY_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()
+if(RADIOBERRY_BUILD_SOAPY)
+    add_subdirectory(soapy)
+endif()
 
 message(STATUS "radioberry ${RADIOBERRY_VERSION}: "
-               "kernel module ${RADIOBERRY_BUILD_MODULE} (${KERNEL_RELEASE})")
+               "kernel module ${RADIOBERRY_BUILD_MODULE} (${KERNEL_RELEASE}), "
+               "SoapySDR module ${RADIOBERRY_BUILD_SOAPY}")

@@ -6,6 +6,13 @@ include /usr/share/dpkg/pkg-info.mk
 
 DKMS_SRC = debian/radioberry-dkms/usr/src/radioberry-$(DEB_VERSION_UPSTREAM)
 
+# The SoapySDR module, unless built with the pkg.radioberry.nosoapy profile.
+ifneq ($(filter pkg.radioberry.nosoapy,$(DEB_BUILD_PROFILES)),)
+SOAPY = OFF
+else
+SOAPY = ON
+endif
+
 %:
 	dh $@ --buildsystem=cmake
 
@@ -19,6 +26,7 @@ override_dh_auto_configure:
 		-DRADIOBERRY_BUILD_MODULE=OFF \
 		-DRADIOBERRY_INSTALL_FIRMWARE=OFF \
 		-DRADIOBERRY_OVERLAY_DIR=/usr/share/radioberry/overlays \
+		-DRADIOBERRY_BUILD_SOAPY=$(SOAPY) \
 		-DRADIOBERRY_VERSION=v$(DEB_VERSION)
 
 override_dh_install:

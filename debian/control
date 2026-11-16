@@ -16,6 +16,8 @@ Build-Depends:
  libspdlog-dev,
  libsystemd-dev,
  catch2,
+ libsoapysdr-dev <!pkg.radioberry.nosoapy>,
+ soapysdr-tools <!pkg.radioberry.nosoapy !nocheck>,
 Standards-Version: 4.7.0
 Homepage: https://github.com/tomdionysus/corvus-radioberry
 Vcs-Git: https://github.com/tomdionysus/corvus-radioberry.git
@@ -61,3 +63,20 @@ Depends:
 Description: RadioBerry 2.x driver ABI header
  radioberry_ioctl.h: the /dev/radioberry interface of the radioberry.ko
  driver, for programs that use the device directly.
+
+Package: soapysdr-module-radioberry
+Build-Profiles: <!pkg.radioberry.nosoapy>
+Architecture: arm64
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+ radioberry (= ${binary:Version}),
+Description: RadioBerry 2.x support for SoapySDR
+ A SoapySDR module (driver key "radioberry") for the RadioBerry 2.x HAT
+ on the Raspberry Pi 4 or 5, so SoapySDR programs such as GNU Radio,
+ CubicSDR and Quisk use the radio directly through /dev/radioberry:
+ receive on the gateware's receivers, transmit at 48 ksps.
+ .
+ The radio has one user at a time: stop radioberry.service to use it from
+ SoapySDR. Transmit follows the allow_tx, allow_pa, drive_ceiling and
+ tx_watchdog_s keys of /etc/radioberry/config.yaml, as radioberryd does.

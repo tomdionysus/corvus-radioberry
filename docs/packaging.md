@@ -11,9 +11,12 @@ same packages serve both.
 | `radioberry` | arm64 | `radioberryd` and `radioberry.service`, `rbprobe`, `rbcat`, `rbctl`, `p1probe`, `p2probe`, sysusers.d entry, udev rule, modules-load.d entry for `i2c-dev`, `/etc/radioberry/config.yaml`, the gateware images, the overlay |
 | `radioberry-dkms` | all | the driver source, built by DKMS for every installed kernel |
 | `radioberry-dev` | all | `radioberry_ioctl.h` |
-| `radioberry-dbgsym` | arm64 | debug symbols for `radioberry` |
+| `soapysdr-module-radioberry` | arm64 | the [SoapySDR module](soapy.md), optional |
+| `radioberry-dbgsym`, `soapysdr-module-radioberry-dbgsym` | arm64 | debug symbols |
 
-`radioberry` depends on `radioberry-dkms` of the same version.
+`radioberry` depends on `radioberry-dkms` of the same version, and
+`soapysdr-module-radioberry` on `radioberry` of the same version.
+`soapysdr-module-radioberry` is installed only when asked for.
 `radioberry-dkms` recommends `linux-headers-rpi-v8 | linux-headers-rpi-2712`,
 which apt installs by default; DKMS needs the headers of each kernel it
 builds for.
@@ -33,6 +36,9 @@ tools/build-deb.sh
 `debian/changelog`, runs `dpkg-buildpackage -us -uc -b` (unsigned, binary
 only) with the unit tests, and moves the packages to `build-deb/`.
 `DEB_BUILD_OPTIONS=nocheck tools/build-deb.sh` skips the tests.
+`DEB_BUILD_PROFILES=pkg.radioberry.nosoapy tools/build-deb.sh` builds
+without the SoapySDR module and without its build dependency
+(`apt build-dep --build-profiles pkg.radioberry.nosoapy ./`).
 
 The version comes from `git describe`: tag `v0.2.0` gives `0.2.0`, a build
 three commits after it `0.2.0+git3.gaff2d9d`, which sorts after `0.2.0` and
@@ -57,6 +63,7 @@ The install does the following:
 | unit, sysusers.d entry, udev rule | `/usr/lib/systemd/system/`, `/usr/lib/sysusers.d/`, `/usr/lib/udev/rules.d/` |
 | `i2c-dev` loaded at boot | `/usr/lib/modules-load.d/radioberry.conf` |
 | daemon config (conffile) | `/etc/radioberry/config.yaml` |
+| SoapySDR module (`soapysdr-module-radioberry`) | `/usr/lib/aarch64-linux-gnu/SoapySDR/modules0.8/libradioberrySupport.so` |
 
 The install does not edit `/boot/firmware/config.txt`. If it has no
 `dtoverlay=radioberry` line the install prints a reminder; add

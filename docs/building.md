@@ -34,6 +34,7 @@ Each component's README describes building it on its own:
 | `-DRADIOBERRY_ABI_INCLUDE_DIR=/usr/local/include` | build the tools and daemon against the installed ABI header; configuration fails if its ABI version differs from the source tree's |
 | `-DRADIOBERRY_BUILD_TESTS=OFF` | skip the unit tests (and the need for Catch2) |
 | `-DRADIOBERRY_BUILD_EXAMPLES=ON` | build `ft8rx` and `wsprrx` |
+| `-DRADIOBERRY_BUILD_SOAPY=ON` | build the [SoapySDR module](soapy.md); needs `libsoapysdr-dev` |
 
 ## What `cmake --install` places
 
@@ -48,6 +49,7 @@ Each component's README describes building it on its own:
 | `radioberry.service`, sysusers.d entry, udev rule | `/usr/local/lib/systemd/system/`, `/usr/local/lib/sysusers.d/`, `/usr/local/lib/udev/rules.d/` |
 | `i2c-dev` loaded at boot | `/usr/local/lib/modules-load.d/radioberry.conf` |
 | daemon config, if there is none | `/etc/radioberry/config.yaml` |
+| SoapySDR module, with `RADIOBERRY_BUILD_SOAPY=ON` | `/usr/local/lib/<arch>/SoapySDR/modules0.8/libradioberrySupport.so` |
 
 After a kernel update, build and install again; the packages do this
 automatically.

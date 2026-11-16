@@ -7,18 +7,15 @@ item is removed from here and recorded at the top of
 
 ## Where things stand
 
-- Released: v0.4.1 (Raspberry Pi 4 and 5, Linux 6.12 and 6.18), as Debian
-  packages from the apt repository and on GitHub, with the Hermes-Lite 2
-  PIO gateware.
-- Development branch `item/new-direction`, to be 0.5.0: this project's own
-  gateware ([gateware/README.md](../gateware/README.md)), one image per
-  board, 10CL025 only. Raspberry Pi 5: `rpi5-pio`, receive and transmit,
-  an FT8 contact on 20 m. Raspberry Pi 4: `rpi4-i2s`, I2S into the PCM
-  block driven by the driver directly (no ALSA), receive and transmit, on
-  air through piHPSDR and WSJT-X; 13% CPU at 192 ksps. Both use the
-  framed SPI control protocol
-  ([driver/kernel/rb_frame.h](../driver/kernel/rb_frame.h)). The driver
-  has only these two transports and sets up the Pi 4's PCM pins itself.
+- Released: v0.5.0 (Raspberry Pi 4 and 5, Linux 6.12 and 6.18), as Debian
+  packages from the apt repository and on GitHub: this project's own
+  gateware, one image per board (`rpi5-pio`, `rpi4-i2s`), 10CL025 only.
+- For 0.6.0, four branches, each to be squash-merged into `develop`:
+  `item/soapysdr` (the SoapySDR module, this file's section 6),
+  `item/os-kernel-matrix` (OS and kernel test matrix, its scripts),
+  `item/hl2-conformance` (HL2 core edits; images bit-identical),
+  `item/dkms-kernels` (DKMS skips kernels older than 6.12). Each branch
+  edits this file and the CHANGELOG: merge them one at a time.
 
 ## Standing decisions
 
@@ -78,10 +75,13 @@ item is removed from here and recorded at the top of
   module and ABI header use kernel style and are not clang-formatted.
 - Version string from `git describe`, embedded at configure time.
 
-## 1. Release 0.5.0
+## 1. Release 0.6.0
 
+- [ ] SoapySDR module on the Raspberry Pi 4 (section 6), then the four
+      branches merged.
 - [ ] Release gate per board (clean-down, README install, FT8 receive, the
-      owner's contact); version 0.5.0.
+      owner's contact); version 0.6.0; packages built, the fourth
+      (`soapysdr-module-radioberry`) with them.
 
 ## 2. Gateware (`gateware/`, `driver/`)
 
@@ -107,6 +107,11 @@ item is removed from here and recorded at the top of
       errors.
 - [ ] Receiver-count stress run on hardware now that the driver holds no
       RX clock (review finding 2.3).
+- [ ] Six receivers starting at once on the Pi 5: the first RX period has
+      2 resyncs and 4 dropped words (driver debug log), from
+      `radioberryd` (`p2probe --receivers 6`) and the SoapySDR module
+      alike, not every start. Acceptance: the cause found, or shown to
+      be the receiver-count change landing in the first period.
 - [ ] Optional: a lock-phase status bit in the I2S image, so each TX
       stream's realign is attributable (explanation now inferred).
 - [ ] A CL016 variant, if someone with a CL016 board will test it.
@@ -156,7 +161,8 @@ item is removed from here and recorded at the top of
       `/lib/modules/$(uname -r)/kernel/drivers/sdr/radioberry.ko`;
       `/etc/systemd/system/radioberry.service` with
       `ExecStart=/etc/init.d/radioberryd`, `/etc/init.d/radioberryd`,
-      `/usr/local/bin/radioberry`. Report it as a blocker named "the
+      `/usr/local/bin/radioberry`. (Its SoapySDR module is already
+      reported.) Report it as a blocker named "the
       original RadioBerry software", list the files found, and say what to
       remove; remove nothing; point to
       [docs/original-software.md](../docs/original-software.md).
@@ -164,7 +170,24 @@ item is removed from here and recorded at the top of
       the fake source for each signal alone and combined, and no finding on
       a Pi with only the packages installed.
 
-## 6. Hardware validation
+## 6. SoapySDR module (`soapy/`)
+
+- [ ] The module: what is left after the runs on both boards is in
+      [SOAPYSDR.md](SOAPYSDR.md), with their results.
+- [ ] Programs written for the SoapyRadioberry module:
+      [SOAPYSDR-COMPAT.md](SOAPYSDR-COMPAT.md) lists where the interfaces
+      differ and what could be matched. The board owner decides, after
+      asking which calls such programs make.
+
+## 6a. Tests
+
+- [ ] `p1probe MOX reaches the device only with transmit allowed`
+      (tools/protoprobe/tests/daemon_test.cpp) failed once in a parallel
+      test run of a package build with "UDP bind to port 55861: Address
+      already in use", and passed on the rerun: two tests' port ranges
+      can meet. Acceptance: the tests take ports that cannot collide.
+
+## 7. Hardware validation
 
 Transmit items each need the board owner's go-ahead at the time.
 
@@ -175,7 +198,7 @@ Transmit items each need the board owner's go-ahead at the time.
       above a floor about 46 dB down. Establish whether the result is the
       test client or the radio, then measure where compression sets in.
 
-## 7. Development Pi (Pi 5)
+## 8. Development Pi (Pi 5)
 
 - [ ] Wi-Fi background scans: while associated, the Pi 5 scans every
       33.7 s for 3.65 s, which stalls UDP to a Wi-Fi client for about

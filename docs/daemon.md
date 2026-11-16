@@ -18,7 +18,8 @@ description. The daemon reads it at start:
 command-line option, which overrides the file.
 
 Stop the service before running anything else that opens
-`/dev/radioberry` (`rbcat`, `rbctl`, the driver tests).
+`/dev/radioberry` (`rbcat`, `rbctl`, the driver tests, a
+[SoapySDR](soapy.md) program).
 
 ## Options
 
