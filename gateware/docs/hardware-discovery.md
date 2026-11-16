@@ -307,7 +307,7 @@ a guarantee from the build.
 ## 10. Measured with the link test image
 
 Measured on one board on a Raspberry Pi 4 with the link test image
-([rtl/linktest](../rtl/linktest), host tool [host/linktest.py](../host/linktest.py)),
+([rtl/linktest](../rtl/linktest)),
 which is written from scratch and shares no code with the radio gateware.
 Where a row contradicts an earlier section or section 11, this section
 is the newer and stands.
