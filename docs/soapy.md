@@ -23,6 +23,15 @@ SoapySDRUtil --probe="driver=radioberry"
 sudo systemctl start radioberry
 ```
 
+If only SoapySDR programs use the radio, stop `radioberryd` for good; it
+then stays off across reboots and package upgrades:
+
+```
+sudo systemctl disable --now radioberry
+```
+
+`sudo systemctl enable --now radioberry` brings it back.
+
 ## Device arguments
 
 | Argument | Default | Meaning |
