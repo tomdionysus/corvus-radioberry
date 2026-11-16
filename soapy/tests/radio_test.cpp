@@ -327,8 +327,12 @@ TEST_CASE("sample rates") {
     CHECK(r.getSampleRate(RX, 0) == 48000);
     r.setSampleRate(RX, 0, 192000);
     CHECK(r.getSampleRate(RX, 3) == 192000);
-    // No stream: the radio stays at one receiver, 48 ksps.
-    CHECK(rig.last(0x00)->data == hl2::general(0, 1).data);
+    // No stream: the radio stays at one receiver, 48 ksps. The command goes
+    // out on the device thread.
+    CHECK(wait_until([&] {
+        const auto general = rig.last(0x00);
+        return general && general->data == hl2::general(0, 1).data;
+    }));
     r.setSampleRate(TX, 0, 48000);
     CHECK(r.getSampleRate(TX, 0) == 48000);
     CHECK_THROWS_AS(r.setSampleRate(RX, 0, 250000), std::invalid_argument);
