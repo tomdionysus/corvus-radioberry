@@ -10,12 +10,9 @@ item is removed from here and recorded at the top of
 - Released: v0.5.0 (Raspberry Pi 4 and 5, Linux 6.12 and 6.18), as Debian
   packages from the apt repository and on GitHub: this project's own
   gateware, one image per board (`rpi5-pio`, `rpi4-i2s`), 10CL025 only.
-- For 0.6.0, four branches, each to be squash-merged into `develop`:
-  `item/soapysdr` (the SoapySDR module, this file's section 6),
-  `item/os-kernel-matrix` (OS and kernel test matrix, its scripts),
-  `item/hl2-conformance` (HL2 core edits; images bit-identical),
-  `item/dkms-kernels` (DKMS skips kernels older than 6.12). Each branch
-  edits this file and the CHANGELOG: merge them one at a time.
+- On `develop` for 0.6.0: the SoapySDR module (section 6), the OS and
+  kernel test matrix, the Hermes-Lite 2 core's conformance edits (images
+  bit-identical) and DKMS skipping kernels older than 6.12.
 
 ## Standing decisions
 
@@ -78,8 +75,6 @@ item is removed from here and recorded at the top of
 
 ## 1. Release 0.6.0
 
-- [ ] SoapySDR module on the Raspberry Pi 4 (section 6), then the four
-      branches merged.
 - [ ] Release gate per board (clean-down, README install, FT8 receive, the
       owner's contact); version 0.6.0; packages built, the fourth
       (`soapysdr-module-radioberry`) with them.
