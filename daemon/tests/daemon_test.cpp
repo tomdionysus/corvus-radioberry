@@ -717,7 +717,11 @@ TEST_CASE("a Protocol 2 packet wakes an idle daemon", "[daemon]") {
     device.idle_wait_ms = 1;
     Running r(device);
     P2Client client(r.daemon);
-    std::this_thread::sleep_for(50ms);  // the main thread sleeps: nobody owns the radio
+    // Nobody owns the radio: the main thread goes to sleep.
+    for (int i = 0; i < 1000 && !r.daemon.idle(); ++i) {
+        std::this_thread::sleep_for(5ms);
+    }
+    REQUIRE(r.daemon.idle());
     client.send(p2::kRxSpecificPort, rx_specific_packet(0, {{0, 48}}));
     client.send(p2::kGeneralPort, p2_discovery_packet());
     CHECK(client.receive_from({p2::kGeneralPort})[p2::kGeneralPort].size() == 60);
