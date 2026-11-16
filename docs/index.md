@@ -35,6 +35,8 @@ Source: [github.com/tomdionysus/corvus-radioberry](https://github.com/tomdionysu
 
 - [Design](design.md)
 - [Test results](testing.md)
+- [OS and kernel test matrix](test-matrix.md): Bookworm and trixie on one
+  Pi, every kernel, client CPU and decode times, and how to repeat it
 - [Driver](https://github.com/tomdionysus/corvus-radioberry/blob/main/driver/README.md):
   building it, [design](https://github.com/tomdionysus/corvus-radioberry/blob/main/driver/docs/design.md),
   [hardware tests](https://github.com/tomdionysus/corvus-radioberry/blob/main/driver/docs/driver-tests.md)

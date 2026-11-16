@@ -120,6 +120,21 @@ item is removed from here and recorded at the top of
 
 - [ ] Upstream review: the driver has not been through review on the
       kernel mailing lists.
+- [ ] Refuse unsupported kernels in DKMS (`BUILD_EXCLUSIVE_KERNEL`) so a
+      kernel the driver cannot build for does not fail its own install and
+      leave apt broken ([test-matrix.md](../docs/test-matrix.md)); the
+      install script names the running kernel and the fix when it is not
+      supported. Acceptance: on Bookworm, installing 6.6.51 with
+      `radioberry-dkms` installed completes, and a trixie system on 6.1
+      (a user's report) gets the message.
+- [ ] Bookworm, if it is to be supported: the four source changes and the
+      packaging findings in [test-matrix.md](../docs/test-matrix.md)
+      (service not enabled, DKMS skipping the Pi 5's newer kernel at
+      install, libgpiod from backports at run time), a `bookworm` suite in
+      the repository, and the kernel matrix there. 6.12.19 (Bookworm's
+      first 6.12) gives no receive data on the Pi 5; 6.6.74 works with
+      one include change; 6.6.62 and older do not build. The board owner
+      decides.
 
 ## 4. Daemon (`daemon/`)
 
@@ -136,6 +151,17 @@ item is removed from here and recorded at the top of
       [tools/protoprobe/tests/daemon_test.cpp](../tools/protoprobe/tests/daemon_test.cpp)
       already runs `p1probe` and `p2probe` against the daemon and the fake
       device; the fault injection is open.
+- [ ] piHPSDR 3.1 over Protocol 2 at 48 ksps received nothing in three of
+      four starts on the Pi 5 (radioberryd logged the stream; piHPSDR
+      showed -200 dBm), while 192 and 384 ksps always worked and `ft8rx`
+      over Protocol 2 at 48 ksps works. Find which side: a capture of the
+      Protocol 2 packets at 48 and 192 ksps, compared.
+      Not reproduced on 0.5.0 (the failures were on a pre-0.5.0 build):
+      eight starts at 48 ksps on the Pi 5 (trixie), all receiving. In four, captured on lo, piHPSDR asked for DDC0 at
+      48 ksps, 24 bits, and `radioberryd` sent DDC0 packets with non-zero
+      samples to its port from 3.3 s, at the rate, as at 192 ksps; the
+      other four showed 20 m FT8 on piHPSDR's spectrum. Close unless it
+      comes back.
 - [ ] piHPSDR at 384 ksps on the Pi 4 stalled and exited; the kernel
       counted UDP receive-buffer drops (none on send), so the client fell
       behind. Confirm with per-socket drops (`ss -uamp`) while it runs;
