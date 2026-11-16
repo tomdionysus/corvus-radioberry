@@ -4,7 +4,10 @@ The driver is built by DKMS against the installed kernel's headers; one
 source serves the 6.12 and 6.18 Raspberry Pi OS kernels on both boards.
 Installing a kernel with its headers (`apt` does this for the
 `linux-image-rpi-v8` and `linux-image-rpi-2712` metapackages) builds the
-driver for it; nothing needs reinstalling.
+driver for it; nothing needs reinstalling. DKMS skips kernels older than
+6.12, which the driver does not build for, and the install says so when
+the running kernel is one of them: update the kernel
+(`sudo apt full-upgrade`) and reboot.
 
 ## Differences between 6.12 and 6.18
 

@@ -9,6 +9,8 @@ packages carry the same number.
   gateware's receivers, transmit at 48 ksps, under `radioberryd`'s
   transmit rules. Build option `RADIOBERRY_BUILD_SOAPY`; package build
   profile `pkg.radioberry.nosoapy`.
+- Packages: DKMS skips kernels older than 6.12 instead of failing the
+  install, and the install names an unsupported running kernel.
 
 ## 0.5.0 - 2026-11-14
 
