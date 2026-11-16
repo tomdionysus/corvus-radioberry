@@ -33,9 +33,11 @@ cp "$top/projects/$project/$project.qsf" "$top/projects/$project/$project.sdc" "
 if [ -n "${SEED:-}" ]; then
     echo "set_global_assignment -name SEED $SEED" >>"$work/$project.qsf"
 fi
-# The Hermes-Lite 2 radio core, unmodified, for the projects that use it.
+# The Hermes-Lite 2 radio core with its standard-conformance edits, for the
+# projects that use it.
 mkdir -p "$work/hl2"
 tar -xJf "$top"/source/Hermes-Lite2-*-radioberry-pio.tar.xz -C "$work/hl2"
+patch -s -p1 -d "$work/hl2" <"$top/source/hl2-conformance.patch"
 echo "compiling $project (a few minutes)"
 if ! docker run --rm --platform linux/amd64 --user "$(id -u):$(id -g)" -e HOME=/tmp \
     -v "$top:/src" -w "/src/build/work-$project" "$image" \

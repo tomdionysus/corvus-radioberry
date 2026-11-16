@@ -14,6 +14,7 @@ on a Raspberry Pi 4 or 5 with a 10CL025 FPGA:
 |---|---|
 | [Driver](driver/README.md) | `radioberry.ko`, the Linux kernel driver: loads the gateware, streams samples over the Pi 5's PIO or the Pi 4's PCM block |
 | [Daemon](daemon/README.md) | `radioberryd`, serving openHPSDR Protocol 1 and Protocol 2 to clients such as piHPSDR and WSJT-X, with control of an [AURSINC PA5W V2](https://www.aursinc.com/products/aursinc-radioberry-preamp-board-v2-output-1-5w-3w-for-hf-power-ampfier-10w-100w-pa-for-raspberry-pi-4-4b) amplifier board |
+| [SoapySDR module](soapy/README.md) | optional: the radio as a SoapySDR device, for GNU Radio, CubicSDR, Quisk and others |
 | [Gateware](gateware/README.md) | the FPGA images, one per Pi, built from GPL source |
 | [Tools](docs/tools.md) | `rbprobe`, which checks every layer from the Pi to the FPGA and says what is wrong, and other diagnostics |
 
@@ -42,6 +43,16 @@ Then enable the driver, configure and start the service: the
 `sudo apt upgrade`. To build from source instead, see
 [Building from source](docs/building.md). Supported and tested kernels:
 [docs/kernels.md](docs/kernels.md).
+
+## Interfaces
+
+Programs reach the radio one of three ways, one program at a time:
+
+| Interface | For | Package | Details |
+|---|---|---|---|
+| openHPSDR Protocol 1 and 2, through `radioberryd` | piHPSDR, WSJT-X, Quisk and other HPSDR software, on the Pi or over the network | `radioberry` | [radioberryd](docs/daemon.md) |
+| SoapySDR | GNU Radio, CubicSDR, Quisk and other SoapySDR software, on the Pi | `soapysdr-module-radioberry` | [SoapySDR](docs/soapy.md) |
+| `/dev/radioberry` | your own program, on the Pi | `radioberry-dev` | [Kernel driver](docs/driver.md) |
 
 ## Getting started
 

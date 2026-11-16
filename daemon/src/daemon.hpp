@@ -86,6 +86,8 @@ public:
     Session& session() { return session_; }
     TxPolicy& policy() { return policy_; }
     DeviceService& device() { return service_; }
+    // The main thread is about to sleep, or sleeps, with no timeout.
+    bool idle() const { return idle_; }
 
 private:
     void on_fault(const Fault& fault);

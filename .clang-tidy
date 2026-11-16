@@ -1,6 +1,6 @@
 ---
-# clang-tidy for the userspace C++ (daemon, tools, example, driver logic
-# tests). Bug-finding, concurrency and performance checks, plus the static
+# clang-tidy for the userspace C++ (daemon, tools, example, SoapySDR
+# module, driver logic tests). Bug-finding, concurrency and performance checks, plus the static
 # analyser. Style is clang-format's job; narrowing is -Wconversion's.
 Checks: >
   -*,
@@ -25,4 +25,4 @@ Checks: >
   readability-container-size-empty,
   readability-redundant-string-cstr
 WarningsAsErrors: "*"
-HeaderFilterRegex: "/(daemon|tools|examples/ft8/src/ft8|driver)/"
+HeaderFilterRegex: "/(daemon|tools|examples/ft8/src/ft8|driver|soapy)/"

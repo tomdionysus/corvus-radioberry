@@ -139,6 +139,29 @@ TEST_CASE("development Pi: boot, firmware and software", "[collect]") {
     CHECK_FALSE(has_id(r, "firmware.fpga"));
 }
 
+TEST_CASE("the original project's SoapySDR module is reported", "[collect]") {
+    FakeSource pi = working_pi();
+    CHECK(collect(pi, test_options()).root.at("software.other_soapy_modules")->items().empty());
+    CHECK_FALSE(has_id(collect(pi, test_options()), "software.soapy_module"));
+
+    const std::string local = "/usr/local/lib/SoapySDR/modules0.8/libSoapyRadioberrySDR.so";
+    const std::string multiarch =
+        "/usr/lib/aarch64-linux-gnu/SoapySDR/modules0.8/libSoapyRadioberrySDR.so";
+    pi.files[local] = "";
+    pi.files[multiarch] = "";
+    // Ours, and an unrelated directory, are not reported.
+    pi.files["/usr/lib/aarch64-linux-gnu/SoapySDR/modules0.8/libradioberrySupport.so"] = "";
+    pi.files["/usr/lib/aarch64-linux-gnu/SoapySDR/other/libSoapyRadioberrySDR.so"] = "";
+    pi.dirs.insert("/usr/lib/python3");
+    const Report r = collect(pi, test_options());
+    const auto& found = r.root.at("software.other_soapy_modules")->items();
+    REQUIRE(found.size() == 2);
+    CHECK(found[0].as_string() == local);
+    CHECK(found[1].as_string() == multiarch);
+    CHECK(has(r, "software.soapy_module", Severity::kWarning));
+    CHECK(r.radio_can_run());
+}
+
 TEST_CASE("working Pi: radio can run", "[collect]") {
     FakeSource pi = working_pi();
     const Report r = collect(pi, test_options());

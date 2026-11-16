@@ -14,10 +14,12 @@
 #
 # RADIOBERRY_CI_HOST may stand in for --remote HOST. The remote copy lives
 # in ~/radioberry-ci on the host and is reused between runs.
+# RADIOBERRY_SOAPY=on|off|auto builds the SoapySDR module with the rest, or
+# not; auto (the default) builds it where SoapySDR's headers are installed.
 set -eu
 
 usage() {
-    sed -n '4,16p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '4,18p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 remote=${RADIOBERRY_CI_HOST:-}
@@ -56,11 +58,20 @@ if [ -n "$remote" ]; then
         rsync -a --no-owner --no-group --delete --from0 --files-from=- ./ "$remote:$dest/"
     rsync -a --no-owner --no-group --delete .git/ "$remote:$dest/.git/"
     exec ssh -o BatchMode=yes "$remote" \
-        "cd $dest && git update-index -q --refresh >/dev/null 2>&1; sh tools/ci-pi.sh --local"
+        "cd $dest && git update-index -q --refresh >/dev/null 2>&1; \
+         RADIOBERRY_SOAPY=${RADIOBERRY_SOAPY:-auto} sh tools/ci-pi.sh --local"
 fi
 
 jobs=$(nproc 2>/dev/null || echo 2)
 step() { echo; echo "== $*"; }
+
+case "${RADIOBERRY_SOAPY:-auto}" in
+    on) soapy=ON ;;
+    off) soapy=OFF ;;
+    auto) if [ -f /usr/include/SoapySDR/Device.hpp ]; then soapy=ON; else soapy=OFF; fi ;;
+    *) echo "RADIOBERRY_SOAPY: on, off or auto" >&2; exit 2 ;;
+esac
+echo "SoapySDR module: $soapy"
 
 step "format"
 sh tools/check-format.sh
@@ -96,7 +107,7 @@ else
 fi
 
 step "release build and tests"
-cmake --preset default >/dev/null
+cmake --preset default -DRADIOBERRY_BUILD_SOAPY=$soapy >/dev/null
 cmake --build --preset default -j "$jobs"
 ctest --preset default
 
@@ -113,7 +124,7 @@ if command -v run-clang-tidy-19 >/dev/null; then
     # Sources only: the tests' Catch2 macros and the vendored ft8_lib are
     # not held to it.
     run-clang-tidy-19 -p build -j "$jobs" -quiet \
-        '^(?!.*ft8_lib)(?!.*/tests/).*/(daemon|tools|examples|driver)/.*\.cpp$' >build/clang-tidy.log 2>&1 ||
+        '^(?!.*ft8_lib)(?!.*/tests/).*/(daemon|tools|examples|driver|soapy)/.*\.cpp$' >build/clang-tidy.log 2>&1 ||
         { grep -E "(warning|error):" build/clang-tidy.log | sort -u; exit 1; }
     echo "clang-tidy: ok"
 else
@@ -121,14 +132,14 @@ else
 fi
 
 step "ASan and UBSan build and tests"
-cmake --preset asan >/dev/null
+cmake --preset asan -DRADIOBERRY_BUILD_SOAPY=$soapy >/dev/null
 cmake --build --preset asan -j "$jobs"
 ctest --preset asan
 
 step "coverage"
 # Test discovery runs the binaries while building; clear stale counters first.
 [ -d build-coverage ] && find build-coverage -name '*.gcda' -delete
-cmake --preset coverage >/dev/null
+cmake --preset coverage -DRADIOBERRY_BUILD_SOAPY=$soapy >/dev/null
 cmake --build --preset coverage -j "$jobs"
 if ! cmake --build --preset coverage --target coverage; then
     echo "lines not covered:"
@@ -147,21 +158,26 @@ if [ -f "$installed_abi" ]; then
         -DRADIOBERRY_BUILD_MODULE=OFF -DRADIOBERRY_BUILD_TESTS=OFF >/dev/null
     cmake --build build-abi -j "$jobs" --target rbprobe rbcat rbctl
     # No userspace compile may see the source tree's copy.
-    python3 - build-abi/compile_commands.json <<'PY'
-import json, sys
-bad = [e["file"] for e in json.load(open(sys.argv[1]))
-       if "/driver/" not in e["file"] and "driver/include" in e["command"]]
-if bad:
-    sys.exit("source-tree ABI header on the include path of: " + ", ".join(bad))
-print("no userspace source sees driver/include")
-PY
+    # CMake writes one "command" and one "file" line for each entry.
+    bad=$(awk '/^{/ { command = ""; file = "" }
+               /^ *"command":/ { command = $0 }
+               /^ *"file":/ { file = $0 }
+               /^}/ && index(command, "driver/include") && !index(file, "/driver/") { print file }' \
+        build-abi/compile_commands.json)
+    if [ -n "$bad" ]; then
+        echo "source-tree ABI header on the include path of:" >&2
+        echo "$bad" >&2
+        exit 1
+    fi
+    grep -q '"command":' build-abi/compile_commands.json
+    echo "no userspace source sees driver/include"
 else
     step "userspace against the installed ABI header: skipped, $installed_abi absent"
 fi
 
 # Receive only: the hardware tests never set PTT or the TX permission bit.
 if [ -c /dev/radioberry ]; then
-    if python3 -c 'import os; os.close(os.open("/dev/radioberry", os.O_RDWR))' 2>/dev/null; then
+    if (exec 3<>/dev/radioberry) 2>/dev/null; then
         step "driver hardware tests on /dev/radioberry"
         build/tools/driver-tests/rbdrivertest
     else

@@ -17,6 +17,13 @@ permissions:
 
 jobs:
   build-and-test:
+    # Without SoapySDR installed (the module is optional, and the rest must
+    # build without its headers), then with it and the module.
+    strategy:
+      fail-fast: false
+      matrix:
+        soapy: ['off', 'on']
+    name: build-and-test (SoapySDR ${{ matrix.soapy }})
     runs-on: ubuntu-24.04
     container:
       image: debian:trixie
@@ -31,6 +38,9 @@ jobs:
             libliquid-dev libgpiod-dev libi2c-dev libyaml-cpp-dev nlohmann-json3-dev \
             libspdlog-dev libsystemd-dev catch2 lcov clang-format-19 clang-tidy-19 python3 perl \
             curl gnupg  # Codecov's uploader verifies its own signature
+          if [ "${{ matrix.soapy }}" = on ]; then
+            apt-get install -y --no-install-recommends libsoapysdr-dev soapysdr-tools
+          fi
 
       - uses: actions/checkout@v4
         with:
@@ -53,9 +63,11 @@ jobs:
       - name: Build and test
         env:
           CHECKPATCH: /opt/checkpatch/checkpatch.pl
+          RADIOBERRY_SOAPY: ${{ matrix.soapy }}
         run: sh tools/ci-pi.sh --local
 
       - name: Upload coverage
+        if: matrix.soapy == 'on'
         uses: codecov/codecov-action@v5
         with:
           files: build-coverage/coverage/coverage.info

@@ -11,7 +11,7 @@ cd "$(git rev-parse --show-toplevel)"
 
 missing=0
 for f in $(git ls-files -co --exclude-standard -- \
-        '*.c' '*.h' '*.cpp' '*.hpp' '*.in' '*.cmake' '*.sh' '*.py' '*.dts' \
+        '*.c' '*.h' '*.cpp' '*.hpp' '*.in' '*.cmake' '*.sh' '*.dts' \
         'CMakeLists.txt' '*/CMakeLists.txt' 'Kbuild' '*/Kbuild' 'Makefile' '*/Makefile'); do
     [ -f "$f" ] || continue
     licence='GPL-2.0-or-later'

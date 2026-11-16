@@ -1,0 +1,46 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# initramfs-tools local-premount script: shrinks the root ext4 before it is
+# mounted, when the kernel command line has rbshrink=. Installed into a
+# private initramfs by shrink-root.sh only; does nothing without the option.
+#   rbshrink=dry  rbdev=DEV               read-only check and size estimate
+#   rbshrink=real rbdev=DEV rbsize=SIZE   e2fsck -fy, then resize2fs to SIZE
+# Results go to the kernel log and to /run/rbshrink.*, which the booted
+# system keeps.
+PREREQ=""
+prereqs() { echo "$PREREQ"; }
+case $1 in prereqs) prereqs; exit 0 ;; esac
+mode=""; size=""; dev=""
+for a in $(cat /proc/cmdline); do
+    case $a in
+        rbshrink=*) mode=${a#rbshrink=} ;;
+        rbsize=*) size=${a#rbsize=} ;;
+        rbdev=*) dev=${a#rbdev=} ;;
+    esac
+done
+[ -n "$mode" ] || exit 0
+log() { echo "rbshrink: $*" >/dev/kmsg; echo "$*" >>/run/rbshrink.log; }
+log "mode $mode size $size dev $dev"
+[ -b "$dev" ] || { log "no $dev"; exit 0; }
+if [ "$mode" = dry ]; then
+    e2fsck -fn "$dev" >/run/rbshrink.fsck 2>&1
+    log "e2fsck -fn exit $?"
+    resize2fs -P "$dev" >/run/rbshrink.min 2>&1
+    log "resize2fs -P exit $? $(tail -1 /run/rbshrink.min)"
+    exit 0
+fi
+if [ "$mode" = real ] && [ -n "$size" ]; then
+    e2fsck -fy "$dev" >/run/rbshrink.fsck 2>&1
+    rc=$?
+    log "e2fsck -fy exit $rc"
+    if [ $rc -gt 1 ]; then
+        log "abort: e2fsck"
+        exit 0
+    fi
+    resize2fs "$dev" "$size" >/run/rbshrink.resize 2>&1
+    log "resize2fs $size exit $?"
+    e2fsck -fn "$dev" >/run/rbshrink.fsck2 2>&1
+    log "e2fsck -fn after exit $?"
+fi
+exit 0

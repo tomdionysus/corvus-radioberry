@@ -1,8 +1,10 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
-# Builds the Debian packages (radioberry, radioberry-dkms, radioberry-dev)
-# on a Raspberry Pi 5 running Raspberry Pi OS (trixie, arm64). The version
+# Builds the Debian packages (radioberry, radioberry-dkms, radioberry-dev,
+# soapysdr-module-radioberry) on a Raspberry Pi 5 running Raspberry Pi OS
+# (trixie, arm64); without SoapySDR's headers, set
+# DEB_BUILD_PROFILES=pkg.radioberry.nosoapy for the first three. The version
 # comes from `git describe`: v0.2.0 gives 0.2.0, and a build 5 commits later
 # 0.2.0+git5.gabc1234, which sorts after 0.2.0 and before 0.2.1. The
 # packages are written to build-deb/.
@@ -27,7 +29,8 @@ END
 dpkg-buildpackage -us -uc -b "$@"
 
 mkdir -p build-deb
-for f in ../radioberry*_"$version"_*.deb ../radioberry_"$version"_*.buildinfo \
+for f in ../radioberry*_"$version"_*.deb ../soapysdr-module-radioberry_"$version"_*.deb \
+    ../radioberry_"$version"_*.buildinfo \
     ../radioberry_"$version"_*.changes; do
     [ -e "$f" ] && mv "$f" build-deb/
 done

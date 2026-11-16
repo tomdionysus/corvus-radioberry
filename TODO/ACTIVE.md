@@ -7,18 +7,12 @@ item is removed from here and recorded at the top of
 
 ## Where things stand
 
-- Released: v0.4.1 (Raspberry Pi 4 and 5, Linux 6.12 and 6.18), as Debian
-  packages from the apt repository and on GitHub, with the Hermes-Lite 2
-  PIO gateware.
-- Development branch `item/new-direction`, to be 0.5.0: this project's own
-  gateware ([gateware/README.md](../gateware/README.md)), one image per
-  board, 10CL025 only. Raspberry Pi 5: `rpi5-pio`, receive and transmit,
-  an FT8 contact on 20 m. Raspberry Pi 4: `rpi4-i2s`, I2S into the PCM
-  block driven by the driver directly (no ALSA), receive and transmit, on
-  air through piHPSDR and WSJT-X; 13% CPU at 192 ksps. Both use the
-  framed SPI control protocol
-  ([driver/kernel/rb_frame.h](../driver/kernel/rb_frame.h)). The driver
-  has only these two transports and sets up the Pi 4's PCM pins itself.
+- Released: v0.5.0 (Raspberry Pi 4 and 5, Linux 6.12 and 6.18), as Debian
+  packages from the apt repository and on GitHub: this project's own
+  gateware, one image per board (`rpi5-pio`, `rpi4-i2s`), 10CL025 only.
+- On `develop` for 0.6.0: the SoapySDR module (section 6), the OS and
+  kernel test matrix, the Hermes-Lite 2 core's conformance edits (images
+  bit-identical) and DKMS skipping kernels older than 6.12.
 
 ## Standing decisions
 
@@ -39,7 +33,8 @@ item is removed from here and recorded at the top of
 - Gateware: one image per board, 10CL025 only, built from `gateware/`
   with Quartus Prime Lite 23.1std.1 in Docker on an x86-64 machine;
   bitfiles are committed and the Pi only installs them. The Hermes-Lite 2
-  radio core is read unmodified from `gateware/source/`. The radio never
+  radio core is read from `gateware/source/` with its standard-conformance
+  patch (images unchanged by it). The radio never
   appears as a sound card.
 - The driver picks its transport from the SoC: Pi 5 PIO with `rpi5-pio`,
   Pi 4 I2S with `rpi4-i2s`. One overlay, `dtoverlay=radioberry`, on both.
@@ -78,15 +73,29 @@ item is removed from here and recorded at the top of
   module and ABI header use kernel style and are not clang-formatted.
 - Version string from `git describe`, embedded at configure time.
 
-## 1. Release 0.5.0
+## 1. Release 0.6.0
 
 - [ ] Release gate per board (clean-down, README install, FT8 receive, the
-      owner's contact); version 0.5.0.
+      owner's contact); version 0.6.0; packages built, the fourth
+      (`soapysdr-module-radioberry`) with them.
 
 ## 2. Gateware (`gateware/`, `driver/`)
 
 - [ ] [Gateware review](../gateware/docs/review.md) findings: not being
       worked on now.
+- [ ] Improve the Hermes-Lite 2 radio core, in three stages. (a) Clean-up
+      with byte-for-byte identical images: unused generate branches and
+      parameters for this configuration, the rest of the core made
+      standard-conforming so a simulator and Quartus read the same source.
+      (b) Audit without changing the image (review items 5, 6 and 8):
+      fixed-point widths and rounding through the receive chain, decimation
+      passband, stopband and alias rejection at each rate, NCO and CORDIC
+      spurs, by simulation of the conforming core and confirmed on the
+      board. (c) Changes that alter the image, only where (b) finds
+      something, each measured before and after on the board, with the
+      board owner's go-ahead per change. Acceptance per stage: (a) the
+      image hashes unchanged; (b) each figure measured and written up;
+      (c) the improvement measured.
 - [ ] Pi 5 receive level of its own transmission: with the same tools the
       Pi 5 sees the tone 25 dB stronger in loopback (-18.7 against -43.6
       dBFS) and 48 dB stronger keyed into the dummy load (-16.9 against
@@ -107,6 +116,11 @@ item is removed from here and recorded at the top of
       errors.
 - [ ] Receiver-count stress run on hardware now that the driver holds no
       RX clock (review finding 2.3).
+- [ ] Six receivers starting at once on the Pi 5: the first RX period has
+      2 resyncs and 4 dropped words (driver debug log), from
+      `radioberryd` (`p2probe --receivers 6`) and the SoapySDR module
+      alike, not every start. Acceptance: the cause found, or shown to
+      be the receiver-count change landing in the first period.
 - [ ] Optional: a lock-phase status bit in the I2S image, so each TX
       stream's realign is attributable (explanation now inferred).
 - [ ] A CL016 variant, if someone with a CL016 board will test it.
@@ -115,6 +129,21 @@ item is removed from here and recorded at the top of
 
 - [ ] Upstream review: the driver has not been through review on the
       kernel mailing lists.
+- [ ] Refuse unsupported kernels in DKMS (`BUILD_EXCLUSIVE_KERNEL`) so a
+      kernel the driver cannot build for does not fail its own install and
+      leave apt broken ([test-matrix.md](../docs/test-matrix.md)); the
+      install script names the running kernel and the fix when it is not
+      supported. Acceptance: on Bookworm, installing 6.6.51 with
+      `radioberry-dkms` installed completes, and a trixie system on 6.1
+      (a user's report) gets the message.
+- [ ] Bookworm, if it is to be supported: the four source changes and the
+      packaging findings in [test-matrix.md](../docs/test-matrix.md)
+      (service not enabled, DKMS skipping the Pi 5's newer kernel at
+      install, libgpiod from backports at run time), a `bookworm` suite in
+      the repository, and the kernel matrix there. 6.12.19 (Bookworm's
+      first 6.12) gives no receive data on the Pi 5; 6.6.74 works with
+      one include change; 6.6.62 and older do not build. The board owner
+      decides.
 
 ## 4. Daemon (`daemon/`)
 
@@ -131,6 +160,17 @@ item is removed from here and recorded at the top of
       [tools/protoprobe/tests/daemon_test.cpp](../tools/protoprobe/tests/daemon_test.cpp)
       already runs `p1probe` and `p2probe` against the daemon and the fake
       device; the fault injection is open.
+- [ ] piHPSDR 3.1 over Protocol 2 at 48 ksps received nothing in three of
+      four starts on the Pi 5 (radioberryd logged the stream; piHPSDR
+      showed -200 dBm), while 192 and 384 ksps always worked and `ft8rx`
+      over Protocol 2 at 48 ksps works. Find which side: a capture of the
+      Protocol 2 packets at 48 and 192 ksps, compared.
+      Not reproduced on 0.5.0 (the failures were on a pre-0.5.0 build):
+      eight starts at 48 ksps on the Pi 5 (trixie), all receiving. In four, captured on lo, piHPSDR asked for DDC0 at
+      48 ksps, 24 bits, and `radioberryd` sent DDC0 packets with non-zero
+      samples to its port from 3.3 s, at the rate, as at 192 ksps; the
+      other four showed 20 m FT8 on piHPSDR's spectrum. Close unless it
+      comes back.
 - [ ] piHPSDR at 384 ksps on the Pi 4 stalled and exited; the kernel
       counted UDP receive-buffer drops (none on send), so the client fell
       behind. Confirm with per-socket drops (`ss -uamp`) while it runs;
@@ -156,7 +196,8 @@ item is removed from here and recorded at the top of
       `/lib/modules/$(uname -r)/kernel/drivers/sdr/radioberry.ko`;
       `/etc/systemd/system/radioberry.service` with
       `ExecStart=/etc/init.d/radioberryd`, `/etc/init.d/radioberryd`,
-      `/usr/local/bin/radioberry`. Report it as a blocker named "the
+      `/usr/local/bin/radioberry`. (Its SoapySDR module is already
+      reported.) Report it as a blocker named "the
       original RadioBerry software", list the files found, and say what to
       remove; remove nothing; point to
       [docs/original-software.md](../docs/original-software.md).
@@ -164,7 +205,24 @@ item is removed from here and recorded at the top of
       the fake source for each signal alone and combined, and no finding on
       a Pi with only the packages installed.
 
-## 6. Hardware validation
+## 6. SoapySDR module (`soapy/`)
+
+- [ ] The module: what is left after the runs on both boards is in
+      [SOAPYSDR.md](SOAPYSDR.md), with their results.
+- [ ] Programs written for the SoapyRadioberry module:
+      [SOAPYSDR-COMPAT.md](SOAPYSDR-COMPAT.md) lists where the interfaces
+      differ and what could be matched. The board owner decides, after
+      asking which calls such programs make.
+
+## 6a. Tests
+
+- [ ] `p1probe MOX reaches the device only with transmit allowed`
+      (tools/protoprobe/tests/daemon_test.cpp) failed once in a parallel
+      test run of a package build with "UDP bind to port 55861: Address
+      already in use", and passed on the rerun: two tests' port ranges
+      can meet. Acceptance: the tests take ports that cannot collide.
+
+## 7. Hardware validation
 
 Transmit items each need the board owner's go-ahead at the time.
 
@@ -175,7 +233,7 @@ Transmit items each need the board owner's go-ahead at the time.
       above a floor about 46 dB down. Establish whether the result is the
       test client or the radio, then measure where compression sets in.
 
-## 7. Development Pi (Pi 5)
+## 8. Development Pi (Pi 5)
 
 - [ ] Wi-Fi background scans: while associated, the Pi 5 scans every
       33.7 s for 3.65 s, which stalls UDP to a Wi-Fi client for about

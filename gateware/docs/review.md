@@ -7,7 +7,8 @@ reads it against this project's own images, `rpi4-i2s` (Raspberry Pi 4) and
 
 Both images are this project's own logic (control registers, AD9866
 set-up, the links to the Pi, keying and PA lines) around the Hermes-Lite 2
-radio core, which is used unmodified: receivers, decimation filters, NCOs
+radio core, whose circuit is used unchanged (its standard-conformance
+patch leaves the images byte for byte the same): receivers, decimation filters, NCOs
 and the transmit DSP. Findings about the radio core are therefore open
 until that core is measured.
 

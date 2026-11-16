@@ -21,6 +21,7 @@ Source: [github.com/tomdionysus/corvus-radioberry](https://github.com/tomdionysu
 - [Raspberry Pi 4](rpi4.md) and [Raspberry Pi 5](rpi5.md): capacity, parameters, tested kernels
 - [Kernels](kernels.md): 6.12 and 6.18 differences, tested kernels
 - [radioberryd](daemon.md): configuration, protocols, clients
+- [SoapySDR](soapy.md): the optional module for SoapySDR programs
 - [Frequency calibration](calibration.md): measuring `frequency_ppm`
 - [Tools](tools.md): `rbprobe`, `rbcat`, `rbctl`, `p1probe`, `p2probe`
 - [Kernel driver](driver.md): device interface, sysfs, parameters
@@ -34,11 +35,15 @@ Source: [github.com/tomdionysus/corvus-radioberry](https://github.com/tomdionysu
 
 - [Design](design.md)
 - [Test results](testing.md)
+- [OS and kernel test matrix](test-matrix.md): Bookworm and trixie on one
+  Pi, every kernel, client CPU and decode times, and how to repeat it
 - [Driver](https://github.com/tomdionysus/corvus-radioberry/blob/main/driver/README.md):
   building it, [design](https://github.com/tomdionysus/corvus-radioberry/blob/main/driver/docs/design.md),
   [hardware tests](https://github.com/tomdionysus/corvus-radioberry/blob/main/driver/docs/driver-tests.md)
 - [Daemon](https://github.com/tomdionysus/corvus-radioberry/blob/main/daemon/README.md):
   building it, [design](https://github.com/tomdionysus/corvus-radioberry/blob/main/daemon/docs/design.md)
+- [SoapySDR module](https://github.com/tomdionysus/corvus-radioberry/blob/main/soapy/README.md):
+  building it, [design](https://github.com/tomdionysus/corvus-radioberry/blob/main/soapy/docs/design.md)
 - [Gateware](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/README.md):
   building it, [interfaces](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/docs/interfaces.md),
   [provenance](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/docs/provenance.md),

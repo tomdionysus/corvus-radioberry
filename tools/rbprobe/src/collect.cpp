@@ -684,6 +684,7 @@ private:
 
         n.set("udp_ports", udp_ports());
         n.set("liquid_dsp", dpkg_version("libliquid"));
+        n.set("other_soapy_modules", other_soapy_modules());
 
         Node pihpsdr = Node::map();
         Node pihpsdr_path;
@@ -698,6 +699,46 @@ private:
         pihpsdr.set("version", dpkg_version("pihpsdr"));
         n.set("pihpsdr", std::move(pihpsdr));
         return n;
+    }
+
+    // SoapySDR modules from the original RadioBerry project (and forks of
+    // it) register the same driver key as soapysdr-module-radioberry, so
+    // only one of the two answers to driver=radioberry. They are built from
+    // source into SoapySDR's module directories.
+    Node other_soapy_modules() {
+        std::vector<std::string> roots = {"/usr/local/lib/SoapySDR"};
+        for (const std::string lib : {"/usr/lib", "/usr/local/lib"}) {
+            for (const auto& name : src_.list_dir(lib)) {
+                if (name.ends_with("-linux-gnu")) {
+                    std::string root = lib;
+                    root += "/";
+                    root += name;
+                    root += "/SoapySDR";
+                    roots.push_back(std::move(root));
+                }
+            }
+        }
+        Node list = Node::seq();
+        for (const auto& root : roots) {
+            for (const auto& dir : src_.list_dir(root)) {
+                std::string path = root;
+                path += "/";
+                path += dir;
+                path += "/libSoapyRadioberrySDR.so";
+                if (dir.starts_with("modules") && src_.exists(path)) {
+                    std::string message =
+                        "another SoapySDR module for driver=radioberry is installed, from the "
+                        "original RadioBerry software: ";
+                    message += path;
+                    message += "; remove it (sudo rm ";
+                    message += path;
+                    message += ")";
+                    add(Severity::kWarning, "software.soapy_module", std::move(message));
+                    list.push(path);
+                }
+            }
+        }
+        return list;
     }
 
     Node systemctl(const char* verb) {

@@ -5,3 +5,7 @@ DEST_MODULE_LOCATION[0]="/updates/dkms"
 MAKE[0]="make -C ${kernel_source_dir} M=${dkms_tree}/${PACKAGE_NAME}/${PACKAGE_VERSION}/build RB_INCLUDE=${dkms_tree}/${PACKAGE_NAME}/${PACKAGE_VERSION}/build/include modules"
 CLEAN="make -C ${kernel_source_dir} M=${dkms_tree}/${PACKAGE_NAME}/${PACKAGE_VERSION}/build clean"
 AUTOINSTALL="yes"
+# Kernels 6.12 and later only: the driver needs the RP1 PIO interface
+# those kernels have. DKMS skips any other kernel instead of failing its
+# install, and apt with it.
+BUILD_EXCLUSIVE_KERNEL="^(6\.(1[2-9]|[2-9][0-9])|[7-9]|[1-9][0-9])\."

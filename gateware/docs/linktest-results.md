@@ -81,9 +81,8 @@ about 20 MHz the right moment is in the following bit period.
 with one cyclic DMA transfer each way (4096-word periods, 16 per buffer),
 checks every received word in the DMA callback and keeps the transmit
 buffer filled with its own sequence. No ALSA, no sound card: the PCM
-node stays disabled and only its DMA requests are used. Run with
-[host/run_dma.sh](../host/run_dma.sh); each row counts 20 s, from 1 s after
-the start.
+node stays disabled and only its DMA requests are used. Each row counts
+20 s, from 1 s after the start.
 
 | Bit clock | FPGA sampling point | To the Pi: words, breaks, FIFO errors | To the FPGA: words, errors | Callback time, one core |
 |---|---|---|---|---|
@@ -164,17 +163,13 @@ So an FPGA reload is a pause, not a fault, for this transport.
 
 ## Repeating it
 
-On the Pi, as root, with the radio's overlays out of `config.txt` and
-`dtparam=spi=on`:
-
-```
-rbload --force linktest.rbf
-pinctrl set 13 ip pn
-python3 linktest.py ad-reset release
-python3 linktest.py ad-write 0x04 0x36
-pinctrl set 18-21 a0
-./run_i2s.sh DIV SAMPLE_POINT SEQUENCE WORD_OFFSET 0 SECONDS
-```
-
-`DIV` is 122.88 MHz divided by the bit clock; `WORD_OFFSET` 1 moves the
-sampling point into the following bit period.
+On the Pi, as root, with the radio's overlays out of `config.txt`,
+`dtparam=spi=on`, the link test image loaded, GPIO 13 an input without a
+pull and GPIO 18 to 21 in their PCM function. Over SPI, through the
+image's registers ([rtl/linktest](../rtl/linktest)): release the AD9866
+reset, write 0x36 to its register 0x04, then start the I2S link with the
+divider (122.88 MHz divided by the bit clock), the sampling point, the
+sequence and the word offset (1 moves the sampling point into the
+following bit period). [host/pcmpoll.c](../host/pcmpoll.c) or the DMA
+module carries the Pi's end; the image's checker counts are read back
+over SPI. The program that wrote the registers is not in this repository.

@@ -3,6 +3,22 @@
 Changes per released version, newest first. Versions are git tags; the
 packages carry the same number.
 
+## 0.6.0 - 2026-11-16
+
+- SoapySDR module, `soapysdr-module-radioberry` (optional): receive on the
+  gateware's receivers, transmit at 48 ksps, under `radioberryd`'s
+  transmit rules. Build option `RADIOBERRY_BUILD_SOAPY`; package build
+  profile `pkg.radioberry.nosoapy`.
+- Packages: DKMS skips kernels older than 6.12 instead of failing the
+  install, and the install names an unsupported running kernel.
+- `rbprobe` reports the original project's SoapySDR module when it is
+  installed.
+- Gateware: the Hermes-Lite 2 core is built to the SystemVerilog standard
+  through a patch applied at build time; both images are unchanged.
+- Tests: `rbsoapytest`, the SoapySDR module on the radio; the OS and
+  kernel test matrix with Raspberry Pi OS Bookworm results on the Pi 5.
+- No Python in the repository.
+
 ## 0.5.0 - 2026-11-14
 
 - New gateware, one image per board, both for the 10CL025: `rpi5-pio`
