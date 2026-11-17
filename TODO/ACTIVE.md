@@ -132,6 +132,16 @@ item is removed from here and recorded at the top of
       supported. Acceptance: on Bookworm, installing 6.6.51 with
       `radioberry-dkms` installed completes, and a trixie system on 6.1
       (a user's report) gets the message.
+- [ ] No driver for the running kernel is reported, not silent: DKMS skips
+      a kernel with no headers (or a broken build tree, as on a Pi running a
+      hand-built kernel whose tree was deleted) and apt reports success.
+      The install script now checks `modinfo -k` for the running kernel and
+      names the cause and the fix (branch `item/postinst-kernel-check`; the
+      check's three outcomes run read-only on such a Pi: no headers, built,
+      unsupported). Acceptance: packages built from the branch, installed
+      on a Pi with the running kernel's headers removed (the message) and
+      with them present (no message); the DKMS-failed branch of the message
+      shown once by breaking a build on purpose.
 - [ ] Bookworm, if it is to be supported: the four source changes and the
       packaging findings in [test-matrix.md](../docs/test-matrix.md)
       (service not enabled, DKMS skipping the Pi 5's newer kernel at

@@ -9,6 +9,17 @@ driver for it; nothing needs reinstalling. DKMS skips kernels older than
 the running kernel is one of them: update the kernel
 (`sudo apt full-upgrade`) and reboot.
 
+DKMS also skips a kernel whose headers are not installed, and the install
+still succeeds. When that leaves no driver for the running kernel, the
+install says so. For a Raspberry Pi OS kernel, install its headers
+(`sudo apt install linux-headers-$(uname -r)`); for a kernel built by
+hand, make its build tree available at `/lib/modules/$(uname -r)/build`.
+Then build the driver for it:
+
+```sh
+sudo dkms autoinstall -k "$(uname -r)"
+```
+
 ## Differences between 6.12 and 6.18
 
 The Raspberry Pi 4 driver uses the PCM block and its DMA channels, which

@@ -3,6 +3,12 @@
 Changes per released version, newest first. Versions are git tags; the
 packages carry the same number.
 
+## Unreleased
+
+- Packages: the install says when no driver was built for the running
+  kernel (its headers missing, or the DKMS build failed) and what to do,
+  instead of succeeding silently.
+
 ## 0.6.0 - 2026-11-16
 
 - SoapySDR module, `soapysdr-module-radioberry` (optional): receive on the

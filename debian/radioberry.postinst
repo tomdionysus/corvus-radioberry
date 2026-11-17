@@ -46,10 +46,27 @@ if [ "$1" = configure ]; then
     fi
 
     # The driver is built for kernels 6.12 and later only (radioberry-dkms
-    # skips others).
-    if ! uname -r | grep -qE '^(6\.(1[2-9]|[2-9][0-9])|[7-9]|[1-9][0-9])\.'; then
-        echo "radioberry: kernel $(uname -r) is not supported: the driver needs 6.12" \
+    # skips others). For a supported kernel, radioberry-dkms (configured
+    # before this package) has built it, unless the kernel's build tree is
+    # missing: DKMS then skips that kernel and the install still succeeds,
+    # with no driver for the kernel running. Say so, and why.
+    kernel=$(uname -r)
+    if ! echo "$kernel" | grep -qE '^(6\.(1[2-9]|[2-9][0-9])|[7-9]|[1-9][0-9])\.'; then
+        echo "radioberry: kernel $kernel is not supported: the driver needs 6.12" \
             "or later. Update the kernel ('sudo apt full-upgrade') and reboot." >&2
+    elif ! modinfo -k "$kernel" radioberry >/dev/null 2>&1; then
+        if [ ! -e "/lib/modules/$kernel/build/Makefile" ]; then
+            echo "radioberry: no driver was built for the running kernel $kernel:" \
+                "its headers are not installed (/lib/modules/$kernel/build is" \
+                "missing or incomplete). Install them ('sudo apt install" \
+                "linux-headers-$kernel', or for a kernel built by hand its build" \
+                "tree), then run 'sudo dkms autoinstall -k $kernel'." >&2
+        else
+            echo "radioberry: no driver was built for the running kernel $kernel." \
+                "See 'dkms status' and the build log under" \
+                "/var/lib/dkms/radioberry/; 'sudo dkms autoinstall -k $kernel'" \
+                "tries again." >&2
+        fi
     fi
 
     if ! grep -qs '^dtoverlay=radioberry$' /boot/firmware/config.txt; then
