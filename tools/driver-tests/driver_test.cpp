@@ -281,6 +281,39 @@ TEST_CASE("non-blocking writes fill the TX ring and it drains at 48 ksps", "[wri
     CHECK(::poll(&p, 1, 0) == 1);
 }
 
+// Fills the TX ring with zeros, then reports the TX words taken in the
+// next 100 ms, after 100 ms for the gateware FIFO to fill (see above).
+static std::uint64_t tx_words_in_100ms(int fd) {
+    const std::vector<std::uint8_t> zeros(4096, 0);
+    for (int i = 0; i < 1000 && ::write(fd, zeros.data(), zeros.size()) > 0; ++i) {
+    }
+    std::this_thread::sleep_for(100ms);
+    const std::uint64_t before = stats(fd).tx_words;
+    std::this_thread::sleep_for(100ms);
+    return stats(fd).tx_words - before;
+}
+
+TEST_CASE("TX samples flow after a gateware reload with TX in flight", "[write][reload]") {
+    // Each round closes the device with TX transfers waiting on the idle
+    // gateware, then reloads it through sysfs, which closes the PIO.
+    for (int round = 0; round < 3; ++round) {
+        INFO("round " << round);
+        {
+            Fd fd(O_NONBLOCK);
+            REQUIRE(fd.get() >= 0);
+            configure(fd.get(), 0, 1);
+            const std::uint64_t words = tx_words_in_100ms(fd.get());
+            CHECK(words >= 4800 - 512);
+            CHECK(words <= 4800 + 512);
+            CHECK((stats(fd.get()).flags & RADIOBERRY_STATS_PTT) == 0);
+        }
+        std::ofstream reload("/sys/bus/spi/devices/spi0.0/reload");
+        reload << "1\n";
+        reload.close();
+        REQUIRE(reload.good());
+    }
+}
+
 TEST_CASE("unknown ioctls fail with ENOTTY", "[ioctl]") {
     Fd fd;
     REQUIRE(fd.get() >= 0);

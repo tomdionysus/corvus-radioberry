@@ -3,6 +3,17 @@
 Changes per released version, newest first. Versions are git tags; the
 packages carry the same number.
 
+## 0.6.1 - unreleased
+
+- Driver (Raspberry Pi 5): transmit works after a gateware reload through
+  sysfs `reload`. TX transfers still in flight are now completed before
+  the PIO is closed; on 6.12 kernels each one closed in flight made every
+  later TX transfer fail (`TX DMA submit failed: -110`) until the module
+  was reloaded.
+- Driver reports version 0.6.1 through the version ioctl too (0.6.0
+  reported 0.5.0 there).
+- Gateware images unchanged from 0.6.0.
+
 ## 0.6.0 - 2026-11-16
 
 - SoapySDR module, `soapysdr-module-radioberry` (optional): receive on the
