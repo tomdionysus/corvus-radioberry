@@ -11,6 +11,10 @@ item is removed from here and recorded at the top of
   packages from the apt repository and on GitHub: this project's own
   gateware, one image per board (`rpi5-pio`, `rpi4-i2s`), 10CL025 only;
   the optional SoapySDR module; DKMS skips kernels older than 6.12.
+- In release: v0.6.1, driver only (Pi 5 transmit after a gateware
+  reload); gateware images byte for byte 0.6.0's. Acceptance: full CI
+  both ways, packages from the tag carrying the 0.6.0 images (same
+  sha256), the release gate on the Pi 5.
 
 ## Standing decisions
 

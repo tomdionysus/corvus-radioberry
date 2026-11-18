@@ -3,7 +3,7 @@
 Changes per released version, newest first. Versions are git tags; the
 packages carry the same number.
 
-## 0.6.1 - unreleased
+## 0.6.1 - 2026-11-18
 
 - Driver (Raspberry Pi 5): transmit works after a gateware reload through
   sysfs `reload`. TX transfers still in flight are now completed before
