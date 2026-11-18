@@ -639,7 +639,8 @@ TEST_CASE("MOX goes when the gateware has taken the last sample") {
     }
     REQUIRE(wait_until([&] { return !r.burst_open(); }));
     CHECK(std::chrono::steady_clock::now() - at < 100ms);
-    CHECK_FALSE(rig.keyed_now());
+    // The unkey goes out on the device thread.
+    CHECK(wait_until([&] { return !rig.keyed_now(); }));
     r.closeStream(t);
 }
 
@@ -658,7 +659,8 @@ TEST_CASE("a gateware counter that does not move ends the burst at the ceiling")
         return !r.burst_open();
     }));
     CHECK(capture.contains("the gateware did not take the last 100 TX samples"));
-    CHECK_FALSE(rig.keyed_now());
+    // The unkey goes out on the device thread.
+    CHECK(wait_until([&] { return !rig.keyed_now(); }));
     r.closeStream(t);
 }
 
@@ -678,7 +680,8 @@ TEST_CASE("without the gateware counter MOX is held for the fixed tail") {
         rig.drain();
         return !r.burst_open();
     }));
-    CHECK_FALSE(rig.keyed_now());
+    // The unkey goes out on the device thread.
+    CHECK(wait_until([&] { return !rig.keyed_now(); }));
     r.closeStream(t);
 }
 
