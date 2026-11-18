@@ -62,10 +62,11 @@
 #include "rb_frame.h"
 #include "rb_pio.h"
 
-#define RB_DRIVER_VERSION ((0u << 16) | (5u << 8) | 0u)
-#define RB_DRIVER_VERSION_STRING "0.6.0"
+#define RB_DRIVER_VERSION ((0u << 16) | (6u << 8) | 1u)
+#define RB_DRIVER_VERSION_STRING "0.6.1"
 
 #define RB_DMA_SLOTS 4
+#define RB_TX_DRAIN_TRIES 2000 /* FIFO clears at 100-200 us, up to 0.4 s */
 #define RB_RX_SLOT_BYTES (32 * 1024)
 #define RB_RX_MIN_PERIOD 256
 #define RB_TX_SLOT_BYTES 1024 /* 256 samples, 5.3 ms at 48 ksps */
@@ -808,6 +809,34 @@ static void rb_stream_reset(struct rb_stream *s)
 	atomic_set(&s->inflight, 0);
 }
 
+/*
+ * Lets the TX transfers still in flight complete, with the state machines
+ * stopped: each clear of the TX FIFO makes room the DMA fills, so the
+ * transfers finish into a FIFO nothing reads and nothing reaches the pins.
+ * Needed because rp1-pio before 6.18 counts TX transfers per state machine
+ * across close and open: each one closed in flight is counted for ever, and
+ * with as many as its bounce buffers every later TX transfer waits 1 s and
+ * fails (-ETIMEDOUT) until the PIO driver itself is reset.
+ */
+static void rb_pio_drain_tx(struct rb_dev *rb)
+{
+	struct rp1_pio_sm_clear_fifos_args clear = { .sm = (u16)rb->tx.sm };
+	int left = atomic_read(&rb->tx.inflight);
+	unsigned int i;
+
+	if (!left)
+		return;
+	for (i = 0; i < RB_TX_DRAIN_TRIES && atomic_read(&rb->tx.inflight); i++) {
+		rp1_pio_sm_clear_fifos(rb->pio, &clear);
+		usleep_range(100, 200);
+	}
+	if (atomic_read(&rb->tx.inflight))
+		dev_warn(rb->dev, "%d TX transfers still in flight at close\n",
+			 atomic_read(&rb->tx.inflight));
+	else
+		rb_debug(rb, "drained %d TX transfers before close\n", left);
+}
+
 static void rb_pio_down(struct rb_dev *rb)
 {
 	struct rp1_pio_sm_set_enabled_args off = { 0 };
@@ -824,11 +853,13 @@ static void rb_pio_down(struct rb_dev *rb)
 			off.mask |= BIT(rb->tx.sm);
 		if (off.mask)
 			rp1_pio_sm_set_enabled(rb->pio, &off);
+		if (rb->tx.sm >= 0)
+			rb_pio_drain_tx(rb);
 		/*
-		 * Unclaims the state machines and frees their DMA. Transfers still in
-		 * flight are terminated without their callbacks; rp1-pio then leaks
-		 * its 64-byte record for each TX one (RX transfers, given by DMA
-		 * address, have none; docs/kernel-debug.md).
+		 * Unclaims the state machines and frees their DMA. RX transfers still
+		 * in flight are terminated without their callbacks (given by DMA
+		 * address, they have no rp1-pio record or count); TX ones are drained
+		 * above.
 		 */
 		rp1_pio_close(rb->pio);
 		rb->pio = NULL;

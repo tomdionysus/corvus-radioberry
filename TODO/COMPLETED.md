@@ -3,6 +3,16 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-16: Release 0.6.0. Full CI with and without SoapySDR (100% line
+  coverage both ways). Release gate on both boards: every RadioBerry trace
+  removed, then installed exactly as the README and quickstart say (DKMS
+  built the driver for every installed kernel, 6.12.25 to 6.18.60),
+  `rbprobe` exit 0, `ft8rx` on 40 m over Protocol 1 and 2 with 0 packets
+  lost, idle 0 CPU. FT8 on air through piHPSDR and WSJT-X: Pi 4, 17
+  transmissions and a contact, 0 blocks dropped, image TX underrun bursts
+  in 5 (an open item); Pi 5, 22 transmissions, 0 blocks dropped, image
+  counters all 0; both spotted across Europe. Packages in the apt
+  repository and on the GitHub release.
 - 2026-11-14: Release 0.5.0 preparation, Pi 5. Packages
   0.4.1+git35.gbcc3654 upgraded in place from 0.4.1+git22 with apt (DKMS
   for all 14 installed kernels, both images linked, new driver loaded

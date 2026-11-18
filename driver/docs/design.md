@@ -94,7 +94,14 @@
 - `rp1_pio_add_program()` takes programs written for offset 0; the RP1
   firmware relocates jump targets to the load offset.
 - `rp1_pio_close()` disables and unclaims the client's state machines and
-  frees their DMA.
+  frees their DMA. Transfers in flight end without their callbacks.
+- Before 6.18, rp1-pio counts transfers given by buffer (TX) per state
+  machine, and neither close nor `rp1_pio_sm_config_xfer()` resets the
+  count: a TX transfer closed in flight is counted for ever, and with as
+  many as there are bounce buffers each later TX transfer waits 1 s and
+  fails with `-ETIMEDOUT`. The driver therefore completes TX transfers in
+  flight before it closes the PIO (state machines stopped, TX FIFO
+  cleared until the DMA has finished).
 - `rp1_pio_open()` returns `-EPROBE_DEFER` until an RP1 PIO device has
   probed, which never happens on a Pi 4, so the transport is chosen before
   it is called.

@@ -7,12 +7,14 @@ item is removed from here and recorded at the top of
 
 ## Where things stand
 
-- Released: v0.5.0 (Raspberry Pi 4 and 5, Linux 6.12 and 6.18), as Debian
+- Released: v0.6.0 (Raspberry Pi 4 and 5, Linux 6.12 and 6.18), as Debian
   packages from the apt repository and on GitHub: this project's own
-  gateware, one image per board (`rpi5-pio`, `rpi4-i2s`), 10CL025 only.
-- On `develop` for 0.6.0: the SoapySDR module (section 6), the OS and
-  kernel test matrix, the Hermes-Lite 2 core's conformance edits (images
-  bit-identical) and DKMS skipping kernels older than 6.12.
+  gateware, one image per board (`rpi5-pio`, `rpi4-i2s`), 10CL025 only;
+  the optional SoapySDR module; DKMS skips kernels older than 6.12.
+- In release: v0.6.1, driver only (Pi 5 transmit after a gateware
+  reload); gateware images byte for byte 0.6.0's. Acceptance: full CI
+  both ways, packages from the tag carrying the 0.6.0 images (same
+  sha256), the release gate on the Pi 5.
 
 ## Standing decisions
 
@@ -73,12 +75,6 @@ item is removed from here and recorded at the top of
   module and ABI header use kernel style and are not clang-formatted.
 - Version string from `git describe`, embedded at configure time.
 
-## 1. Release 0.6.0
-
-- [ ] Release gate per board (clean-down, README install, FT8 receive, the
-      owner's contact); version 0.6.0; packages built, the fourth
-      (`soapysdr-module-radioberry`) with them.
-
 ## 2. Gateware (`gateware/`, `driver/`)
 
 - [ ] [Gateware review](../gateware/docs/review.md) findings: not being
@@ -101,10 +97,14 @@ item is removed from here and recorded at the top of
       dBFS) and 48 dB stronger keyed into the dummy load (-16.9 against
       -64.9) than the Pi 4; output power matches (1.4 W against 1.35 W at
       drive 128). Cause unknown. Acceptance: explained by a measurement.
-- [ ] Pi 4 transmit, 30 m: the image counted 482 TX underruns across the
-      30 m transmissions (drive 150, capped from 162), none on 40 m before
-      or after. Cause unknown. Acceptance: the cause found from a counter
-      log of one 30 m transmission.
+- [ ] Pi 4 transmit, image TX underruns: 482 across 30 m transmissions
+      (drive 150), none on 40 m then. With 0.6.0 on 40 m (piHPSDR over
+      Protocol 2, WSJT-X, PA, drive 115 to 129): 2062 in short bursts in
+      5 of 17 transmissions, the driver never late, no block dropped,
+      the signal spotted throughout; the Pi's supply logged under-voltage
+      9 times, and 4 of the 5 bursts began within 2 s of one. Cause not
+      proven. Acceptance: no bursts on a supply that logs no
+      under-voltage, or the cause found from a counter log.
 - [ ] Transmit drive curve: power rose about 1.06 dB per AD9866 gain code
       against the datasheet's 0.5 dB. Cause unknown (PA gain with level,
       TxDAC/IAMP split, the board's register 0x0e). Measurement first.
