@@ -3,6 +3,21 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-18: Release 0.6.1, driver only: on the Pi 5, transmit after a
+  gateware reload through sysfs (TX transfers in flight are completed
+  before the PIO is closed; on 6.12 kernels rp1-pio kept counting them and
+  every later TX transfer timed out), with an `rbdrivertest` case for it;
+  the version ioctl reports the release's version; three SoapySDR tests
+  wait for the unkey the device thread sends (a race the release CI
+  found). Gateware images those of 0.6.0, byte for byte (sha256 checked in
+  the packages). Full CI with and without SoapySDR (100% line coverage
+  both ways). Pi 5 gate: everything removed, README and quickstart
+  followed exactly from the live repository, `rbprobe` exit 0, `ft8rx`
+  40 m over Protocol 1 and 2 with 0 packets lost, `rbcat` clean at four
+  rates, the loopback self-test the same from a fresh driver and after
+  each of two reloads; the board owner's FT8 contact on air, 0 TX blocks
+  dropped. Repository sources file now names its architectures (no
+  `armhf` notice from apt). Pi 4 not tested (off).
 - 2026-11-16: Release 0.6.0. Full CI with and without SoapySDR (100% line
   coverage both ways). Release gate on both boards: every RadioBerry trace
   removed, then installed exactly as the README and quickstart say (DKMS

@@ -7,14 +7,14 @@ item is removed from here and recorded at the top of
 
 ## Where things stand
 
-- Released: v0.6.0 (Raspberry Pi 4 and 5, Linux 6.12 and 6.18), as Debian
+- Released: v0.6.1 (Raspberry Pi 4 and 5, Linux 6.12 and 6.18), as Debian
   packages from the apt repository and on GitHub: this project's own
-  gateware, one image per board (`rpi5-pio`, `rpi4-i2s`), 10CL025 only;
-  the optional SoapySDR module; DKMS skips kernels older than 6.12.
-- In release: v0.6.1, driver only (Pi 5 transmit after a gateware
-  reload); gateware images byte for byte 0.6.0's. Acceptance: full CI
-  both ways, packages from the tag carrying the 0.6.0 images (same
-  sha256), the release gate on the Pi 5.
+  gateware, one image per board (`rpi5-pio`, `rpi4-i2s`; the images of
+  0.6.0), 10CL025 only; the optional SoapySDR module; DKMS skips kernels
+  older than 6.12.
+- Gateware rework on `item/gateware-core`: its plan and progress are in
+  [2026-11-17-core-takeover.md](2026-11-17-core-takeover.md) on that
+  branch.
 
 ## Standing decisions
 
@@ -221,6 +221,18 @@ item is removed from here and recorded at the top of
       test run of a package build with "UDP bind to port 55861: Address
       already in use", and passed on the rerun: two tests' port ranges
       can meet. Acceptance: the tests take ports that cannot collide.
+- [ ] `radioberryd reports a port already in use`
+      (daemon/tests/daemon_test.cpp:326) failed with "TCP bind to port
+      37078: Address already in use" in a 0.6.1 CI run in which two CI
+      runs had been started by mistake in the same tree at once; not seen
+      in a run alone. Acceptance: the same as the item above (the tests'
+      ports cannot collide, even between two runs).
+- [ ] SoapySDR test `without the gateware counter MOX is held for the
+      fixed tail` (its sysfs variant) fails when the packages are built on
+      a Pi with the radioberry module loaded: it assumes the driver's
+      attribute is absent and reads the real driver's. Acceptance: the
+      test passes on a Pi with the module loaded (it takes its sysfs path
+      from the test, not the system).
 
 ## 7. Hardware validation
 
