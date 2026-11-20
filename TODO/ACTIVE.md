@@ -7,7 +7,10 @@ item is removed from here and recorded at the top of
 
 ## Where things stand
 
-- Being released: v0.7.0 (Raspberry Pi 4 and 5, Linux 6.12 and 6.18):
+- Planned, not started: transmit predistortion in the gateware
+  ([2026-11-20-dpd.md](2026-11-20-dpd.md), branch `item/dpd`); its first
+  stage is a bench measurement with the board owner.
+- Released: v0.7.0 (Raspberry Pi 4 and 5, Linux 6.12 and 6.18):
   the radio core is this project's own (the core takeover,
   [2026-11-17-core-takeover.md](2026-11-17-core-takeover.md): stages 1
   to 7, the ADC capture clock, the memory blocks, the transmit CIC); the
