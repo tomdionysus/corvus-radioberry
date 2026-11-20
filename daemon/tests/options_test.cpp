@@ -74,6 +74,10 @@ TEST_CASE("radioberryd's transmit options", "[options]") {
     CHECK(o.daemon.tx.allow_pa);
     CHECK(o.daemon.tx.drive_ceiling == 64);
     CHECK(o.daemon.tx.watchdog == 30s);
+    CHECK_FALSE(o.daemon.tx.jack_keying);
+    CHECK(parse_options({"--jack-keying", "true"}).daemon.tx.jack_keying);
+    CHECK_FALSE(parse_options({"--jack-keying", "false"}).daemon.tx.jack_keying);
+    CHECK(usage().find("--jack-keying BOOL") != std::string::npos);
     CHECK(parse_options({"--frequency-ppm", "22.9"}).daemon.frequency_ppm == 22.9);
     CHECK(parse_options({"--frequency-ppm", "-5"}).daemon.frequency_ppm == -5);
     CHECK_THROWS_AS(parse_options({"--frequency-ppm", "201"}), std::invalid_argument);

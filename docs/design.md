@@ -17,7 +17,7 @@
                                        | spi0 (control), PCM block or RP1 PIO (samples)
                            +-----------|------------------------+
                            | gateware: rpi4-i2s or rpi5-pio     |
-                           |  Hermes-Lite 2 radio core          |
+                           |  radio core, Hermes-Lite 2 commands |
                            | AD9866, CN301 -> PA5W V2           |
                            +------------------------------------+
 
@@ -29,8 +29,10 @@ Each component has its own README and design notes:
 [daemon](https://github.com/tomdionysus/corvus-radioberry/blob/main/daemon/README.md),
 [gateware](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/README.md).
 C++20 everywhere except the kernel module and the ioctl ABI header, which
-are C; the gateware is SystemVerilog around the Hermes-Lite 2 core's
-Verilog. CMake throughout. Dependencies are Debian trixie packages:
+are C; the gateware is SystemVerilog, its radio core wholly this
+project's, with its own registers; the driver turns clients'
+Hermes-Lite 2 commands into them. CMake throughout. Dependencies are
+Debian trixie packages:
 Catch2 v3, yaml-cpp, nlohmann/json, spdlog, liquid-dsp, libgpiod, libi2c,
 libsystemd.
 

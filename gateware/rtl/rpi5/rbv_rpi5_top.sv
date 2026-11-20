@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// rpi5-pio: the Hermes-Lite 2 radio core (six receivers) with this
+// rpi5-pio: the radio core (rtl/core/rbv_core.sv, six receivers) with this
 // project's control and AD9866 start-up (as rpi4-i2s) and the RP1 PIO
 // transport of the Raspberry Pi 5 driver (driver/kernel/rb_pio.h). TX = 0
 // builds the receive image: nothing on the transmit side is wired. TX = 1
@@ -10,7 +10,9 @@
 //   cfg    the board clock as it arrives on pin 53 (38.4 MHz, then 76.8 MHz
 //          once the AD9866 is programmed): control registers, AD9866
 //          start-up and register upkeep. Needs no PLL.
-//   radio  PLL 76.8 MHz and 153.6 MHz: radio core, AD9866 buses, PA lines.
+//   radio  PLL 76.8 MHz and 153.6 MHz: radio core, AD9866 buses, PA lines;
+//          the receive bus's input registers on the 153.6 MHz shifted about
+//          102 ps later (same PLL, timed as one domain).
 //   pi_rx  the Pi's RX clock: the receive FIFO's read side and the RX wire
 //          (rbv_pio_rx). It stops whenever the Pi stops its state machine.
 //   pi_tx  the Pi's TX clock: the TX wire and the transmit FIFO's write
@@ -24,19 +26,19 @@
 // permission, the last written within KEY_WD_CYCLES (about a second;
 // otherwise KEYING clears itself). The PA lines additionally need CONTROL
 // PA allowed and loopback clear; envpa and envbias also need PA enable
-// (Hermes-Lite 2 command 0x09 bit 19), and inttr needs PA enable or T/R
-// disable clear (bit 18). The CW key and PTT on the PA board's jack key the
-// radio core as in the Hermes-Lite 2 gateware (with run set), and the PA
-// lines only under the same permission and PA allowed. The AD9866's
-// transmit gain is the drive of command 0x09 while transmitting or keyed,
-// and its lowest otherwise; TX quiet is high only while the core transmits.
+// (TX_CONFIG bit 8), and inttr needs PA enable or T/R disable clear (bit
+// 9). The CW key and PTT on the PA board's jack key the radio core only
+// with run and the transmit permission set, so the keying watchdog stops
+// them too. The AD9866's transmit gain is TX_CONFIG's drive while
+// transmitting or keyed, and its lowest otherwise; TX quiet is high only
+// while the core transmits.
 // Loopback: the AD9866's digital loopback, the TxDAC and IAMP powered down
 // (register 0x01), every PA line held low; TX quiet still follows the core,
 // since held low it stops the AD9866 taking TX words; transmit samples come
 // back on the receive bus.
 //
 // Board registers (space 1):
-//   00 ID        ro  0x52425632 ("RBV2")
+//   00 ID        ro  0x52425633 ("RBV3")
 //   01 VERSION   ro  major in 31..16, minor in 15..0
 //   02 CAPS      ro  3..0 receivers, 4 transmit available, 11..8 transport
 //                    (2 = RP1 PIO), 15..12 FPGA (2 = 10CL025)
@@ -70,9 +72,13 @@
 // Status 2 (reply byte 6): 0 the core's CW or jack PTT, 1 jack CW key,
 //   2 jack PTT, 3 transmit FIFO overflowed, 4 keying watchdog cleared
 //   KEYING, 5 the core is transmitting, 6 0, 7 loopback.
-// Radio space (space 0): a write is passed to the radio core as a
-// Hermes-Lite 2 command (address, data); a read returns the last value
-// written to that address. Address 0x0a also sets the AD9866 receive gain.
+//   20..33       the radio's registers: rw, a read returns the last value
+//                written. 20 RX_CONFIG, 21 TX_PHASE, 22.. RX_PHASE, 32
+//                TX_TIMING, 33 CW_HANG go to the radio core
+//                (rtl/core/rbv_core.sv); 30 LNA (5..0 the AD9866 receive
+//                gain code) and 31 TX_CONFIG (7..0 drive, 8 PA enable, 9
+//                T/R disable) are this module's.
+// Radio space (space 0) is not used: writes are ignored, reads return 0.
 module rbv_rpi5_top #(
     parameter bit TX = 1'b0,
     parameter int NR = 6,
@@ -112,7 +118,7 @@ module rbv_rpi5_top #(
     output logic       ad_txquiet_n
 );
 
-    localparam logic [31:0] ID      = 32'h52425632;
+    localparam logic [31:0] ID      = 32'h52425633;
     localparam logic [31:0] VERSION = 32'h0001_0000;
     localparam logic [3:0]  NR4     = NR;
     localparam logic        TX1     = TX;
@@ -122,8 +128,10 @@ module rbv_rpi5_top #(
     assign ad_mode = 1'b1;
 
     // ---- clocks ----
-    logic clk, clk_2x, pll_locked;
-    rbt_pll pll_i (.inclk0(clk53), .c0(clk), .c1(clk_2x), .c2(), .locked(pll_locked));
+    logic clk, clk_2x, clk_rxcap, pll_locked;
+    rbt_pll #(.C3_PHASE_PS("102")) pll_i (
+        .inclk0(clk53), .c0(clk), .c1(clk_2x), .c2(), .c3(clk_rxcap),
+        .locked(pll_locked));
 
     // ======================= cfg domain (clk53) =======================
     logic        rd_req, rd_space, frame_stb, frame_bad, f_write, f_space;
@@ -207,18 +215,18 @@ module rbv_rpi5_top #(
         end
         if (frame_stb) begin
             frames <= frames + 32'd1;
-            if (f_write && !f_space) begin
+            if (f_write && f_space && f_addr[5]) begin
+                // The radio's registers: kept for reading back, and passed
+                // to the radio domain.
                 shadow[f_addr] <= f_data;
                 cmd_addr_c <= f_addr;
                 cmd_data_c <= f_data;
                 cmd_tgl    <= ~cmd_tgl;
-                // Hermes-Lite 2 receive gain (LNA) word to AD9866 gain code.
-                if (f_addr == 6'h0a) begin
-                    gain_code <= f_data[6] ? f_data[5:0] :
-                                 (f_data[5] ? ~f_data[5:0] : {1'b1, f_data[4:0]});
+                if (f_addr == 6'h30) begin
+                    gain_code <= f_data[5:0];
                     gain_req  <= 1'b1;
                 end
-                if (f_addr == 6'h09) drive <= f_data[31:24];
+                if (f_addr == 6'h31) drive <= f_data[7:0];
             end else if (f_write && f_space) begin
                 case (f_addr)
                     6'h03: sticky <= sticky & ~f_data[6:4];
@@ -255,7 +263,8 @@ module rbv_rpi5_top #(
         rsp_q    <= rd_space;
         rad_q    <= rd_addr;
         shadow_q <= shadow[rd_addr];
-        if (!rsp_q) rd_data <= shadow_q;
+        if (!rsp_q) rd_data <= 32'd0;
+        else if (rad_q[5]) rd_data <= shadow_q;
         else case (rad_q)
             6'h00: rd_data <= ID;
             6'h01: rd_data <= VERSION;
@@ -355,8 +364,10 @@ module rbv_rpi5_top #(
         ptt_s        <= {ptt_s[0], TX && keying == 2'b11};
         pa_s         <= {pa_s[0], TX && control[2]};
         lb_s         <= {lb_s[0], TX && control[3]};
-        key_s        <= {key_s[0], TX && jack_key};
-        jptt_s       <= {jptt_s[0], TX && jack_ptt};
+        // The jack keys only with the TX permission bit (KEYING bit 1),
+        // so the keying watchdog stops it with the host.
+        key_s        <= {key_s[0], TX && jack_key && keying[1]};
+        jptt_s       <= {jptt_s[0], TX && jack_ptt && keying[1]};
         go_s         <= {go_s[0], TX && (dac_ready || control[3])};
         cmd_rqst     <= 1'b0;
         rst_channels <= 1'b0;
@@ -364,13 +375,13 @@ module rbv_rpi5_top #(
             cmd_addr <= cmd_addr_c;
             cmd_data <= cmd_data_c;
             cmd_rqst <= 1'b1;
-            if (cmd_addr_c == 6'h00 && cmd_data_c[6:3] != nrx) begin
-                nrx          <= cmd_data_c[6:3];
+            if (cmd_addr_c == 6'h20 && cmd_data_c[3:0] != nrx) begin
+                nrx          <= cmd_data_c[3:0];
                 rst_channels <= 1'b1;
             end
-            if (cmd_addr_c == 6'h09) begin
-                pa_enable  <= cmd_data_c[19];
-                tr_disable <= cmd_data_c[18];
+            if (cmd_addr_c == 6'h31) begin
+                pa_enable  <= cmd_data_c[8];
+                tr_disable <= cmd_data_c[9];
             end
         end
         if (rst_r) begin
@@ -387,15 +398,22 @@ module rbv_rpi5_top #(
     assign qmsec_pulse = (qms == 15'd0);
 
     // AD9866 receive bus: both data and RX sync in the I/O-cell registers
-    // (the sync changes up to about 3 ns after the data). The half with
-    // RX sync high is the low half of a sample.
-    logic [5:0]  rx_d1, rx_d2;
-    logic        rxsync_d1;
+    // (the sync changes up to about 3 ns after the data), clocked by
+    // clk_rxcap, clk_2x about 102 ps later: that centres the capture in the
+    // bus's window (slow-model setup +0.109 ns where clk_2x itself gave
+    // +0.010, fast-model hold +0.174). Then into clk_2x. The half with RX
+    // sync high is the low half of a sample.
+    logic [5:0]  rx_d0, rx_d1, rx_d2;
+    logic        rxsync_d0, rxsync_d1;
     logic [11:0] rx_asm = 12'd0, adc = 12'd0;
+    always_ff @(posedge clk_rxcap) begin
+        rx_d0     <= ad_rx;
+        rxsync_d0 <= ad_rxsync;
+    end
     always_ff @(posedge clk_2x) begin
-        rx_d1     <= ad_rx;
+        rx_d1     <= rx_d0;
         rx_d2     <= rx_d1;
-        rxsync_d1 <= ad_rxsync;
+        rxsync_d1 <= rxsync_d0;
         if (rxsync_d1) rx_asm <= {rx_d2, rx_d1};
     end
     always_ff @(posedge clk) begin
@@ -404,11 +422,11 @@ module rbv_rpi5_top #(
     end
 
     // Transmit FIFO: samples from the Pi's TX clock to the radio core (clk).
-    // The core takes PTT from the samples (tx_tuser[3] with tx_tvalid), drains
-    // the FIFO while not transmitting, and waits its TX buffer latency after
-    // PTT before sending samples (Hermes-Lite 2 radio.v); the host sends
-    // samples only while it transmits. Never cleared (the write side's clock
-    // runs only while the Pi sends).
+    // The core takes PTT from the samples (with tx_tvalid), drains the FIFO
+    // while not transmitting, and waits its TX start latency after PTT
+    // before sending samples; the host sends samples only while it
+    // transmits. Never cleared (the write side's clock runs only while the
+    // Pi sends).
     logic        txf_wr, txf_valid, txf_take, tx_tready;
     logic [31:0] txf_wdata, txf_rdata;
     logic [11:0] txf_free;
@@ -432,27 +450,19 @@ module rbv_rpi5_top #(
     assign tx_power = TX && run_s[1] && !lb_s[1] &&
                       (ptt_s[1] || key_s[1] || jptt_s[1] || core_tx_on);
 
-    radio #(
-        .NR(NR), .NT(1), .CLK_FREQ(76800000), .VNA(0), .LRDATA(0)
-    ) radio_i (
+    rbv_core #(.NR(NR)) radio_i (
         .clk(clk), .clk_2x(clk_2x),
         .rst_channels(rst_channels | rst_r | !run_s[1]), .rst_all(rst_r | !run_s[1]),
-        .rst_nco(1'b0),
-        .link_running(1'b0), .link_master(1'b0), .lm_data(24'd0), .lm_valid(1'b0),
-        .ls_valid(), .ls_done(1'b0),
-        .ds_cmd_ptt(ptt_r), .run(TX && run_s[1]), .qmsec_pulse(qmsec_pulse),
+        .rst_nco(1'b0), .run(TX && run_s[1]), .qmsec_pulse(qmsec_pulse),
+        .ds_cmd_ptt(ptt_r),
         .ext_keydown(TX && key_s[1] && go_s[1]), .ext_ptt(TX && jptt_s[1] && go_s[1]),
-        .tx_on(core_tx_on), .cw_on(cw_on), .cw_profile(),
-        .tx_tdata(txf_rdata), .tx_tlast(1'b1), .tx_tready(tx_tready),
-        .tx_tvalid(TX && txf_valid),
-        .tx_tuser({ptt_r, 3'b000}), .tx_twait(), .tx_data_dac(tx_data_dac),
-        .clk_envelope(clk), .tx_envelope_pwm_out(), .tx_envelope_pwm_out_inv(),
-        .lr_tdata(32'd0), .lr_tid(3'd0), .lr_tlast(1'b0), .lr_tready(), .lr_tvalid(1'b0),
+        .tx_on(core_tx_on), .cw_on(cw_on),
+        .tx_tdata(txf_rdata), .tx_tptt(ptt_r), .tx_tvalid(TX && txf_valid),
+        .tx_tready(tx_tready), .tx_data_dac(tx_data_dac),
         .rx_data_adc(adc),
         .rx_tdata(rx_tdata), .rx_tlast(rx_tlast), .rx_tready(rx_tready),
         .rx_tvalid(rx_tvalid), .rx_tuser(rx_tuser),
-        .cmd_addr(cmd_addr), .cmd_data(cmd_data), .cmd_rqst(cmd_rqst), .cmd_ack(),
-        .debug_out()
+        .cmd_addr(cmd_addr), .cmd_data(cmd_data), .cmd_rqst(cmd_rqst)
     );
     assign tx_on = TX && core_tx_on;
 

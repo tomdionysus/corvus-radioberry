@@ -7,14 +7,17 @@ item is removed from here and recorded at the top of
 
 ## Where things stand
 
-- Released: v0.6.0 (Raspberry Pi 4 and 5, Linux 6.12 and 6.18), as Debian
-  packages from the apt repository and on GitHub: this project's own
-  gateware, one image per board (`rpi5-pio`, `rpi4-i2s`), 10CL025 only;
-  the optional SoapySDR module; DKMS skips kernels older than 6.12.
-- In release: v0.6.1, driver only (Pi 5 transmit after a gateware
-  reload); gateware images byte for byte 0.6.0's. Acceptance: full CI
-  both ways, packages from the tag carrying the 0.6.0 images (same
-  sha256), the release gate on the Pi 5.
+- Being released: v0.7.0 (Raspberry Pi 4 and 5, Linux 6.12 and 6.18):
+  the radio core is this project's own (the core takeover,
+  [2026-11-17-core-takeover.md](2026-11-17-core-takeover.md): stages 1
+  to 7, the ADC capture clock, the memory blocks, the transmit CIC); the
+  driver translates Hermes-Lite 2 commands to the image's registers; one
+  image per board (`rpi5-pio`, `rpi4-i2s`), 10CL025 only; the optional
+  SoapySDR module; DKMS skips kernels older than 6.12.
+- Branch `item/postinst-kernel-check`: the install says when no driver
+  was built for the running kernel (section 3).
+- Waiting on the board owner: the PA HAT bias of the board now on the
+  Pi 5 (shelved); stage 8 (own filter coefficients, optional).
 
 ## Standing decisions
 
@@ -34,9 +37,17 @@ item is removed from here and recorded at the top of
   is for development only.
 - Gateware: one image per board, 10CL025 only, built from `gateware/`
   with Quartus Prime Lite 23.1std.1 in Docker on an x86-64 machine;
-  bitfiles are committed and the Pi only installs them. The Hermes-Lite 2
-  radio core is read from `gateware/source/` with its standard-conformance
-  patch (images unchanged by it). The radio never
+  bitfiles are committed and the Pi only installs them. The radio core
+  is this project's `gateware/rtl/core/` (`rbv_core.sv` and its blocks,
+  each checked against the Hermes-Lite 2 block it replaced:
+  [2026-11-17-core-takeover.md](2026-11-17-core-takeover.md)), with its
+  own registers; the driver turns clients' Hermes-Lite 2 commands into
+  them. The archive in `gateware/source/` supplies the NCO tables and the
+  filter coefficients and is the simulations' reference.
+  Simulations run on a build Pi (`SIM_LOCAL=1 tools/sim.sh`), Quartus in
+  Docker on the Mac, one container at a time.
+  RTL is written for the device and Quartus, never bent to a tool's
+  subset; Quartus sweeps of ten seeds are the judge. The radio never
   appears as a sound card.
 - The driver picks its transport from the SoC: Pi 5 PIO with `rpi5-pio`,
   Pi 4 I2S with `rpi4-i2s`. One overlay, `dtoverlay=radioberry`, on both.
@@ -77,21 +88,48 @@ item is removed from here and recorded at the top of
 
 ## 2. Gateware (`gateware/`, `driver/`)
 
-- [ ] [Gateware review](../gateware/docs/review.md) findings: not being
-      worked on now.
-- [ ] Improve the Hermes-Lite 2 radio core, in three stages. (a) Clean-up
-      with byte-for-byte identical images: unused generate branches and
-      parameters for this configuration, the rest of the core made
-      standard-conforming so a simulator and Quartus read the same source.
-      (b) Audit without changing the image (review items 5, 6 and 8):
-      fixed-point widths and rounding through the receive chain, decimation
-      passband, stopband and alias rejection at each rate, NCO and CORDIC
-      spurs, by simulation of the conforming core and confirmed on the
-      board. (c) Changes that alter the image, only where (b) finds
-      something, each measured before and after on the board, with the
-      board owner's go-ahead per change. Acceptance per stage: (a) the
-      image hashes unchanged; (b) each figure measured and written up;
-      (c) the improvement measured.
+- [ ] [Gateware review](../gateware/docs/review.md) findings: the
+      takeover has moved 1.2, 5, 6, 7.4, 7.5, 8 and 10.1; the rest are
+      not being worked on now.
+- [ ] Take over the radio core block by block:
+      [2026-11-17-core-takeover.md](2026-11-17-core-takeover.md). Stages
+      1, 2, 3, 5 and 6a to 6c done; 6d (keying) built and simulated, its
+      board and keyed runs open (keyed runs with the board owner). Then
+      stage 7 (the core's own top). Stage 4 (the frequency calculation
+      moved from the FPGA into the kernel driver) goes with the release.
+- [ ] Release `item/gateware-core`. Before the release gate: the receive
+      noise floor on the dummy load at each rate, stage 1's image against
+      the current one (the CIC pruning's tolerance); the audit of review
+      items 5, 6 and 8 (passband, stopband and alias rejection per rate
+      against the v0.6.0 image; the transmit spectrum on the board);
+      stage 4 of the takeover with its driver change; both images built
+      at the release commit and committed with their rows in
+      [provenance.md](../gateware/docs/provenance.md). Then the gate on
+      both boards (`rbcat` at the most receivers per rate, FT8 over
+      Protocol 1 and 2, loopback, an on-air contact). Acceptance: every
+      seed of both images meets timing; both boards pass as v0.6.0 did;
+      the audit figures no worse.
+- [ ] ADC input capture margin: `ad_rx` into its input register has
+      +0.008 to +0.018 ns setup on every seed of every image, set by the
+      pins (the takeover plan, "Alongside"). Measured on stage 6d's
+      rpi5-pio seed 1 (the full timing dump), the seven inputs' setup /
+      hold slack: slow 85 C +0.008..+0.027 / +0.553..+0.573 ns, slow 0 C
+      +0.216..+0.233 / +0.436..+0.454, fast 0 C +0.218..+0.231 /
+      +0.269..+0.283. The window the constraint leaves (the Hermes-Lite 2
+      input delays, 0 to 5.0 ns of the 6.51 ns period) is about 0.5 ns;
+      a capture clock about 130 ps later (its own PLL output, the rest of
+      the 153.6 MHz logic unchanged) would give about +0.14 ns each side
+      at every corner, the most this constraint allows. A larger margin
+      needs the real data window measured on the board (the AD9866's
+      output timing against this board's clock path), not the inherited
+      constraint. Acceptance: the capture clock moved and the constraint
+      checked against a measured window on the board, setup and hold each
+      at least 0.1 ns at every corner, receive unchanged on both boards.
+- [ ] The board's frequency range, measured: receive response from a
+      signal source swept down from 30 MHz until it falls away, and the
+      transmit side into the dummy load (keyed: the board owner's
+      go-ahead per run). Acceptance: the lower and upper limits written
+      into the hardware documentation.
 - [ ] Pi 5 receive level of its own transmission: with the same tools the
       Pi 5 sees the tone 25 dB stronger in loopback (-18.7 against -43.6
       dBFS) and 48 dB stronger keyed into the dummy load (-16.9 against
@@ -127,6 +165,11 @@ item is removed from here and recorded at the top of
 
 ## 3. Kernel driver remainder (`driver/`)
 
+- [ ] The driver reports its version as 0.5.0 in release 0.6.0
+      (`rbcat` shows `driver_version 0.5.0`); one version number for every
+      component, so the driver's must follow the release. Acceptance: the
+      next release's driver reports that release's version, checked in
+      the release gate.
 - [ ] Upstream review: the driver has not been through review on the
       kernel mailing lists.
 - [ ] Refuse unsupported kernels in DKMS (`BUILD_EXCLUSIVE_KERNEL`) so a
@@ -216,11 +259,30 @@ item is removed from here and recorded at the top of
 
 ## 6a. Tests
 
-- [ ] `p1probe MOX reaches the device only with transmit allowed`
-      (tools/protoprobe/tests/daemon_test.cpp) failed once in a parallel
-      test run of a package build with "UDP bind to port 55861: Address
-      already in use", and passed on the rerun: two tests' port ranges
-      can meet. Acceptance: the tests take ports that cannot collide.
+
+## 6a. Tests (continued)
+
+- [ ] One SoapySDR module test failed once (1 of 45 cases, 1 assertion)
+      in a run on a build Pi under another session's -j4 load,
+      2026-11-20; which case was not captured. 33 further full runs and
+      100 runs of each new jack keying case passed. Acceptance: the case
+      found (run the suite under load with `--durations yes` and keep the
+      output) and made independent of timing.
+
+## 6b. Observed on the Pi 4, 2026-11-19 (image of `7828030`, seed 3)
+
+- [ ] On air with piHPSDR and WSJT-X (40 m FT8), the board owner saw the
+      radio key with no RF out for a short time, about 23:33Z; waiting a
+      minute cleared it; first time seen. The daemon logged every
+      transmission whole (13.8 to 13.9 s, 0 TX blocks dropped; one cut to
+      6.5 s at 23:33:52), so the samples reached the gateware; whether
+      they carried signal is not recorded. Also in that session: image
+      `tx_underruns` 827 (0 in the stage 7 contact earlier that day), one
+      receive stall of 200 ms at about 23:18Z, kernel UdpRcvbufErrors 803,
+      no under-voltage. Not explained; the board owner's view: probably
+      WSJT-X, or RF from a nearby kilowatt station in the shack. Acceptance: the cause found, or the
+      next occurrence caught with the TX audio level, the image counters
+      and the receive stall times logged together.
 
 ## 7. Hardware validation
 

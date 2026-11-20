@@ -55,7 +55,7 @@ boot, and publishes in `/sys/bus/spi/devices/spi0.0/`:
 
 | Attribute | Meaning |
 |---|---|
-| `gateware_version` | the Hermes-Lite 2 core version clients are shown |
+| `gateware_version` | the gateware version clients are shown, in Hermes-Lite 2 numbering |
 | `fpga_type`, `receivers`, `transmitters` | from the image |
 | `transport` | `i2s` or `rp1-pio` |
 | `reload` | write 1 to reload the gateware (EBUSY while the device is open) |

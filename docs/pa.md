@@ -50,7 +50,12 @@ bias line also need PA enable
 ([gateware/docs/interfaces.md](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/docs/interfaces.md)).
 
 The board's PTT, key and paddle inputs go to the FPGA's CN301 pins, not to
-the Pi, so they work whatever software runs.
+the Pi. The gateware keys the radio from the key and PTT inputs (FPGA
+pins 120 and 121) only while the software has given the transmit
+permission: `radioberryd` gives it while a client holds MOX, and with
+`jack_keying: true` whenever a client owns the radio
+([radioberryd](daemon.md#sessions-and-transmit)). The paddle inputs (141
+and 142) are not read.
 
 ## Setting the bias
 

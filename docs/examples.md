@@ -73,8 +73,8 @@ noise alone.
 
 ## Sample order
 
-The Hermes-Lite 2 radio core sends each receiver's I first and takes I
-first (`radio.v`), and the driver and `radioberryd` pass the order
+The radio core sends each receiver's I first and takes I first, as the
+Hermes-Lite 2's does, and the driver and `radioberryd` pass the order
 through. HL2 software reads it that way: piHPSDR hands the first value to
 WDSP as I and decodes real FT8 through `radioberryd`.
 

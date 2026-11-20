@@ -62,8 +62,8 @@
 #include "rb_frame.h"
 #include "rb_pio.h"
 
-#define RB_DRIVER_VERSION ((0u << 16) | (6u << 8) | 1u)
-#define RB_DRIVER_VERSION_STRING "0.6.1"
+#define RB_DRIVER_VERSION ((0u << 16) | (7u << 8) | 0u)
+#define RB_DRIVER_VERSION_STRING "0.7.0"
 
 #define RB_DMA_SLOTS 4
 #define RB_TX_DRAIN_TRIES 2000 /* FIFO clears at 100-200 us, up to 0.4 s */
@@ -226,6 +226,7 @@ struct rb_dev {
 	struct delayed_work keepalive; /* rewrites KEYING while it is set */
 	u8 reply[RB_CMD_BYTES];	/* identity in the reply layout, once valid */
 	bool identified;
+	struct rb_hl2_state hl2; /* the command translation's state */
 
 	struct mutex io_lock; /* read and write bounce buffers */
 	u8 *io_buf;
@@ -426,6 +427,7 @@ static int rb_load_gateware(struct rb_dev *rb)
 	rb->identified = false;
 	rb->flags_sent = false;
 	rb->control_sent = false;
+	memset(&rb->hl2, 0, sizeof(rb->hl2));
 	if (ret)
 		return ret;
 
@@ -1053,7 +1055,7 @@ static int rb_identify(struct rb_dev *rb, u8 status)
 		ret = rb_breg_read(rb, RB_BREG_CAPS, &caps);
 	if (ret)
 		return ret;
-	if (id != RB_ID_RBV2 || RB_CAPS_TRANSPORT(caps) != rb->tp->caps_transport) {
+	if (id != RB_ID_RBV3 || RB_CAPS_TRANSPORT(caps) != rb->tp->caps_transport) {
 		dev_err_ratelimited(rb->dev,
 				    "%s is not the image for this board: id 0x%08x caps 0x%08x\n",
 				    rb->tp->firmware, id, caps);
@@ -1371,8 +1373,9 @@ static void rb_keepalive(struct work_struct *work)
 
 /*
  * One command block, in the image's framed protocol: the Hermes-Lite 2
- * command to the radio space; run and PA allowed, when they change, to the
- * board's CONTROL register, PTT and the permission bit to KEYING (kept
+ * command as the radio's registers (rb_hl2_translate(); a command that
+ * writes none reads STATUS, for the reply); run and PA allowed, when they
+ * change, to the board's CONTROL register, PTT and the permission bit to KEYING (kept
  * alive while set); on the Pi 4 a receiver-count or rate change sets the
  * I2S bit clock. rx[] gets the reply in the command layout: byte 0 from
  * status 2 (the core's CW or the jack's PTT, the jack's key), then the
@@ -1384,13 +1387,22 @@ static int rb_frame_command(struct rb_dev *rb, const u8 *tx, u8 *rx)
 				  RADIOBERRY_CMD_PA_ALLOWED)) |
 			(rb_cmd_ptt(tx) ? RB_FLAG_PTT : 0));
 	bool first = !rb->flags_sent;
-	unsigned int receivers, rate_code;
+	unsigned int receivers, rate_code, n, i;
+	struct rb_breg_write w[2];
 	u8 status;
 	int ret;
 
-	ret = rb_frame_xfer(rb, true, false, rb_cmd_addr(tx), rb_cmd_data(tx), NULL, &status);
-	if (ret)
-		return ret;
+	n = rb_hl2_translate(&rb->hl2, rb_cmd_addr(tx), rb_cmd_data(tx), w);
+	if (!n) {
+		ret = rb_frame_xfer(rb, false, true, RB_BREG_STATUS, 0, NULL, &status);
+		if (ret)
+			return ret;
+	}
+	for (i = 0; i < n; i++) {
+		ret = rb_frame_xfer(rb, true, true, w[i].addr, w[i].data, NULL, &status);
+		if (ret)
+			return ret;
+	}
 	/* Keying off before PA allowed goes; PA allowed before keying goes on. */
 	if (!first && rb_keying(flags) != rb_keying(rb->flags) &&
 	    !rb_keying(flags)) {

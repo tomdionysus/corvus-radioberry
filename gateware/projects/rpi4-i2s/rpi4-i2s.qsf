@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 # rpi4-i2s build for the RadioBerry on a Raspberry Pi 4, receive and
-# transmit: the
-# Hermes-Lite 2 radio core (read unmodified from gateware/source/ at build
-# time, into hl2/) inside this project's control, AD9866 start-up and I2S
-# transport. Cyclone 10 LP 10CL025, 144-pin.
+# transmit: the Hermes-Lite 2 radio core (its top in rtl/core/radio.sv,
+# its other modules read from gateware/source/ at build time, into hl2/)
+# inside this project's control, AD9866 start-up and I2S transport.
+# Cyclone 10 LP 10CL025, 144-pin.
 
 set_global_assignment -name FAMILY "Cyclone 10 LP"
 set_global_assignment -name DEVICE 10CL025YE144C8G
@@ -51,35 +51,18 @@ set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/common/rbv_i2s.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/linktest/rbt_adser.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/linktest/rbt_pll.sv
 set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/rpi4/rbv_rpi4_top.sv
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/radio.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/varcic.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/cic.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/cic_comb.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/cic_integrator.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/cordic.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/cpl_cordic.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/receiver.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/FirInterp5_1025_EER.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/counter.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/firrom/firrom1_1025.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/firram36I_205.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/square.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/sqroot.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/firfilt.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/CicInterpM5.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/firram36I_1024.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/FirInterp8_1024.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/firram36.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/vna_scanner.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/firrom/firromH.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/firrom/firromI_1024.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/radio_openhpsdr1/receiver_nco.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/primitives/intel/multipliers.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/nco/coarserom.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/nco/finerom.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/nco/sincos.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/nco/nco2.v
-set_global_assignment -name VERILOG_FILE hl2/Hermes-Lite2-3e467fd/gateware/rtl/nco/mix2.v
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/core/rbv_core.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/core/firsharedfold.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/core/fir_sdpram.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/core/rx_cic_int.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/core/rx_varcomb.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/core/tx_cic.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/core/tx_fir.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/core/tx_upconv.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/core/cw_shape.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/core/sincos.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/core/mix2.sv
+set_global_assignment -name SYSTEMVERILOG_FILE ../../rtl/core/rx_sender.sv
 
 # Pins. I2S: GPIO 18 bit clock (33), 19 frame sync (44), 20 to the Pi (43),
 # 21 from the Pi (42). Every other pin is an input with a weak pull-up,
@@ -130,3 +113,7 @@ set_instance_assignment -name FAST_INPUT_REGISTER ON -to ad_rxsync
 set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to ad_tx[*]
 set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to ad_txsync
 set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to ad_txquiet_n
+
+# Memory blocks are the scarce resource (66, against logic at about 55%):
+# shift registers stay in logic.
+set_global_assignment -name AUTO_SHIFT_REGISTER_RECOGNITION OFF

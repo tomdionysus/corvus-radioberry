@@ -63,7 +63,7 @@ enum class Counter {
     Absent,     // no counter
     Stuck,      // a counter that never moves
     Vanishing,  // read once, at the burst's start, then unreadable
-    Sysfs,      // the module's own: the driver's sysfs counters
+    Sysfs,      // the module's own reader, with no driver attribute to read
 };
 
 // A radio over a fake device the test keeps a handle on.
@@ -102,7 +102,13 @@ struct Rig {
             case Counter::Sysfs:
                 break;
         }
-        radio = std::make_unique<Radio>(std::move(device), settings, timing, count);
+        // The module's own reader, pointed at a directory with no driver
+        // attribute, whatever the machine running the test has loaded.
+        Settings s = settings;
+        if (counter == Counter::Sysfs) {
+            s.sysfs_dir = "/nonexistent/radioberry-test";
+        }
+        radio = std::make_unique<Radio>(std::move(device), s, timing, count);
     }
 
     std::vector<Command> commands() const {
@@ -610,6 +616,41 @@ TEST_CASE("deactivation ends a burst that does not drain") {
     CHECK_FALSE(rig.keyed_now());
 }
 
+TEST_CASE("jack keying holds the permission bit and never PTT while the device is open") {
+    Settings settings = transmit_settings();
+    settings.tx.jack_keying = true;
+    Rig rig(settings);
+    // From the start, before any stream: permission, no PTT.
+    REQUIRE(rig.sent([](const Command& c) { return (c.flags & Command::kTxPermit) != 0; }));
+    for (const Command& c : rig.commands()) {
+        CHECK_FALSE(c.ptt);
+    }
+    CHECK_FALSE(rig.radio->transmitting());
+    // A burst keys and unkeys as usual; the permission stays after it.
+    Radio& r = *rig.radio;
+    SoapySDR::Stream* t = r.setupStream(TX, "CF32", {}, {});
+    REQUIRE(r.activateStream(t, 0, 0, 0) == 0);
+    std::vector<std::complex<float>> a(100);
+    const void* buffs[] = {a.data()};
+    int flags = SOAPY_SDR_END_BURST;
+    CHECK(r.writeStream(t, buffs, 100, flags, 0, 1'000'000) == 100);
+    REQUIRE(wait_until([&] {
+        rig.drain();
+        return !r.burst_open();
+    }));
+    CHECK(wait_until([&] { return !rig.keyed_now(); }));
+    CHECK((rig.commands().back().flags & Command::kTxPermit) != 0);
+    r.closeStream(t);
+}
+
+TEST_CASE("without jack keying no permission bit before a burst") {
+    const Rig rig(transmit_settings());
+    REQUIRE(rig.sent([](const Command& c) { return c.address == 0x0a; }));
+    for (const Command& c : rig.commands()) {
+        CHECK((c.flags & Command::kTxPermit) == 0);
+    }
+}
+
 TEST_CASE("MOX goes when the gateware has taken the last sample") {
     Timing timing = fast();
     timing.tx_tail_max = 1000ms;
@@ -666,7 +707,7 @@ TEST_CASE("a gateware counter that does not move ends the burst at the ceiling")
 
 TEST_CASE("without the gateware counter MOX is held for the fixed tail") {
     // Absent; read at the burst's start only; and the module's own sysfs
-    // reader, with no driver attribute on a build machine.
+    // reader, with no driver attribute in the directory it is given.
     const auto counter = GENERATE(Counter::Absent, Counter::Vanishing, Counter::Sysfs);
     Rig rig(transmit_settings(), fast(), {}, counter);
     Radio& r = *rig.radio;

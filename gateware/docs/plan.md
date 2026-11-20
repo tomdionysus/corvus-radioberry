@@ -21,8 +21,11 @@ Two gateware images from one radio core, one per host board. Background:
 Not pursued: SMI, a stream over SPI, and one image serving both boards.
 They stay described in the strategy documents.
 
-Nothing here is built. Figures marked unverified are measured by the link
-test image before the project that depends on them starts.
+This is the plan as it was written before the images were built. Both
+images are built ([README](../README.md)), and the radio core described
+below as the Hermes-Lite 2's is now this project's own
+([provenance](provenance.md)); where this page and those differ, they are
+right.
 
 ## 1. What can and cannot be remapped
 

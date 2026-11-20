@@ -21,7 +21,7 @@ derive_clock_uncertainty
 set_clock_groups -asynchronous \
     -group {clk53} \
     -group {spi_sck} \
-    -group {pll_i|pll|auto_generated|pll1|clk[0] pll_i|pll|auto_generated|pll1|clk[1]} \
+    -group {pll_i|pll|auto_generated|pll1|clk[0] pll_i|pll|auto_generated|pll1|clk[1] pll_i|pll|auto_generated|pll1|clk[3]} \
     -group {pi_rx_clk} \
     -group {pi_tx_clk}
 
@@ -36,9 +36,13 @@ set_multicycle_path -from [get_clocks {pll_i|pll|auto_generated|pll1|clk[1]}] -t
 create_clock -name virt_adc -period 6.510
 set_input_delay -clock virt_adc -max 5.0 [get_ports {ad_rx[*] ad_rxsync}]
 set_input_delay -clock virt_adc -min 0.0 [get_ports {ad_rx[*] ad_rxsync}]
+# The receive bus's input registers take clk[3], clk[1] about 102 ps later,
+# on the edge a period after the ADC's launch, as clk[1] did.
+set_multicycle_path -from [get_clocks {virt_adc}] -to [get_clocks {pll_i|pll|auto_generated|pll1|clk[3]}] -setup -end 2
 set_output_delay -clock virt_adc -max 2.5 [get_ports {ad_tx[*] ad_txsync}]
 set_output_delay -clock virt_adc -min 0.0 [get_ports {ad_tx[*] ad_txsync}]
-# Pin 105 (ad_tx[4]): see rpi4-i2s.sdc and hardware_discovery.md section 4.
+# Pin 105 (ad_tx[4]): kept relaxed; the figures and why in rpi4-i2s.sdc and
+# hardware-discovery.md section 4.
 set_max_delay -from [get_registers {ad_tx_q[4]}] -to [get_ports {ad_tx[4]}] 10.0
 
 # RX wire: the nibble and sample-ready change on the Pi's rising edge and

@@ -20,11 +20,16 @@ receivers and transmit with one.
 - `rtl/`: this project's own RTL, SystemVerilog, GPL-2.0-or-later:
   control registers and the SPI protocol, AD9866 start-up, keying and PA
   lines, and the links to the Pi.
-- `source/`: the Hermes-Lite 2 radio core (receivers, decimation, NCOs,
-  transmit DSP), a `git archive` of the Hermes-Lite 2 repository, built
-  with three standard-conformance edits that leave the images unchanged
-  (`hl2-conformance.patch`): [docs/provenance.md](docs/provenance.md) has
-  the commit, hashes, licences and the fitter seed of each image.
+- `rtl/core/`: the radio core, `rbv_core.sv`, with its own registers, and
+  its blocks (mixers and NCOs, receive decimators and filter, receive
+  sender, transmit filter, interpolator and up-converter, CW envelope),
+  each simulated against the Hermes-Lite 2 block it replaced. The driver
+  turns clients' Hermes-Lite 2 commands into the core's registers.
+- `source/`: a `git archive` of the Hermes-Lite 2 repository. The build
+  reads the NCO tables and the filter coefficients from it; the
+  simulations compare this project's blocks against its modules.
+  [docs/provenance.md](docs/provenance.md) has the commit, hashes,
+  licences and the fitter seed of each image.
 
 ## Layout
 
@@ -32,6 +37,7 @@ receivers and transmit with one.
 |---|---|
 | `rtl/common/` | shared modules: SPI protocol, CRC, AD9866 sequencer, dual-clock FIFO, I2S link |
 | `rtl/rpi4/`, `rtl/rpi5/` | each image's top level and its link to the Pi |
+| `rtl/core/` | the radio core ([core rework](docs/core-rework.md): the receive filter's design and measurements) |
 | `rtl/linktest/` | the link test image |
 | `projects/` | Quartus project (`.qsf`) and timing constraints (`.sdc`) per image |
 | `sim/` | testbenches, the radio-core stand-in and a model of the RP1 PIO running the driver's programs |
@@ -68,7 +74,12 @@ Docker does.
    tools/sim.sh rpi5
    tools/sim.sh rpi4
    tools/sim.sh rpi4tx
+   tools/sim.sh failsafe
    ```
+
+   The script's header lists the others: each core block against the
+   Hermes-Lite 2 block it replaced, and the whole core against an
+   earlier revision of itself (`radioeq`).
 
 3. **Compile.** A few minutes each:
 

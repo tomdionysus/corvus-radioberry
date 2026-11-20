@@ -40,6 +40,7 @@ Stop the service before running anything else that opens
 | `allow_pa` | `--allow-pa BOOL` | `false` | pass on the client's PA enable while transmitting |
 | `drive_ceiling` | `--drive-ceiling N` | `150` as installed (`0` without the file) | highest drive level sent, 0 to 255 |
 | `tx_watchdog_s` | `--tx-watchdog-s N` | `120` | longest continuous MOX, seconds |
+| `jack_keying` | `--jack-keying BOOL` | `false` | let the key jack key the radio while a client owns it, without MOX; needs `allow_tx` |
 | `log_level` | `--log-level LEVEL` | `info` | trace, debug, info, warn or error |
 
 ## Sessions and transmit
@@ -50,6 +51,11 @@ Stop the service before running anything else that opens
 - With it, the owning client transmits while it holds MOX. Drive is
   capped at `drive_ceiling`, PA enable is passed on only with
   `allow_pa: true`, and `tx_watchdog_s` ends any transmission held longer.
+- The key jack (key and PTT) keys the radio only with the gateware's TX
+  permission, which the gateware clears about a second after the host
+  stops refreshing it. The daemon gives that permission while a client
+  holds MOX, and with `jack_keying: true` also while a client owns the
+  radio (never PTT; PA enable still only with MOX).
 - These faults drop MOX, which stays dropped until the client releases
   it: an invalid TX block, a full RX queue, a device error, a full TX
   queue, a gap in the host sequence (Protocol 1 host packets, Protocol 2

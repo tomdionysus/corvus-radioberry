@@ -3,6 +3,166 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-20: The SoapySDR module follows radioberryd's `jack_keying`
+  (the board owner's correction of 2026-11-19's choice to ignore it): the
+  key jack may key while a program has the device open. Tests for both
+  settings and a line in docs/soapy.md.
+- 2026-11-19: The SoapySDR test `without the gateware counter MOX is held
+  for the fixed tail` no longer reads the real driver's sysfs on a Pi with
+  the module loaded: the module takes the directory from its settings,
+  and the test points it at one with no driver attribute. 42 module test
+  cases pass.
+- 2026-11-19: The daemon and probe tests' ports no longer collide. Both
+  suites took ports in the kernel's ephemeral range (by pid, or port 0
+  with TCP bound to the number UDP got), where other programs' sockets
+  live: `p1probe streams from radioberryd` failed in a CI run that way.
+  `daemon/tests/free_ports.hpp` now gives each daemon a range below the
+  ephemeral range that no socket holds, UDP or TCP. The 38 daemon and
+  probe tests passed three times in a row run four at a time.
+- 2026-11-19: Core takeover, stage 6d built and simulated (branch
+  `item/gateware-core`; board and keyed runs still open in the plan).
+  - The jack's key and PTT keyed the core, powered the TxDAC and set the
+    transmit gain with no permission and no watchdog (only the PA lines
+    needed permission). Both images (`b8b7fc9`): they pass only with
+    KEYING's permission bit, so the keying watchdog stops them with the
+    host. `tools/sim.sh rpi4tx`, `rpi4`, `rpi5` pass.
+  - `radioberryd` (`abbefe1`): `jack_keying` (default false; needs
+    `allow_tx` and a transmitter) holds the permission bit, never PTT,
+    while a client owns the radio; a release or a stream fault clears it
+    until the owner's next packet. 348 tests pass on a Pi 5.
+  - The CW envelope a raised cosine over the level counter's ramp
+    (`rtl/core/cw_shape.sv`), the same 4.1 ms and peak as the straight
+    line: within 1.3 LSB of the ideal curve (`tools/sim.sh cwshape`).
+    Click spectrum of one element, dB under the carrier, straight line /
+    raised cosine: 500 Hz -53.2 / -47.6, 1 kHz -67.1 / -74.3, 2 kHz -68.6
+    / -89.8, 5 kHz -81.9 / -114.6; above -80 dB to 4 975 / 1 700 Hz.
+    `radioeq` against `b338416`: 0 mismatches outside the DAC words.
+  - `tools/sim.sh failsafe` (`3390368`): the Pi 4 transmit build with the
+    real core; each path keyed under the host's keepalive, which then
+    stops. Transmit ended after KEYING cleared: software PTT 1.9 ms (its
+    2 ms hang), PTT hang 31 at once, jack PTT at once, the jack's key at
+    full level 5.0 ms (1 ms latency, then the ramp down); after each the
+    core idle, PA lines and TX quiet low, the AD9866's transmit path off.
+  - Pi 5 with the 6d image (Pi 5 seed 1): `rbprobe` passes, `rbcat`
+    clean, FT8 over Protocol 1 and 2 with nothing lost; loopback tone
+    -18.7 dBFS, image -142.8, carrier -131.1 dBFS, counters clean.
+  - Our own toolchain: `b8b7fc9` proven equivalent to its sources for
+    both images (rpi5-pio 28 424 obligations, rpi4-i2s 29 253, none
+    differing or undecided); every one of the 20 seeds' bitstreams
+    rebuilt byte for byte from Quartus's routing. The jack is not tested
+    on the board (the board owner accepts the simulation).
+- 2026-11-18: Core takeover, stages 5 and 6a to 6c (branch
+  `item/gateware-core`). Every seed of ten of both images meets timing at
+  `b338416`: the Pi 5 image 13 226 to 13 278 logic elements, the Pi 4
+  image 13 814 to 13 868. Our own toolchain rebuilt every stage 6c
+  bitstream byte for byte from Quartus's routing.
+  - Stage 5 (`1b4db11`): the receive sender (`rx_sender.sv`), bit for
+    bit. The variable CIC's output rounded halves to even (`6c11187`): no
+    DC offset (loopback 0 Hz bin -131.5 dBFS, -120 before).
+  - Stage 6a (`72da3fe`): the transmit interpolating filter
+    (`tx_fir.sv`), bit for bit over 9.6 million clocks; its coefficients
+    are symmetric, so half are stored. Stage 6b (`1b9d8bd`): the transmit
+    CIC interpolator (`tx_cic.sv`), each stage only as wide as it grows,
+    bit for bit.
+  - Stage 6c (`03b5706`, `b338416`): the CORDIC up-converter (about 1 770
+    cells) replaced by `tx_upconv.sv`: the same NCO, a multiplier mixer,
+    the CORDIC path's level, rounding, a +-1 LSB triangular dither and
+    saturation (the original truncated and wrapped). The board owner
+    chose dither on; a one-bit input can turn it off. Simulated
+    (`tools/sim.sh txupconv`; worst spur 0 to 38.4 MHz, dBc, CORDIC / new
+    without dither / with): 14.074 MHz at -1 dBFS -101.1 / -99.5 /
+    -104.4; at -20 dBFS -75.5 / -73.7 / -84.8; 7.074 MHz -96.3 / -94.1 /
+    -104.5; 28.074 MHz -97.0 / -94.4 / -103.4. Level within 0.002 % of
+    the CORDIC's; DC -66 / -83 / -83 dBFS; SNR and distortion at -1 dBFS
+    73.1 / 73.0 / 68.3 dB. Per hertz the dithered floor is about 6 dB
+    above the AD9866 TxDAC's typical figure (-144.1 against -149.8
+    dBc/Hz; the datasheet's conditions are not this board's). Dithers of
+    half and a quarter of an LSB were simulated and not taken (worst spur
+    at -20 dBFS -81.7 and -76.5 dBc). `radioeq` against `03b5706`: 0
+    mismatches outside the DAC words over 800 768 clocks.
+  - Pi 5 with the 6c image: `rbcat` clean, FT8 over Protocol 1 and 2 with
+    nothing lost; loopback tone -18.7 dBFS as before, image -144.3,
+    carrier -131.3 dBFS, counters clean. Keyed into the dummy load with
+    the board owner's external amplifier in line (drive 128, a 1 kHz tone
+    at 0.8 of full scale, 3 s): 12 W with the released image, 13 W with
+    this one, the receive path hearing both tones within 0.1 dB. On air,
+    40 m FT8 through piHPSDR and WSJT-X: 13 transmissions, no block
+    dropped, image counters clean, spotted by seven stations in five
+    countries; one answered and could not decode the reports sent to it.
+- 2026-11-18: Core takeover, stages 1 to 3 (branch `item/gateware-core`,
+  plan [2026-11-17-core-takeover.md](2026-11-17-core-takeover.md)). Every
+  seed of ten of both images meets timing at `c653e37`; the Pi 5 image is
+  14 647 to 14 720 logic elements (19 828 before), the Pi 4 image 15 192
+  to 15 276 (about 20 400 before).
+  - Stage 1 (`50d4a22`, `ad4726b`, `bfeb533`): the Hermes-Lite 2 core's
+    `radio.v` in the tree as `gateware/rtl/core/radio.sv`, first
+    unchanged, then with this project's two patches (the same Pi 5
+    bitstream byte for byte), then without what no client reaches: the
+    FPGA-side VNA scanner, the board-to-board link, the envelope PWM for
+    EER, the debug outputs. Against the version before
+    (`tools/sim.sh radioeq`): every output on every clock equal over
+    800 768 clocks. About 250 logic elements fewer. Pi 5: `rbcat` clean
+    at every rate, FT8 over Protocol 1 and 2 with nothing lost, loopback
+    tone -18.7 dBFS as before.
+  - Stage 2 (`12c6864`, `45a42e9`, `19c1441`): the receive CIC
+    decimators. The variable CIC's combs for all receivers in one engine
+    with their state in a memory (`rx_varcomb.sv`; the integrators stay
+    each receiver's, in `rx_cic_int.sv`: their state would need about 12
+    memory blocks more than the device has free), bit for bit and clock
+    for clock. Then the registers pruned (Hogenauer) to the tolerance the
+    board owner set, the pruning error's variance at most a quarter of
+    the 16-bit output rounding's (rms at most 0.144 output LSB): the
+    variable CIC's input shifted by the decimation so that one set of
+    widths serves every rate, its integrators 43, 37, 33, 29, 25 bits
+    with rounded inputs, its combs 23, 22, 21, 20, 20; the first CIC this
+    project's own, its combs 21, 20, 19 bits, its integrators whole, its
+    output rounded halves to even. Truncating into an integrator, pruning
+    the first CIC's integrators and rounding halves up each left an
+    offset (0.38, 0.14 and 0.047 LSB) and were not used. Measured
+    against the exact CICs (`tools/sim.sh cicprune`, 24 000 values a
+    decimation): error rms 0.079 to 0.097 LSB, mean about 0.001 LSB.
+    Estimated, not measured: about 0.2 dB more noise at 48 ksps over the
+    ADC's own. About 4 900 logic elements fewer. The Pi 4 image missed
+    timing on one seed of ten, in the NCO's table to multiplier path.
+  - Stage 3 (`5064682`, `c653e37`): the NCO's sine and cosine
+    (`sincos.sv`) with the tables' outputs and the multipliers' inputs in
+    registers the device has, and the mixers with their NCOs
+    (`mix2.sv`), each mixer's state register kept as its own; both the
+    same values on the same clocks as the originals
+    (`tools/sim.sh sincoseq`, `mixeq`: 200 000 clocks each, 0
+    mismatches). Every seed of both images meets timing.
+  - On the board: the Pi 5 received with the stage 2 and stage 3 cores as
+    our own toolchain built them (its synthesis, routing and bitstream on
+    Quartus's placement): `rbcat` clean at every rate, FT8 over Protocol 1
+    and 2 with nothing lost.
+- 2026-11-17: Gateware rework, first part (branch `item/gateware-core`,
+  [core-rework.md](../gateware/docs/core-rework.md)). `rbv_i2s`'s word and
+  check logic registered a cycle early (identical to v0.6.0's over 1.7
+  million cycles in simulation). The receive filter replaced by design
+  A+B, one folded filter shared by all receivers: equal to design A's
+  arithmetic value for value, within -118 dBFS rms of the original, on 52
+  of 132 multiplier elements (the original's took all 132). Pi 4 image,
+  ten seeds each: v0.6.0 met timing on 6, the reworked I2S logic alone on
+  10, with A+B on 10, every seed limited by the ADC input pin. Pi 5
+  image with A+B (one seed, meets): `rbcat` clean at three receivers at
+  384 ksps and six at 192, FT8 over Protocol 1 (78 decodes) and 2 (103)
+  with nothing lost, loopback as v0.6.0, and the board owner's FT8
+  contact on air. Designs A and B built and measured, then dropped.
+- 2026-11-18: Release 0.6.1, driver only: on the Pi 5, transmit after a
+  gateware reload through sysfs (TX transfers in flight are completed
+  before the PIO is closed; on 6.12 kernels rp1-pio kept counting them and
+  every later TX transfer timed out), with an `rbdrivertest` case for it;
+  the version ioctl reports the release's version; three SoapySDR tests
+  wait for the unkey the device thread sends (a race the release CI
+  found). Gateware images those of 0.6.0, byte for byte (sha256 checked in
+  the packages). Full CI with and without SoapySDR (100% line coverage
+  both ways). Pi 5 gate: everything removed, README and quickstart
+  followed exactly from the live repository, `rbprobe` exit 0, `ft8rx`
+  40 m over Protocol 1 and 2 with 0 packets lost, `rbcat` clean at four
+  rates, the loopback self-test the same from a fresh driver and after
+  each of two reloads; the board owner's FT8 contact on air, 0 TX blocks
+  dropped. Repository sources file now names its architectures (no
+  `armhf` notice from apt). Pi 4 not tested (off).
 - 2026-11-16: Release 0.6.0. Full CI with and without SoapySDR (100% line
   coverage both ways). Release gate on both boards: every RadioBerry trace
   removed, then installed exactly as the README and quickstart say (DKMS

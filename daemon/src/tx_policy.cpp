@@ -107,8 +107,14 @@ void TxPolicy::apply_locked(bool granted, std::chrono::nanoseconds now) {
         spdlog::info("PTT off");
     }
     granted_ = granted;
+    // Called only for the radio's owner (Session::mox), so with jack keying
+    // the permission bit is held exactly while a client owns the radio; a
+    // release or a fault clears it (Control::safe) until the owner's next
+    // packet.
+    const bool jack = options_.jack_keying && options_.allow_tx && options_.tx_available;
+    const bool permit = granted || jack;
     control_.set_transmit(
-        {granted, granted, granted && cwx_requested_, granted && options_.allow_pa});
+        {granted, permit, granted && cwx_requested_, permit && options_.allow_pa});
     if (control_.value(Control::kTxDrive) != drive_word) {
         Command c;
         c.address = Control::kTxDrive;

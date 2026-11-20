@@ -18,8 +18,9 @@
  *                  2..5    the addressed register's value before any write
  *                  6       status 2 (RB_FS2_*)
  *                  7       CRC-8 of bytes 0..6
- * Radio space carries Hermes-Lite 2 commands (address, data); board space
- * the image's own registers (RB_BREG_*).
+ * Board space holds every register (RB_BREG_*); radio space is not used.
+ * The radio's registers (RB_BREG_RX_CONFIG up) are written from the
+ * Hermes-Lite 2 commands clients send, by rb_hl2_translate().
  */
 #ifndef RB_FRAME_H
 #define RB_FRAME_H
@@ -67,6 +68,15 @@
 #define RB_BREG_STATUS2 0x12  /* write 1s to clear RB_FS2_KEY_WD */
 #define RB_BREG_TX_BAD 0x13   /* frames dropped: flags failed their check */
 #define RB_BREG_REALIGNS 0x14 /* times the sample/flags word phase moved */
+/* The radio's registers (gateware rtl/core/rbv_core.sv and the image tops). */
+#define RB_BREG_RX_CONFIG 0x20	/* 3..0 receivers less one, 9..8 rate code */
+#define RB_BREG_TX_PHASE 0x21	/* NCO phase step a 76.8 MHz clock */
+#define RB_BREG_RX_PHASE0 0x22	/* receiver r at 0x22 + r */
+#define RB_BREG_LNA 0x30	/* 5..0 AD9866 receive gain code */
+#define RB_BREG_TX_CONFIG 0x31	/* 7..0 drive, 8 PA enable, 9 T/R disable */
+#define RB_BREG_TX_TIMING 0x32	/* 6..0 TX start latency ms, 12..8 PTT hang ms */
+#define RB_BREG_CW_HANG 0x33	/* 9..0 */
+#define RB_RX_PHASES 12		/* receiver phase registers */
 
 #define RB_CONTROL_RUN (1u << 0)
 #define RB_CONTROL_RESTART (1u << 1)
@@ -75,7 +85,7 @@
 #define RB_KEYING_PTT (1u << 0)
 #define RB_KEYING_PERMIT (1u << 1)
 
-#define RB_ID_RBV2 0x52425632u
+#define RB_ID_RBV3 0x52425633u /* images with the radio's own registers */
 
 /* CAPS fields. */
 #define RB_CAPS_RECEIVERS(c) ((c) & 0xfu)
@@ -143,6 +153,93 @@ static inline bool rb_frame_reply(const u8 *in, u8 *status, u32 *data, u8 *statu
 static inline u8 rb_frame_reply_flags(u8 status2)
 {
 	return (u8)((status2 & RB_FS2_CW_OR_PTT ? 0x01 : 0) | (status2 & RB_FS2_JACK_KEY ? 0x04 : 0));
+}
+
+/*
+ * A frequency in Hz as the NCO's phase step a 76.8 MHz clock:
+ * Hz * 2^57 / 76.8 MHz, rounded as the Hermes-Lite 2 core rounded it.
+ */
+static inline u32 rb_phase_word(u32 hz)
+{
+	return (u32)(((u64)hz * 1876499845ull + (1ull << 24)) >> 25);
+}
+
+/* What the translation remembers between commands. */
+struct rb_hl2_state {
+	u32 tx_phase;
+	u8 last_chan; /* receivers less one */
+	bool duplex;
+};
+
+struct rb_breg_write {
+	u8 addr;
+	u32 data;
+};
+
+/*
+ * The register writes a Hermes-Lite 2 command (address, data) becomes:
+ * 0, 1 or 2 of them in out[], their count returned. The rules a Hermes-Lite
+ * 2 client expects are kept here: with one receiver and duplex clear,
+ * receiver 0 follows the transmitter's frequency. Commands the radio has
+ * no use for (PureSignal, predistortion, CW keyer settings, the VNA bit
+ * and others) give nothing.
+ */
+static inline unsigned int rb_hl2_translate(struct rb_hl2_state *s, u8 addr, u32 data,
+					    struct rb_breg_write *out)
+{
+	bool follow = !s->duplex && s->last_chan == 0;
+
+	if (addr == 0x00) {
+		s->duplex = (data >> 2) & 1;
+		s->last_chan = (u8)((data >> 3) & 0xf);
+		out[0].addr = RB_BREG_RX_CONFIG;
+		out[0].data = s->last_chan | ((data >> 24) & 3) << 8;
+		return 1;
+	}
+	if (addr == 0x01) {
+		s->tx_phase = rb_phase_word(data);
+		out[0].addr = RB_BREG_TX_PHASE;
+		out[0].data = s->tx_phase;
+		if (!follow)
+			return 1;
+		out[1].addr = RB_BREG_RX_PHASE0;
+		out[1].data = s->tx_phase;
+		return 2;
+	}
+	if (addr == 0x02) {
+		out[0].addr = RB_BREG_RX_PHASE0;
+		out[0].data = follow ? s->tx_phase : rb_phase_word(data);
+		return 1;
+	}
+	if ((addr >= 0x03 && addr <= 0x08) || (addr >= 0x12 && addr <= 0x16)) {
+		/* Receivers 1 to 6, then 7 to 11. */
+		out[0].addr = (u8)(RB_BREG_RX_PHASE0 + (addr <= 0x08 ? addr - 0x02 : addr - 0x12 + 7));
+		out[0].data = rb_phase_word(data);
+		return 1;
+	}
+	if (addr == 0x09) {
+		out[0].addr = RB_BREG_TX_CONFIG;
+		out[0].data = data >> 24 | ((data >> 19) & 1) << 8 | ((data >> 18) & 1) << 9;
+		return 1;
+	}
+	if (addr == 0x0a) {
+		/* The Hermes-Lite 2 LNA field: bit 6 set, a code in 5..0. */
+		out[0].addr = RB_BREG_LNA;
+		out[0].data = data & 0x40 ? data & 0x3f :
+					    (data & 0x20 ? ~data & 0x3f : 0x20 | (data & 0x1f));
+		return 1;
+	}
+	if (addr == 0x10) {
+		out[0].addr = RB_BREG_CW_HANG;
+		out[0].data = (data >> 24) << 2 | ((data >> 16) & 3);
+		return 1;
+	}
+	if (addr == 0x17) {
+		out[0].addr = RB_BREG_TX_TIMING;
+		out[0].data = (data & 0x7f) | (data & 0x1f00);
+		return 1;
+	}
+	return 0;
 }
 
 /*

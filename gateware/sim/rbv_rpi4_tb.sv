@@ -205,7 +205,7 @@ module rbv_rpi4_tb;
 
     initial begin
         #3000;
-        rd(1'b1, 6'h00, q); check("ID", q, 32'h52425632);
+        rd(1'b1, 6'h00, q); check("ID", q, 32'h52425633);
         rd(1'b1, 6'h02, q); check("CAPS", q, 32'h00002106);
 
         // A frame with a bad CRC is ignored and counted.
@@ -227,17 +227,22 @@ module rbv_rpi4_tb;
         check("AD9866 0x0a (TX gain lowest)", ad_regs[5'h0a], 8'h40);
         check("AD9866 0x0d", ad_regs[5'h0d], 8'h03);
 
-        // Radio space: a command reaches the radio and reads back.
-        wr(1'b0, 6'h00, 32'h0000_0008);   // two receivers (bits 6..3 = 1)
-        rd(1'b0, 6'h00, q); check("radio shadow 0x00", q, 32'h8);
+        // The radio's registers: a write reaches the core and reads back;
+        // radio space is ignored.
+        wr(1'b1, 6'h20, 32'h0000_0001);   // RX_CONFIG: two receivers
+        rd(1'b1, 6'h20, q); check("RX_CONFIG reads back", q, 32'h1);
         #200;
-        check("radio got the command", {26'd0, dut.radio_i.last_addr}, 32'h0);
-        check("radio receiver count", {28'd0, dut.radio_i.last_chan}, 32'h1);
+        check("core got the command", {26'd0, dut.radio_i.last_addr}, 32'h20);
+        check("core receiver count", {28'd0, dut.radio_i.last_chan}, 32'h1);
+        wr(1'b0, 6'h00, 32'h0000_0010);
+        rd(1'b0, 6'h00, q); check("radio space reads 0", q, 32'h0);
+        #200;
+        check("radio space write ignored", {28'd0, dut.radio_i.last_chan}, 32'h1);
 
-        // Receive gain: Hermes-Lite 2 LNA word 0x5f (bit 6 set: code 31).
-        wr(1'b0, 6'h0a, 32'h0000_005f);
+        // Receive gain: LNA code 31.
+        wr(1'b1, 6'h30, 32'd31);
         #40000;
-        check("AD9866 0x09 from the LNA command", ad_regs[5'h09], {2'b01, 6'd31});
+        check("AD9866 0x09 from the LNA register", ad_regs[5'h09], {2'b01, 6'd31});
         check("AD9866 0x0a still lowest", ad_regs[5'h0a], 8'h40);
 
         // AD9866 read through the board register.

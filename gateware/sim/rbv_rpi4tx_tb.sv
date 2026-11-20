@@ -253,8 +253,8 @@ module rbv_rpi4tx_tb;
 
         // The link with the return sampling point the driver uses at div 8.
         wr(1'b1, 6'h06, {2'd0, 6'd1, 8'd0, 8'd8, 7'd0, 1'b1});
-        wr(1'b0, 6'h00, 32'h0);              // one receiver
-        wr(1'b0, 6'h09, {8'd128, 24'd0});    // drive 128: code 20; PA enable clear
+        wr(1'b1, 6'h20, 32'h0);              // one receiver
+        wr(1'b1, 6'h31, 32'd128);            // drive 128: code 20; PA enable clear
         tx_on_host = 1'b1;
         #200000;
         rd(1'b1, 6'h0B, q);
@@ -314,10 +314,10 @@ module rbv_rpi4tx_tb;
         wr(1'b1, 6'h05, 32'h3);
         #2000;
         check("exttr and inttr with PA allowed", {28'd0, pa_out}, 32'h3);
-        wr(1'b0, 6'h09, {8'd128, 4'd0, 1'b1, 19'd0});   // PA enable
+        wr(1'b1, 6'h31, 32'h180);            // drive 128, PA enable
         #2000;
         check("all four with PA enable", {28'd0, pa_out}, 32'hF);
-        wr(1'b0, 6'h09, {8'd128, 24'd0});
+        wr(1'b1, 6'h31, 32'd128);
         wr(1'b1, 6'h05, 32'h1);              // PTT without permission
         #2000;
         check("nothing without permission", {28'd0, pa_out}, 32'h0);
@@ -339,7 +339,7 @@ module rbv_rpi4tx_tb;
 
         // Loopback: TxDAC off, digital loopback, TX quiet and PA lines low
         // even with PA allowed and PA enable.
-        wr(1'b0, 6'h09, {8'd128, 4'd0, 1'b1, 19'd0});
+        wr(1'b1, 6'h31, 32'h180);
         wr(1'b1, 6'h04, 32'hD);              // run, PA allowed, loopback
         wr(1'b1, 6'h05, 32'h3);
         #60000;
@@ -358,17 +358,26 @@ module rbv_rpi4tx_tb;
         check("AD9866 0x01 after loopback, not keyed", ad_reg(1), 8'h60);
         check("loopback left in the right order", {31'd0, lb_order_bad}, 32'h0);
 
-        // The jack's PTT keys the core with run set, as Hermes-Lite 2 does;
-        // the PA lines need permission and PA allowed.
-        wr(1'b0, 6'h09, {8'd128, 24'd0});
+        // The jack's PTT keys the core only with the TX permission bit,
+        // and stops when the keying watchdog clears it.
+        wr(1'b1, 6'h31, 32'd128);
         jack_ring = 1'b0;
-        #60000;                              // debounce, then the TxDAC powers up
-        check("jack PTT keys the core", {31'd0, dut.tx_on}, 32'h1);
-        check("jack PTT: PA lines low without permission", {28'd0, pa_out}, 32'h0);
-        wr(1'b1, 6'h04, 32'h5);
+        #60000;                              // debounce
+        check("jack PTT without permission: core idle", {31'd0, dut.tx_on}, 32'h0);
+        check("jack PTT without permission: TxDAC off", ad_reg(1), 8'h60);
+        check("jack PTT without permission: PA lines low", {28'd0, pa_out}, 32'h0);
         wr(1'b1, 6'h05, 32'h2);              // permission only
+        #60000;                              // the TxDAC powers up
+        check("jack PTT with permission keys the core", {31'd0, dut.tx_on}, 32'h1);
+        check("jack PTT: PA lines low without PA allowed", {28'd0, pa_out}, 32'h0);
+        wr(1'b1, 6'h04, 32'h5);
+        wr(1'b1, 6'h05, 32'h2);
         #2000;
         check("jack PTT with permission and PA allowed", {28'd0, pa_out}, 32'h3);
+        #600000;                             // permission not rewritten
+        check("jack PTT stopped by the watchdog", {31'd0, dut.tx_on}, 32'h0);
+        check("PA lines low after the watchdog (jack)", {28'd0, pa_out}, 32'h0);
+        wr(1'b1, 6'h12, 32'h10);
         jack_ring = 1'b1;
         wr(1'b1, 6'h05, 32'h0);
         wr(1'b1, 6'h04, 32'h0);

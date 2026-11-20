@@ -53,3 +53,7 @@ drive_ceiling: 150
 
 # Longest single transmission in seconds before MOX is dropped.
 tx_watchdog_s: 120
+
+# Let the key jack (key and PTT) key the radio while a client owns it, without MOX.
+# Needs allow_tx. Off, the jack keys only while a client holds MOX.
+jack_keying: false

@@ -3,6 +3,32 @@
 Changes per released version, newest first. Versions are git tags; the
 packages carry the same number.
 
+## 0.7.0 - 2026-11-20
+
+- Gateware: the radio core is this project's own, block by block, each
+  checked against the Hermes-Lite 2 block it replaced; no Hermes-Lite 2
+  or openHPSDR module is compiled into the images. They are 38 to 39%
+  smaller than 0.6.1's (13 267 to 13 961 logic elements against 21 903 to
+  22 607) and leave 8 of the 66 memory blocks free; every seed swept
+  meets timing on both. Receive: one shared folded filter, pruned CIC
+  decimators with no DC offset, and the ADC bus captured on its own clock
+  about 100 ps later, which raises its worst timing margin from 0.010 to
+  0.109 ns. Transmit: a CIC interpolator about half the size, a
+  multiplier up-converter with dither in place of the CORDIC (spurs 5 to
+  11 dB lower), a raised-cosine CW envelope (key clicks above -80 dB to
+  1.7 kHz from the carrier, 5 kHz before). The image has its own
+  registers; PureSignal and the gateware predistortion are gone.
+- Driver: turns clients' Hermes-Lite 2 commands into the image's
+  registers and computes the NCO phase words; it needs the new images
+  (ID RBV3) and they need it.
+- The key jack keys only with the transmit permission, so the keying
+  watchdog stops it; `radioberryd`'s `jack_keying` (default off) lets it
+  key while a client owns the radio, and the SoapySDR module the same
+  while a program has the device open.
+- Tests: the daemon and probe tests take ports no other socket holds, and
+  the SoapySDR tests no longer read a loaded driver's sysfs. `ci-pi.sh`
+  runs six gateware testbenches under Verilator where it is installed.
+
 ## 0.6.1 - 2026-11-18
 
 - Driver (Raspberry Pi 5): transmit works after a gateware reload through

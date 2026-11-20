@@ -3,7 +3,7 @@
 The module (`soapy/`, package `soapysdr-module-radioberry`) is built,
 documented ([docs/soapy.md](../docs/soapy.md),
 [soapy/docs/design.md](../soapy/docs/design.md)) and tested on the
-Raspberry Pi 5 and Pi 4. Branch `item/soapysdr`.
+Raspberry Pi 5 and Pi 4. Released in 0.6.0.
 
 Board owner's decisions: direct to `/dev/radioberry`; receive and transmit;
 nothing that exists changes; an optional package, and the whole stack
@@ -44,7 +44,7 @@ Pi 4: 6.18.60.
 | Program killed while keyed | keying, control, status2 0 | keying 0 |
 | `rbsoapytest` | | 4 tests and the 2 loopback tests pass |
 | Dummy load, `DRIVE` 5 dB | PTT and PA on and off cleanly | external PA in line: PTT and PA on and off cleanly, drive 67, unkeyed 0.11 s after the last write, 0 image TX overflows and underruns |
-| Quisk keyed, PA HAT, external PA | MicroPA50, AT100: 1.9 W at the tuner | dummy load, `DRIVE` 5 dB: keyed and unkeyed through rigctl, keying 0 after |
+| Quisk keyed, PA HAT, external PA | external amplifier and tuner in line: 1.9 W at the tuner | dummy load, `DRIVE` 5 dB: keyed and unkeyed through rigctl, keying 0 after |
 | Existing stack | `rbdrivertest` 12/12; `ft8rx` 0 lost over Protocol 1 and 2 | `rbdrivertest` 12/12; `ft8rx` 0 lost over Protocol 1 (23 decodes) and 2 (30) |
 | Packages | with and without the module, the three existing packages equal to 0.5.0 in files, modes, control fields and scripts | built on the Pi 4, 374 tests pass; installed over 0.4.1 packages, `config.yaml` kept |
 | CI | full run with the module, and on a machine without SoapySDR: all stages, coverage 100%; module tests clean under TSan | |

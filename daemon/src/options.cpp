@@ -43,7 +43,8 @@ std::array<std::uint8_t, 6> mac(const std::string& text) {
 const std::set<std::string> kKeys = {
     "device",        "address",       "port",          "mac",           "client_timeout_ms",
     "frequency_ppm", "iq_convention", "p2_rx_gain",    "protocols",     "realtime",
-    "allow_tx",      "allow_pa",      "drive_ceiling", "tx_watchdog_s", "log_level"};
+    "allow_tx",      "allow_pa",      "drive_ceiling", "tx_watchdog_s", "jack_keying",
+    "log_level"};
 
 std::string lower(std::string text) {
     std::transform(text.begin(), text.end(), text.begin(),
@@ -232,6 +233,8 @@ Options parse_options(const std::vector<std::string>& command_line) {
             o.daemon.tx.allow_tx = flag();
         } else if (a == "--allow-pa") {
             o.daemon.tx.allow_pa = flag();
+        } else if (a == "--jack-keying") {
+            o.daemon.tx.jack_keying = flag();
         } else if (a == "--drive-ceiling") {
             o.daemon.tx.drive_ceiling = static_cast<std::uint8_t>(number(a, value(), 255));
         } else if (a == "--tx-watchdog-s") {
@@ -286,6 +289,8 @@ std::string usage() {
            "                           (default false)\n"
            "  --drive-ceiling N        highest drive level sent, 0 to 255 (default 0)\n"
            "  --tx-watchdog-s N        longest continuous MOX, seconds (default 120)\n"
+           "  --jack-keying BOOL       let the key jack key the radio while a client owns\n"
+           "                           it, without MOX; needs --allow-tx (default false)\n"
            "  --log-level LEVEL        trace, debug, info, warn or error (default info)\n"
            "  --version                print the version and exit\n"
            "  -h, --help               print this and exit\n";

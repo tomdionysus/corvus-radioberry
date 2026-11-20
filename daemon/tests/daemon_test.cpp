@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "fake_device.hpp"
+#include "free_ports.hpp"
 #include "p1_packets.hpp"
 #include "p2_packets.hpp"
 
@@ -92,7 +93,7 @@ struct Running {
     static DaemonOptions options() {
         DaemonOptions o;
         o.address = kLoopback;
-        o.port = 0;
+        o.port = radioberry::test::free_port_block();
         o.mac = std::array<std::uint8_t, 6>{2, 0, 0, 0, 0, 9};
         o.device.wait_ms = 2;
         o.device.stall_after = 10s;

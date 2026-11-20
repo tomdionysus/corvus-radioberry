@@ -15,9 +15,14 @@
   ([rb_frame.h](../kernel/rb_frame.h),
   [gateware/docs/interfaces.md](../../gateware/docs/interfaces.md)): 8-byte
   frames with a CRC, each reading or writing one register. A command from
-  userspace (the six bytes of `radioberry_command`) becomes a radio-space
-  write of its Hermes-Lite 2 address and data, plus CONTROL (run, PA
-  allowed, loopback) when it changes and KEYING (PTT, permission). KEYING
+  userspace (the six bytes of `radioberry_command`) carries a Hermes-Lite 2
+  address and data; `rb_hl2_translate()` makes it the image's own radio
+  registers (receiver count and rate, phase words computed from the
+  frequencies, gain, drive and PA bits, TX timings), keeping the rules a
+  Hermes-Lite 2 client expects (with one receiver and duplex clear,
+  receiver 0 follows the transmitter). Commands the radio has no use for
+  write nothing. Then CONTROL (run, PA allowed, loopback) when it changes
+  and KEYING (PTT, permission). The image must report ID "RBV3". KEYING
   clears itself in the image unless rewritten within a second, so while it
   is set a delayed work item rewrites it every 250 ms: a host that stops
   stops the transmitter. The reply bytes are built from the identity and

@@ -42,7 +42,8 @@ sudo systemctl disable --now radioberry
 From the config file ([radioberryd](daemon.md#options)): `frequency_ppm`,
 `p2_rx_gain` (the LNA gain at start), and the transmit keys `allow_tx`,
 `allow_pa`, `drive_ceiling` and `tx_watchdog_s`. A program cannot raise
-these limits.
+these limits. `jack_keying` works as in radioberryd: the key jack may key
+the radio while a program has the device open.
 
 ## Receive
 
