@@ -139,6 +139,91 @@ TEST_CASE("a DMA period is about 2 ms of words, 256 to 4096") {
     CHECK(rb_i2s_period_words(8) == 1024);
 }
 
+TEST_CASE("a frequency becomes the Hermes-Lite 2 core's phase word") {
+    // The core's own sum: (Hz * 1876499845 + 2^24) bits 56..25.
+    for (u32 hz : {0u, 1u, 7074000u, 14074000u, 30000000u, 38400000u, 0xffffffffu}) {
+        const u64 p = static_cast<u64>(hz) * 1876499845ull + (1ull << 24);
+        CHECK(rb_phase_word(hz) == static_cast<u32>((p >> 25) & 0xffffffffu));
+    }
+    // 19.2 MHz is a quarter of the 76.8 MHz clock: a quarter turn a clock.
+    CHECK(rb_phase_word(19200000u) == 0x40000000u);
+}
+
+TEST_CASE("Hermes-Lite 2 commands become the radio's registers") {
+    rb_hl2_state s{};
+    rb_breg_write w[2]{};
+
+    // General: receivers 3 (bits 6..3 = 2), 192 ksps (rate code 2), duplex.
+    REQUIRE(rb_hl2_translate(&s, 0x00, 2u << 24 | 2u << 3 | 1u << 2, w) == 1);
+    CHECK(w[0].addr == RB_BREG_RX_CONFIG);
+    CHECK(w[0].data == (2u | 2u << 8));
+    CHECK(s.duplex);
+
+    // Receivers 1 to 6 and 7 to 11 by their Hermes-Lite 2 addresses.
+    REQUIRE(rb_hl2_translate(&s, 0x03, 7074000u, w) == 1);
+    CHECK(w[0].addr == RB_BREG_RX_PHASE0 + 1);
+    CHECK(w[0].data == rb_phase_word(7074000u));
+    REQUIRE(rb_hl2_translate(&s, 0x08, 1u, w) == 1);
+    CHECK(w[0].addr == RB_BREG_RX_PHASE0 + 6);
+    REQUIRE(rb_hl2_translate(&s, 0x12, 1u, w) == 1);
+    CHECK(w[0].addr == RB_BREG_RX_PHASE0 + 7);
+    REQUIRE(rb_hl2_translate(&s, 0x16, 1u, w) == 1);
+    CHECK(w[0].addr == RB_BREG_RX_PHASE0 + 11);
+
+    // Drive, PA enable and T/R disable; the VNA bit is dropped.
+    REQUIRE(rb_hl2_translate(&s, 0x09, 0x80u << 24 | 1u << 23 | 1u << 19 | 1u << 18, w) == 1);
+    CHECK(w[0].addr == RB_BREG_TX_CONFIG);
+    CHECK(w[0].data == (0x80u | 1u << 8 | 1u << 9));
+    REQUIRE(rb_hl2_translate(&s, 0x09, 0x10u << 24, w) == 1);
+    CHECK(w[0].data == 0x10u);
+
+    // LNA: bit 6 set carries the code; the older encodings as the
+    // Hermes-Lite 2 gateware read them; PureSignal (bit 22) is dropped.
+    REQUIRE(rb_hl2_translate(&s, 0x0a, 0x40u | 31u | 1u << 22, w) == 1);
+    CHECK(w[0].addr == RB_BREG_LNA);
+    CHECK(w[0].data == 31u);
+    rb_hl2_translate(&s, 0x0a, 0x25u, w);  // bit 5 set: the inverted code
+    CHECK(w[0].data == (~0x25u & 0x3fu));
+    rb_hl2_translate(&s, 0x0a, 0x05u, w);  // neither: 32 + bits 4..0
+    CHECK(w[0].data == (0x20u | 0x05u));
+
+    // CW hang {31..24, 17..16}; TX timing: latency 6..0, PTT hang 12..8.
+    REQUIRE(rb_hl2_translate(&s, 0x10, 0xabu << 24 | 3u << 16 | 0xffffu, w) == 1);
+    CHECK(w[0].addr == RB_BREG_CW_HANG);
+    CHECK(w[0].data == (0xabu << 2 | 3u));
+    REQUIRE(rb_hl2_translate(&s, 0x17, 0xffffffffu, w) == 1);
+    CHECK(w[0].addr == RB_BREG_TX_TIMING);
+    CHECK(w[0].data == (0x7fu | 0x1f00u));
+
+    // Nothing for what the radio does not use.
+    for (const u8 a : {u8{0x0b}, u8{0x0f}, u8{0x11}, u8{0x2b}, u8{0x3f}})
+        CHECK(rb_hl2_translate(&s, a, 0xffffffffu, w) == 0);
+}
+
+TEST_CASE("with one receiver and duplex clear, receiver 0 follows the transmitter") {
+    rb_hl2_state s{};
+    rb_breg_write w[2]{};
+    rb_hl2_translate(&s, 0x00, 0u, w);  // one receiver, duplex clear
+    REQUIRE(rb_hl2_translate(&s, 0x01, 14074000u, w) == 2);
+    CHECK(w[0].addr == RB_BREG_TX_PHASE);
+    CHECK(w[0].data == rb_phase_word(14074000u));
+    CHECK(w[1].addr == RB_BREG_RX_PHASE0);
+    CHECK(w[1].data == rb_phase_word(14074000u));
+    // Receiver 0's own frequency is ignored: it takes the transmitter's.
+    REQUIRE(rb_hl2_translate(&s, 0x02, 7074000u, w) == 1);
+    CHECK(w[0].data == rb_phase_word(14074000u));
+
+    // Duplex, or more than one receiver: each keeps its own.
+    rb_hl2_translate(&s, 0x00, 1u << 2, w);
+    REQUIRE(rb_hl2_translate(&s, 0x01, 14074000u, w) == 1);
+    REQUIRE(rb_hl2_translate(&s, 0x02, 7074000u, w) == 1);
+    CHECK(w[0].data == rb_phase_word(7074000u));
+    rb_hl2_translate(&s, 0x00, 1u << 3, w);
+    REQUIRE(rb_hl2_translate(&s, 0x01, 14074000u, w) == 1);
+    REQUIRE(rb_hl2_translate(&s, 0x02, 7074000u, w) == 1);
+    CHECK(w[0].data == rb_phase_word(7074000u));
+}
+
 TEST_CASE("idle words are dropped and the valid flag cleared") {
     const u32 in[] = {0x80000001u, 0x00000000u, 0x81fffffeu, 0x7fffffffu, 0x8b123456u};
     u32 out[5] = {};

@@ -28,7 +28,9 @@
   transmit watchdog; every PA state change logged. No interlock is claimed.
   The gateware's own levers are the permission bit, PA allowed and the
   KEYING register, which the driver keeps alive only while the daemon
-  keys, and the Hermes-Lite 2 core's PTT hang-time watchdog, which is
-  never disabled.
+  sets a bit of it, and the radio core's PTT hang time, never set to its
+  hold-for-ever value. The permission bit alone (never PTT) is also held
+  while a client owns the radio when `jack_keying` is set, so the key
+  jack can key; a release or a stream fault clears it.
 - Idle: with no client every thread blocks until a packet arrives, a
   command is queued or it is stopped; nothing polls.

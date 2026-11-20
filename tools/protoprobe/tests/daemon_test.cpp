@@ -14,6 +14,7 @@
 #include <thread>
 
 #include "fake_device.hpp"
+#include "free_ports.hpp"
 #include "probe.hpp"
 
 using namespace radioberry;
@@ -27,17 +28,8 @@ namespace {
 
 constexpr std::uint32_t kLoopback = 0x7f000001;
 
-// Daemon ports for this process: kSlots ranges of kStride ports in a block
-// chosen by pid, so test processes run in parallel (one per test case) do
-// not collide. Protocol 2 needs its offsets free too.
-constexpr int kStride = 20;
-constexpr int kSlots = 4;
-std::uint16_t base_port() {
-    static int slot = 0;
-    REQUIRE(slot < kSlots);
-    const int block = static_cast<int>(::getpid() % 400) * kStride * kSlots;
-    return static_cast<std::uint16_t>(30000 + block + kStride * slot++);
-}
+// Daemon ports: a free range for each daemon (free_ports.hpp).
+std::uint16_t base_port() { return radioberry::test::free_port_block(); }
 
 // The daemon on loopback, with a thread feeding the fake device RX frames
 // and draining its TX ring in real time.

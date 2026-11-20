@@ -171,19 +171,24 @@ and, for this project's images, [interfaces.md](interfaces.md)):
   transmitter that works (O8) shows the AD9866 is not held quiet during a
   transmission; it does not show the pin is what releases it.
 - Pin 105 (TX bit 4) is fragile. The AD9866 needs each TX half 2.5 ns
-  before the 153.6 MHz edge (datasheet: setup 2.5 ns, hold 1.5 ns). In the
-  slow timing model pin 105's output buffer takes about 5.4 ns, the other
-  TX pins about 2.2 ns, and the pin is fixed by the board trace. The
-  rpi4-i2s constraints relax that one path to `set_max_delay 10`, as the
-  radio gateware's own constraints do; the radio gateware transmits with
-  it (O8). Under the strict constraint, rpi4-i2s at 52303aa: bit 4
-  -2.708 ns, the other TX bits and TX sync +0.051 to +0.245 ns.
-  `tools/worst.sh` prints these "strict" lines on every build; the
-  relaxed path itself is checked by nothing else. Whether bit 4 arrives
-  in time on real boards is not measured. Unexplored remedies: faster
-  drive strength or slew rate on pin 105, or launching bit 4 earlier
-  than the others (risks the 1.5 ns hold). Suspect this pin first if
-  transmitted samples show errors in bit 4 or bit 10.
+  before the 153.6 MHz edge and 1.5 ns after (datasheet setup and hold).
+  Pin 105's output buffer takes 5.43 ns in the slow timing model and
+  3.16 ns in the fast, the other TX pins 2.65 and 1.47 ns, and the pin is
+  fixed by the board trace. The pins run at 2 mA, the only drive the
+  3.3-V LVCMOS standard offers (more needs another I/O standard), and the
+  fastest slew rate already. No launch phase serves: setup needs bit 4 at
+  least 2.72 ns earlier, the datasheet's hold allows at most about 1.7.
+  The constraints relax that one path to `set_max_delay 10`, as the radio
+  gateware's own constraints do; both boards transmit with it, keyed and
+  on air, and the board owner keeps it (2026-11-19). `tools/worst.sh`
+  prints every TX pin's strict setup (slow model) and its hold under the
+  datasheet's 1.5 ns (fast model; the constraints take 0 ns) on every
+  build. Suspect this pin first if transmitted samples show errors in
+  bit 4 or bit 10.
+- The receive bus is captured on a second 153.6 MHz PLL output about
+  102 ps later than the core's, which centres the capture in the window
+  the constraints give it (slow-model setup +0.109 ns, fast-model hold
+  +0.174, where the core's own clock gave +0.010 setup).
 - Whether mode and reset are wired cannot be told from a working radio:
   the full-duplex mode is proven (section 2), but a strap on the board
   would do the same as pin 111. The build has no half-duplex option set,

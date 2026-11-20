@@ -299,6 +299,68 @@ TEST_CASE("losing the owner while transmitting leaves the gateware safe", "[poli
     CHECK(rig.control.transmit() == TransmitState{});
 }
 
+TEST_CASE("jack keying holds the permission bit, never PTT, while a client owns the radio",
+          "[policy]") {
+    TxPolicyOptions o = allowed(true);
+    o.jack_keying = true;
+    Rig rig(o);
+    rig.policy.set_tx_drive(0x30u << 24 | kPa);
+    rig.policy.set_cwx(true);
+    rig.policy.update(kClient, false, 0s);
+    // Permission and PA allowed for the jack; no PTT, no CWX, no PA enable.
+    CHECK(rig.control.transmit() == TransmitState{false, true, false, true});
+    CHECK_FALSE(rig.policy.transmitting());
+    CHECK((*rig.control.value(0x09) & kPa) == 0);
+    for (const Command& c : rig.drain()) {
+        CHECK_FALSE(c.ptt);
+    }
+    // MOX as usual on top of it.
+    rig.policy.update(kClient, true, 1s);
+    CHECK(rig.control.transmit() == TransmitState{true, true, true, true});
+    rig.policy.update(kClient, false, 2s);
+    CHECK(rig.control.transmit() == TransmitState{false, true, false, true});
+    // A release clears it; a packet from someone else does not bring it back.
+    rig.session.release(kClient, "test");
+    CHECK(rig.control.transmit() == TransmitState{});
+    rig.policy.update(kClient, false, 3s);
+    CHECK(rig.control.transmit() == TransmitState{});
+}
+
+TEST_CASE("jack keying without the PA allowed holds only the permission bit", "[policy]") {
+    TxPolicyOptions o = allowed(false);
+    o.jack_keying = true;
+    Rig rig(o);
+    rig.policy.update(kClient, false, 0s);
+    CHECK(rig.control.transmit() == TransmitState{false, true, false, false});
+}
+
+TEST_CASE("jack keying needs transmit allowed and a transmitter", "[policy]") {
+    TxPolicyOptions off;
+    off.jack_keying = true;  // allow_tx false
+    Rig no_tx(off);
+    no_tx.policy.update(kClient, false, 0s);
+    CHECK(no_tx.control.transmit() == TransmitState{});
+
+    TxPolicyOptions rx_only = allowed(true);
+    rx_only.jack_keying = true;
+    rx_only.tx_available = false;
+    Rig no_transmitter(rx_only);
+    no_transmitter.policy.update(kClient, false, 0s);
+    CHECK(no_transmitter.control.transmit() == TransmitState{});
+}
+
+TEST_CASE("a stream fault clears jack keying until the owner's next packet", "[policy]") {
+    TxPolicyOptions o = allowed();
+    o.jack_keying = true;
+    Rig rig(o);
+    rig.policy.update(kClient, true, 0s);
+    rig.session.fault("TX underrun");
+    CHECK(rig.control.transmit() == TransmitState{});
+    rig.policy.update(kClient, true, 1s);  // latched: MOX refused, the jack again
+    CHECK_FALSE(rig.policy.transmitting());
+    CHECK(rig.control.transmit() == TransmitState{false, true, false, false});
+}
+
 TEST_CASE("only the owner's MOX counts", "[policy]") {
     Rig rig(allowed());
     const Owner other{Protocol::P1, {0xc0000209, 50000, false}};

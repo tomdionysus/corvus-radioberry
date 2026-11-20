@@ -185,7 +185,7 @@ The same scripts, with these differences:
 
 ## Results
 
-Raspberry Pi 5, 10CL025 RadioBerry, 2026-11-15 and 16. Trixie: the
+Raspberry Pi 5, 10CL025 RadioBerry. Trixie: the
 supported system, all eleven kernels in its archive passed for 0.5.0
 ([kernels.md](kernels.md)).
 

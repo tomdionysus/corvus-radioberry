@@ -201,9 +201,11 @@ bool Daemon::run(const std::atomic<bool>& stop) {
         spdlog::info("the gateware has no transmitter: receive only, MOX is refused");
     } else if (tx.allow_tx) {
         spdlog::warn(
-            "transmit allowed: drive ceiling {}, PA {}, watchdog {} s; no PA interlock is claimed",
+            "transmit allowed: drive ceiling {}, PA {}, watchdog {} s, key jack {}; no PA "
+            "interlock is claimed",
             tx.drive_ceiling, tx.allow_pa ? "allowed" : "not allowed",
-            std::chrono::duration_cast<std::chrono::seconds>(tx.watchdog).count());
+            std::chrono::duration_cast<std::chrono::seconds>(tx.watchdog).count(),
+            tx.jack_keying ? "keys while a client owns the radio" : "keys only with MOX");
     } else {
         spdlog::info("transmit not allowed (--allow-tx): receive only");
     }

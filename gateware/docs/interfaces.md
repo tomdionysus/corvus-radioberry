@@ -38,18 +38,14 @@ the reply carries the register's value, a status byte and a second status
 byte. The frame layout and the status bits are in
 [rb_frame.h](../../driver/kernel/rb_frame.h).
 
-Two register spaces:
-
-- **Radio space**: a write is passed to the radio core as a Hermes-Lite 2
-  command (address, data), as in Hermes-Lite 2 Protocol 1; a read returns
-  the last value written. Address 0x00 bits 6..3 is the number of
-  receivers less one; 0x09 bits 31..24 the drive, bit 19 PA enable, bit
-  18 T/R relay disable; 0x0a the receive gain.
-- **Board space**: the image's own registers.
+Every register is in board space (the frame's space bit set); radio
+space is not used (writes ignored, reads 0). Clients speak Hermes-Lite 2
+commands; the driver turns them into these registers
+(`rb_hl2_translate()` in [rb_frame.h](../../driver/kernel/rb_frame.h)).
 
 | Address | Name | Access | Meaning |
 |---|---|---|---|
-| 0x00 | ID | ro | 0x52425632 ("RBV2") |
+| 0x00 | ID | ro | 0x52425633 ("RBV3") |
 | 0x01 | VERSION | ro | major in 31..16, minor in 15..0 |
 | 0x02 | CAPS | ro | 3..0 receivers, 4 transmitter present, 11..8 link (1 I2S, 2 PIO), 15..12 FPGA (2 = 10CL025) |
 | 0x03 | STATUS | rw | 0 PLL locked, 1 AD9866 set up, 2 radio running, 3 link enabled, 4 receive FIFO was full, 5 ADC hit full scale, 6 a frame had a bad CRC; write 1s to clear 4..6 |
@@ -70,11 +66,23 @@ Two register spaces:
 | 0x12 | STATUS2 | rw | as the reply's second status byte; write 1s to clear bits 3 and 4 (and 6 on the Pi 4) |
 | 0x13 | TX_BAD | ro | Pi 4: frames whose flags failed their check; Pi 5: 0 |
 | 0x14 | REALIGNS | ro | Pi 4: times the sample/flags word phase moved; Pi 5: 0 |
+| 0x20 | RX_CONFIG | rw | 3..0 receivers less one, 9..8 rate (0 to 3: 48, 96, 192, 384 ksps) |
+| 0x21 | TX_PHASE | rw | the transmitter's NCO phase step a 76.8 MHz clock (Hz x 2^32 / 76.8 MHz) |
+| 0x22 + r | RX_PHASE | rw | receiver r's phase step |
+| 0x30 | LNA | rw | 5..0 the AD9866 receive gain code |
+| 0x31 | TX_CONFIG | rw | 7..0 drive, 8 PA enable, 9 T/R relay disable |
+| 0x32 | TX_TIMING | rw | 6..0 TX start latency (ms), 12..8 PTT hang (ms; 31 holds until PTT drops) |
+| 0x33 | CW_HANG | rw | 9..0 CW hang time |
 
-The radio core transmits only while CONTROL run, KEYING PTT and KEYING
-permission are all set. The PA lines additionally need CONTROL PA allowed
-and loopback clear; envpa and envbias also need PA enable (radio address
-0x09 bit 19).
+The registers from 0x20 read back the last value written.
+
+The radio core transmits only while CONTROL run and KEYING permission are
+set and something keys it: KEYING PTT, or the key jack's key or PTT input
+(debounced over 6 ms). KEYING clears itself unless rewritten, so a host
+that stops ends every one of them. The PA lines additionally need CONTROL
+PA allowed and loopback clear; envpa and envbias also need PA enable
+(TX_CONFIG bit 8). CW from the jack's key has a raised-cosine
+envelope, 4.1 ms up and down.
 
 ## Pi 5 link: RP1 PIO
 

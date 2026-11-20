@@ -4,15 +4,17 @@
 # Prints the worst setup and hold slack of every clock of a built project:
 #   tools/worst.sh PROJECT
 # For a project with an AD9866 TX bus it also prints each TX pin's setup
-# slack under the strict constraint. ad_tx[4] (pin 105) is relaxed in the
-# project's constraints, so its "strict" line is the only check of it;
-# a negative value there is known (docs/hardware-discovery.md section 4,
-# "Pin 105"; docs/review.md finding 1.3) and does not fail anything.
+# slack under the strict constraint (slow model) and its hold slack under
+# the datasheet's 1.5 ns hold (fast model; the project's constraints take
+# 0 ns). ad_tx[4] (pin 105) is relaxed in the project's constraints, so
+# its "strict" lines are the only check of it; a negative value there is
+# known (docs/hardware-discovery.md section 4, "Pin 105"; docs/review.md
+# findings 1.3, 1.4) and does not fail anything.
 set -eu
 top=$(cd "$(dirname "$0")/.." && pwd)
 p=$1
 w="$top/build/work-$p"
-rm -f "$w/worst.txt" "$w/worst-hold.txt" "$w/worst-txbus.txt"
+rm -f "$w/worst.txt" "$w/worst-hold.txt" "$w/worst-txbus.txt" "$w/worst-txbus-hold.txt"
 docker run --rm --platform linux/amd64 --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$top:/src" \
     -w "/src/build/work-$p" radioberry-quartus:23.1std.1 quartus_sta -t /src/tools/quartus/worst.tcl "$p" >/dev/null 2>&1
 
@@ -40,9 +42,11 @@ worst() {
 
 worst setup "$w/worst.txt"
 worst hold "$w/worst-hold.txt"
-# The worst strict setup slack of each TX bus pin.
-if [ -f "$w/worst-txbus.txt" ]; then
-    awk -F';' '
+# The worst strict slack of each TX bus pin: setup, then the datasheet's
+# hold.
+strict() {
+    [ -f "$2" ] || return 0
+    awk -F';' -v what="$1" '
         function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
         $1 == "" && NF >= 6 && trim($2) ~ /^-?[0-9]+\.[0-9]+$/ {
             s = trim($2) + 0; port = trim($4)
@@ -50,8 +54,10 @@ if [ -f "$w/worst-txbus.txt" ]; then
         }
         END {
             for (port in slack) {
-                note = (port == "ad_tx[4]") ? "  (relaxed in the .sdc)" : ""
-                printf "strict %-39s %7.3f  TX bus setup%s\n", port, slack[port], note
+                note = (what == "setup" && port == "ad_tx[4]") ? "  (relaxed in the .sdc)" : ""
+                printf "strict %-39s %7.3f  TX bus %s%s\n", port, slack[port], what, note
             }
-        }' "$w/worst-txbus.txt" | LC_ALL=C sort
-fi
+        }' "$2" | LC_ALL=C sort
+}
+strict setup "$w/worst-txbus.txt"
+strict hold "$w/worst-txbus-hold.txt"

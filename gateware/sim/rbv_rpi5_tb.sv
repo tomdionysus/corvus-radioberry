@@ -203,7 +203,7 @@ module rbv_rpi5_tb;
 
     initial begin
         #3000;
-        rd(1'b1, 6'h00, q); check("ID", q, 32'h52425632);
+        rd(1'b1, 6'h00, q); check("ID", q, 32'h52425633);
         rd(1'b1, 6'h02, q); check("CAPS (6 rx, tx, PIO, 10CL025)", q, 32'h00002216);
         wait (dut.setup_done === 1'b1);
         #2000;
@@ -211,7 +211,7 @@ module rbv_rpi5_tb;
 
         // Two receivers: frames of 4 values every 256 radio clocks
         // (1.2 M values/s), against the wire's 2.38 M.
-        wr(1'b0, 6'h00, 32'h0000_0008);
+        wr(1'b1, 6'h20, 32'h0000_0001);
         wr(1'b1, 6'h04, 32'h1);
         rx_en = 1'b1;
         #300000;
@@ -247,14 +247,14 @@ module rbv_rpi5_tb;
 
         // Receiver-count change with the clock running (no hold): three
         // receivers, frames of 6.
-        wr(1'b0, 6'h00, 32'h0000_0010);
+        wr(1'b1, 6'h20, 32'h0000_0002);
         #20000;
         n0 = pio_rx.rxq.size();
         #200000;
         rx_check("RX after 2 -> 3 receivers, clock running", 6, n0, 1'b1, 60);
         // And back to one, with the clock held across it.
         rx_en = 1'b0;
-        wr(1'b0, 6'h00, 32'h0000_0000);
+        wr(1'b1, 6'h20, 32'h0000_0000);
         #200;
         rx_en = 1'b1;
         #20000;

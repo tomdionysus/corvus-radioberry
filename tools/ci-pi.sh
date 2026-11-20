@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 # The merge gate. Builds and tests everything on a Raspberry Pi 5:
-# format and SPDX checks, the release build with its tests, the ASan and
+# format and SPDX checks, the release build with its tests, where
+# Verilator is installed the gateware simulations, the ASan and
 # UBSan build with the same tests, the coverage build with a summary,
 # where the ABI header is installed the userspace build against it, and
 # where /dev/radioberry is present and free the driver's hardware tests.
@@ -19,7 +20,7 @@
 set -eu
 
 usage() {
-    sed -n '4,18p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '4,19p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 remote=${RADIOBERRY_CI_HOST:-}
@@ -129,6 +130,25 @@ if command -v run-clang-tidy-19 >/dev/null; then
     echo "clang-tidy: ok"
 else
     step "clang-tidy: skipped, run-clang-tidy-19 not installed"
+fi
+
+# The gateware testbenches compiled with Verilator (a few minutes in all):
+# both images' receive and transmit paths, the keying fail-safe, the core
+# against its last Hermes-Lite 2 revision, and the CW and up-converter
+# blocks. rpi5 and radioeq need Icarus and an hour; they are run by hand.
+if command -v verilator >/dev/null; then
+    step "gateware simulations (Verilator)"
+    mkdir -p gateware/build
+    for tb in rpi4 rpi4tx failsafe corecmp cwshape txupconv; do
+        if ! (cd gateware && VERILATOR=1 VJOBS="$jobs" sh tools/sim.sh "$tb" >"build/sim-$tb.log" 2>&1); then
+            tail -20 "gateware/build/sim-$tb.log"
+            echo "gateware simulation $tb: FAIL" >&2
+            exit 1
+        fi
+        echo "$tb: PASS"
+    done
+else
+    step "gateware simulations: skipped, verilator not installed"
 fi
 
 step "ASan and UBSan build and tests"

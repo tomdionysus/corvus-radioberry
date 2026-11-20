@@ -86,7 +86,8 @@ Radio::Radio(std::unique_ptr<radioberry::Device> device, const Settings& setting
       info_(device_->info()),
       settings_(settings),
       timing_(timing),
-      tx_counter_(tx_counter ? std::move(tx_counter) : [] { return image_tx_samples(); }),
+      tx_counter_(tx_counter ? std::move(tx_counter)
+                             : [dir = settings.sysfs_dir] { return image_tx_samples(dir); }),
       clock_(daemon::steady_clock()),
       session_([this] { service_.control().safe(); }, std::chrono::nanoseconds::max()),
       service_(
@@ -102,6 +103,9 @@ Radio::Radio(std::unique_ptr<radioberry::Device> device, const Settings& setting
     if (!service_.start()) {
         throw std::runtime_error("radioberry: the device failed at start");
     }
+    // As radioberryd for a client that owns the radio: with jack_keying the
+    // key jack may key from now until the program closes the device.
+    policy_.update(kOwner, false, clock_());
     {
         const std::lock_guard lock(mutex_);
         send_general_locked();

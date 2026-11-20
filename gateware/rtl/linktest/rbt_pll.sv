@@ -1,12 +1,18 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// PLL for the link test image: 76.8 MHz in; 76.8 MHz, 153.6 MHz and
-// 122.88 MHz out.
-module rbt_pll (
+// PLL for the images: 76.8 MHz in; 76.8 MHz, 153.6 MHz and 122.88 MHz
+// out, and c3, a second 153.6 MHz shifted later by C3_PHASE_PS
+// picoseconds (a string, as altpll takes it) for the AD9866 receive bus's
+// input registers. The VCO runs at 1228.8 MHz for phase steps of about
+// 102 ps (at Quartus's own choice, 614.4 MHz, the step is 203 ps).
+module rbt_pll #(
+    parameter string C3_PHASE_PS = "0"
+) (
     input  logic inclk0,
     output logic c0,
     output logic c1,
     output logic c2,
+    output logic c3,
     output logic locked
 );
 
@@ -23,6 +29,8 @@ module rbt_pll (
         .clk1_multiply_by(2),
         .clk1_phase_shift("0"),
         .compensate_clock("CLK0"),
+        .vco_frequency_control("MANUAL_PHASE"),
+        .vco_phase_shift_step(102),
         .inclk0_input_frequency(13020),
         .intended_device_family("Cyclone 10 LP"),
         .lpm_type("altpll"),
@@ -37,7 +45,11 @@ module rbt_pll (
         .clk2_multiply_by(8),
         .clk2_phase_shift("0"),
         .port_clk2("PORT_USED"),
-        .port_clk3("PORT_UNUSED"),
+        .clk3_divide_by(1),
+        .clk3_duty_cycle(50),
+        .clk3_multiply_by(2),
+        .clk3_phase_shift(C3_PHASE_PS),
+        .port_clk3("PORT_USED"),
         .port_clk4("PORT_UNUSED"),
         .self_reset_on_loss_lock("ON"),
         .width_clock(5)
@@ -50,5 +62,6 @@ module rbt_pll (
     assign c0 = clk_out[0];
     assign c1 = clk_out[1];
     assign c2 = clk_out[2];
+    assign c3 = clk_out[3];
 
 endmodule

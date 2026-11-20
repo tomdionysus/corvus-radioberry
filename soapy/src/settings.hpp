@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <string>
 
+#include "find.hpp"
 #include "radioberry/device.hpp"
 #include "tx_policy.hpp"
 
@@ -23,6 +24,8 @@ struct Settings {
     daemon::TxPolicyOptions tx;
     std::string path = kConfigPath;  // the file, for messages
     bool from_file = false;          // the file existed
+    // Where the driver publishes its attributes (not a config key).
+    std::string sysfs_dir = kSysfsDir;
 };
 
 // The settings in the config file at `path`; the defaults (receive only)

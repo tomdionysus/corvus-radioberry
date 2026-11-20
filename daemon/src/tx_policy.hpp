@@ -26,6 +26,12 @@ struct TxPolicyOptions {
     // The gateware has a transmitter (the driver reports one). Clear for a
     // receive-only image: MOX is then refused whatever allow_tx says.
     bool tx_available = true;
+    // Let the key jack (key and PTT) key the radio while a client owns it,
+    // without MOX: the TX permission bit (never PTT) is then held while a
+    // client owns the radio, which the gateware requires for the jack and
+    // which its keying watchdog clears if the host stops. Needs allow_tx
+    // and a transmitter. Off, the jack keys only while MOX is granted.
+    bool jack_keying = false;
 };
 
 // What reaches the gateware's transmit controls (gateware/README.md
@@ -35,9 +41,12 @@ struct TxPolicyOptions {
 // command; otherwise both are clear. Address 0x09 carries the client's
 // drive capped at the ceiling, VNA always clear, and PA enable only while
 // MOX is granted and the PA is allowed, so envpa is driven only while a
-// client holds MOX. CWX is set only with MOX. Every PTT and PA change is
-// logged, and so is every drive change while transmitting. This is software
-// policy, not an interlock.
+// client holds MOX. CWX is set only with MOX. With jack_keying, the TX
+// permission bit (and PA allowed, if the PA is allowed) is also held while
+// a client owns the radio, so the key jack can key it; PTT, CWX and PA
+// enable still follow MOX only. Every PTT and PA change is logged, and so
+// is every drive change while transmitting. This is software policy, not
+// an interlock.
 class TxPolicy {
 public:
     TxPolicy(Control& control, Session& session, TxPolicyOptions options);

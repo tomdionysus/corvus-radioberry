@@ -57,6 +57,14 @@ TEST_CASE("transmit keys as radioberryd reads them") {
     CHECK(s.frequency_ppm == -1.5);
 }
 
+TEST_CASE("jack_keying is read as radioberryd reads it") {
+    const std::string path = write_config("allow_tx: true\njack_keying: true\n");
+    const Settings s = load_settings(path);
+    std::filesystem::remove(path);
+    CHECK(s.tx.allow_tx);
+    CHECK(s.tx.jack_keying);
+}
+
 TEST_CASE("a config file radioberryd would refuse is refused") {
     const std::string path = write_config("allow_tx: perhaps\n");
     CHECK_THROWS_AS(load_settings(path), std::invalid_argument);

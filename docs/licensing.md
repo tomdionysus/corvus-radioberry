@@ -18,8 +18,8 @@ that work's licence header and copyright line beneath the SPDX line.
 | Work | Licence | Use here | Reference |
 |---|---|---|---|
 | RadioBerry 2.x driver, daemon, overlays, gateware loader | Unlicense (public domain), stated in each source file | ABI, pin map and behaviour reference | https://github.com/pa3gsb/Radioberry-2.x |
-| Hermes-Lite 2 gateware | GPL-2.0-or-later (file headers) | Source in `gateware/source/`, as archived, with three standard-conformance edits applied at build time (`hl2-conformance.patch`); its radio core is built into this project's images in `gateware/images/` | https://github.com/softerhardware/Hermes-Lite2 |
-| openHPSDR DSP cores used by Hermes-Lite 2 (CIC, FIR, CORDIC, receiver) | LGPL-2.0-or-later (file headers) | Contained in the bitfiles | https://github.com/softerhardware/Hermes-Lite2/tree/master/gateware/rtl/radio_openhpsdr1 |
+| Hermes-Lite 2 gateware | GPL-2.0-or-later (file headers) | Source in `gateware/source/`, as archived, with standard-conformance edits applied at build time (`hl2-conformance.patch`); no module of it is compiled into this project's images in `gateware/images/`; they contain its NCO sine tables and receive filter coefficients, and this project's RTL was written against its modules ([provenance](https://github.com/tomdionysus/corvus-radioberry/blob/main/gateware/docs/provenance.md)) | https://github.com/softerhardware/Hermes-Lite2 |
+| openHPSDR DSP cores used by Hermes-Lite 2 (CIC, FIR, CORDIC, receiver) | LGPL-2.0-or-later (file headers) | Reference for this project's own blocks; not compiled into the bitfiles | https://github.com/softerhardware/Hermes-Lite2/tree/master/gateware/rtl/radio_openhpsdr1 |
 | Hermes-Lite 2 protocol description | project wiki | Protocol 1 dialect, PA and bias commands | https://github.com/softerhardware/Hermes-Lite2/wiki/Protocol |
 | openHPSDR Ethernet Protocol v4.x and Protocol 1 firmware sources | GPL-2.0 | Protocol 2 reference | https://github.com/TAPR/OpenHPSDR-Firmware |
 | Raspberry Pi Linux kernel, `rp1-pio` driver | GPL-2.0 | Kernel API the driver is built on | https://github.com/raspberrypi/linux |
