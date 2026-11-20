@@ -1,5 +1,9 @@
 # Taking over the radio core, block by block
 
+Done: released in 0.7.0 (2026-11-20). Kept as the record of how each
+stage was checked; what is left (stage 8, the board measurements) is in
+[ACTIVE.md](ACTIVE.md).
+
 The gateware wrapped the Hermes-Lite 2 radio core. Everything around it
 was already this project's: the Pi transport (I2S on a Pi 4, RP1 PIO on a
 Pi 5), the framed SPI command protocol, the AD9866 start-up sequencer,

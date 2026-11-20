@@ -3,6 +3,21 @@
 Newest first. Each entry gives the date, what was done, its acceptance
 result, and where it lives.
 
+- 2026-11-20: Release 0.7.0 (develop `88a7a51`, main `f9ea007`, tag
+  `v0.7.0`; squash of item/gateware-core). The core takeover done
+  (stages 1 to 7, with stage 4 folded into 7), plus the ADC capture clock
+  102 ps later, 65 to 57 then 58 memory blocks (fine sine corrections
+  computed, shift registers kept in logic), and a transmit CIC half the
+  size. Images rpi5-pio seed 3 (cffc107f), rpi4-i2s seed 3 (25943ca3),
+  rebuilt at the release byte-identical to the seeds tested: on both
+  boards receive, keyed runs at 12 W through the amplifier, and an FT8
+  contact; Miach equivalence, writer and three-corner timing on all six
+  seeds. Release CI passed (397 tests, ASan 393, coverage 100%, six
+  Verilator testbenches, checkpatch, sparse, clang-tidy); release gate on
+  both Pis (clean-down, README install from a test repo, rbprobe, FT8
+  receive); the board owner signed and uploaded; GitHub release and CI
+  green on main. The driver reports 0.7.0 (the 0.6.0 version slip
+  closed). Details: [2026-11-17-core-takeover.md](2026-11-17-core-takeover.md).
 - 2026-11-20: The SoapySDR module follows radioberryd's `jack_keying`
   (the board owner's correction of 2026-11-19's choice to ignore it): the
   key jack may key while a program has the device open. Tests for both
